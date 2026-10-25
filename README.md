@@ -25,7 +25,7 @@ Yongle is a single `ddraw.dll` placed in the game folder. Windows loads it inste
 
 This follows the [OpenRCT2](https://github.com/OpenRCT2/OpenRCT2) approach: start inside the original executable and replace its parts step by step, keeping the game playable at every step. A full **reimplementation** that no longer needs `Emperor.exe` (as Julius/Augustus did for Caesar III) is a **long-term goal**, not the current state.
 
-**The original art stays as it is.** Yongle aims to preserve the game's own art style and atmosphere: everything on screen is drawn from the game's own images, at their own size or scaled sharply. There are no plans for AI-generated or AI-upscaled backgrounds, artwork or other images.
+**The original art stays as it is.** Yongle aims to preserve the game's own art direction and atmosphere: everything on screen is drawn from the game's own images, at their own size or scaled sharply. There are no plans for AI-generated or AI-upscaled backgrounds, artwork or other images.
 
 ## Features
 
