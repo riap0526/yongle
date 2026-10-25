@@ -432,7 +432,7 @@ const char *const kInfoWindow[] = {"original", "centered", "cursor"};
 const char *const kFullSpeed[] = {"capped", "original"};
 const char *const kFullSpeedLabels[] = {"capped: steady, a step above 90%", "original: as fast as the computer can"};
 const char *const kInfoWindowLabels[] = {"original (above or below, as the game does it)",
-                                         "centred in the city area", "beside the cursor"};
+                                         "centered in the city area", "beside the cursor"};
 
 bool ApplyInfoWindow(int, const char *v, bool)
 {
@@ -501,7 +501,7 @@ extern "C" void emperor_register_settings(void)
     int i = core::settings::Register(Item{
         "ui", "info_window", "Building info window",
         "Where the window opens when you right-click a building. original: as the game does it (above or below, "
-        "moved with the centre of the city area); centered: in the middle of the city area; cursor: beside the "
+        "moved with the center of the city area); centered: in the middle of the city area; cursor: beside the "
         "cursor, never past the edges. Applies to the next window you open.",
         Type::Choice, "cursor", Effect::Live, true, true, 0, 0, 0, nullptr, kInfoWindow, kInfoWindowLabels, 3});
     core::settings::OnChange(i, &ApplyInfoWindow);

@@ -3,7 +3,7 @@
 # or simply run proxy/ddraw/build.ps1.
 cmake_minimum_required(VERSION 3.25)
 # Yongle: the public name (v0.1.0 onwards). The version is shown in the log, the panel and the DLL's properties.
-project(emperor_engine VERSION 0.1.0 LANGUAGES C CXX RC)
+project(emperor_engine VERSION 0.1.1 LANGUAGES C CXX RC)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 20)

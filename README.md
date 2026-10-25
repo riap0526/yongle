@@ -13,6 +13,7 @@ Yongle runs the original game at your monitor's resolution and refresh rate, lay
 <summary>For comparison: the original game at 1024×768</summary>
 
 ![The original game at 1024×768](screenshots/compare-1024.webp)
+
 </details>
 
 ## How it works
@@ -30,37 +31,48 @@ This follows the [OpenRCT2](https://github.com/OpenRCT2/OpenRCT2) approach: star
 ## Features
 
 ### Display
+
 - **No more display mode changes.** The desktop resolution is never touched; the game is shown in a borderless full-screen window on your monitor, scaled sharply (nearest pixels with a one-pixel blend at their edges).
+
 - **Smooth frame rate.** Frames follow your monitor's refresh rate instead of the original's ~20 per second. The game's own timing (simulation, animations) is unchanged.
-- **Any resolution, laid out for your screen.** The game draws at your native resolution divided by a display scale (100–250 % in 5 % steps, or *Auto*: 1080 pixels high on taller screens, e.g. 1920×1080 on a 2560×1440 monitor). The sidebar and top bar extend to the screen's edges, the city fills the rest, and dialogs are centred.
+
+- **Any resolution, laid out for your screen.** The game draws at your native resolution divided by a display scale (100–250 % in 5 % steps, or *Auto*: 1080 pixels high on taller screens, e.g. 1920×1080 on a 2560×1440 monitor). The sidebar and top bar extend to the screen's edges, the city fills the rest, and dialogs are centered.
+
 - **Full-screen pictures** (main menu, loading screens) are shown at their own size in a frame instead of being stretched. Around the menus: a blurred, darkened picture of the last city you played — or your own picture (see [MENU_BACKGROUND.md](MENU_BACKGROUND.md)).
 
   ![The main menu over a blurred picture of the last city](screenshots/main-menu.webp)
 
-- **China map** at its own size or enlarged, centred over a blurred backdrop of itself.
+- **China map** at its own size or enlarged, centered over a blurred backdrop of itself.
 
   ![The China map at its own size](screenshots/china-map.webp)
 
-- **Windowed mode**: F5 or Alt+Enter. The window can be moved, resized and maximised; the game is laid out again for its new size, and its size and position are remembered. The cursor can optionally be kept inside the window.
+- **Windowed mode**: F5 or Alt+Enter. The window can be moved, resized and maximized; the game is laid out again for its new size, and its size and position are remembered. The cursor can optionally be kept inside the window.
+
 - **In-game Display options** (Options → Display options): window mode, the game's own 1024×768, the display scale with the game's own arrow buttons, 100 %, Auto, OK / Cancel. Changes apply at once; OK saves them. This dialog will grow as more features arrive: display settings that are only in the settings panel today (resolution list, how the menus and the China map are shown, and so on) will move into it.
 
   ![The game's Display options dialog with Yongle's settings](screenshots/display-options.webp)
-- Where a building's information window opens: original, centred, or next to the cursor (default).
+
+- Where a building's information window opens: original, centered, or next to the cursor (default).
 
 ### Gameplay feel
+
 - **Pixel-smooth scrolling** of the city at the game's own average speed, with easing.
 - **Steady game speed.** In the original, a large city at a high resolution runs slower, because the simulation waits for drawing. Yongle catches up on the missed simulation steps (as Augustus does), so every resolution runs at the speed you set.
-- **Predictable 100 % speed.** The original's 100 % runs as fast as the computer can draw; by default Yongle caps it to a steady pace one step above 90 % (the original behaviour is a setting).
+- **Predictable 100 % speed.** The original's 100 % runs as fast as the computer can draw; by default Yongle caps it to a steady pace one step above 90 % (the original behavior is a setting).
 - **The city keeps running while you scroll** (the original pauses it; a setting).
 
 ### Tools
+
 - **Settings panel** (Insert) for everything above, saved to `emperor_engine.ini`. Most settings apply immediately.
 
   ![The settings panel](screenshots/settings-panel.webp)
 
 - **F11** saves a screenshot of the game's picture to `shots\`.
+
 - **F12** writes a problem report (log mark, screenshots, statistics) for bug reports.
+
 - An exception log with function names and source lines (`ddraw_proxy.log`, using `ddraw.syms`).
+
 - The game's separate editor (`EmperorEdit.exe`, the Campaign Creator) runs unchanged.
 
 ## Requirements
@@ -80,13 +92,13 @@ Files Yongle creates in the game folder: `ddraw_proxy.log` (log; it grows over s
 
 ## Keys
 
-| Key | Action |
-|---|---|
-| Insert | Open / close the settings panel (the game pauses while it is open) |
-| F5 or Alt+Enter | Switch between full screen and a window |
-| F11 | Screenshot to `shots\` |
-| F12 | Problem report (when something looks wrong) |
-| Shift+F7 | Cycle through a few resolutions until the game ends (for trying them out; the setting is not changed) |
+| Key             | Action                                                                                                |
+| --------------- | ----------------------------------------------------------------------------------------------------- |
+| Insert          | Open / close the settings panel (the game pauses while it is open)                                    |
+| F5 or Alt+Enter | Switch between full screen and a window                                                               |
+| F11             | Screenshot to `shots\`                                                                                |
+| F12             | Problem report (when something looks wrong)                                                           |
+| Shift+F7        | Cycle through a few resolutions until the game ends (for trying them out; the setting is not changed) |
 
 The panel, screenshot and report keys can be changed in `emperor_engine.ini`.
 
@@ -97,7 +109,7 @@ All settings are in `emperor_engine.ini` next to `ddraw.dll`; the file explains 
 ## Known issues
 
 - **Flashing black blocks** have been seen occasionally after playing for a while on one system (AMD graphics); screenshots do not show them, and switching windows (Alt+Tab) clears them. The cause is not known yet. If you see them, press F12 and send the log and `shots\` folder.
-- The map and campaign editors and the multiplayer screens run at 1024×768 (centred), not at your resolution.
+- The map and campaign editors and the multiplayer screens run at 1024×768 (centered), not at your resolution.
 - The campaign map screen has not been tested in play yet.
 - Tested on one machine so far (AMD graphics, 2560×1440; 1920×1080 by changing the Windows resolution). **Real 4K monitors and NVIDIA / Intel graphics have not been tested yet** — reports are welcome.
 - An original-game crash remains: in heavily modified saves with many monuments, opening the Monuments panel can crash the game (this happens without Yongle too).
@@ -106,12 +118,14 @@ All settings are in `emperor_engine.ini` next to `ddraw.dll`; the file explains 
 ## Roadmap
 
 Near term:
-- **City zoom** (mouse wheel, centred on the cursor), then **export of the whole city as one large image**.
+
+- **City zoom** (mouse wheel, centered on the cursor), then **export of the whole city as one large image**.
 - **Original-style settings screens**: the settings drawn with the game's own art, grouped into the game's option dialogs (all display settings in Display options, and so on).
 - **Key rebinding** in a game-style dialog.
 
 Longer term:
-- **Localisation**: UTF-8 translation files and a text engine with open-source fonts, starting with Traditional Chinese. The format will be open and documented, so the community can add **language packs** for other languages without changing the game's files.
+
+- **Localization**: UTF-8 translation files and a text engine with open-source fonts, starting with Traditional Chinese. The format will be open and documented, so the community can add **language packs** for other languages without changing the game's files.
 - Raising the original's limits and fixing its bugs; better support for custom scenarios.
 - Smoother movement of people and animations between simulation steps.
 - **Zeus & Poseidon** support with the same engine.
@@ -124,6 +138,7 @@ See **[BUILDING.md](BUILDING.md)** for the tools, the build steps, the offline t
 ## Reporting problems
 
 Please open an issue with the **Bug report** form (it walks you through the same steps we use in our own tests). In short:
+
 - close the game and delete `ddraw_proxy.log` in the game folder (it keeps growing over sessions);
 - reproduce the problem and press **F12** the moment you see it (it saves screenshots to `shots\` and marks the log);
 - send the new `ddraw_proxy.log`, the `shots\report*` pictures and, if you changed settings, `emperor_engine.ini`;
@@ -134,7 +149,7 @@ Please open an issue with the **Bug report** form (it walks you through the same
 Contributions are welcome. For anything beyond a small fix, please open an issue first to discuss it.
 
 - Keep the two layers apart: nothing game-specific (addresses, structures) in `src/core/`.
-- Every hook must check the game's bytes before installing and fall back to the original behaviour on failure.
+- Every hook must check the game's bytes before installing and fall back to the original behavior on failure.
 - Never add files from the game (art, text, data) or derived from them to the repository.
 - No AI-generated or AI-upscaled images (backgrounds, artwork, interface graphics): the project keeps the original art style, so such contributions will not be accepted.
 - Run the offline tests before submitting.

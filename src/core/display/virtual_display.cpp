@@ -63,6 +63,14 @@ KeyState_fn o_GetKeyState = GetKeyState;
 SetWindowLong_fn o_SetWindowLongA = SetWindowLongA;
 SetCursor_fn o_SetCursor = SetCursor;
 
+// Our own calls on the game window (placing it, keeping it on the monitor) go to user32 itself, past any Windows
+// compatibility shim in front of it: GOG installs Emperor with the DWM8And16BitMitigation layer, and through its
+// SetWindowPos (AcGenral.dll) the window stayed 30 px above the monitor, with the taskbar over the game (0.1.1). The
+// exe's own calls still pass the shim (they are hooked where they arrive). Without a shim these are the trampolines.
+SetWindowPos_fn own_SetWindowPos = SetWindowPos;
+MoveWindow_fn own_MoveWindow = MoveWindow;
+SetWindowLong_fn own_SetWindowLongA = SetWindowLongA;
+
 // R2e: windowed (a window that can be moved and sized) or covering the monitor. The game is not told: it stays in
 // its fullscreen mode; only the window's style and place change, and the output follows the client area.
 bool g_windowed = false;
@@ -333,7 +341,7 @@ BOOL WINAPI SetWindowPos_detour(HWND hwnd, HWND after, int x, int y, int w, int 
         if (after == HWND_TOPMOST) {
             flags |= SWP_NOZORDER;
         }
-        return o_SetWindowPos(hwnd, after, x, y, w, h, flags);
+        return own_SetWindowPos(hwnd, after, x, y, w, h, flags);
     }
     if (g_hwnd && hwnd == g_hwnd && FromExe(caller) && (flags & (SWP_NOSIZE | SWP_NOMOVE)) != (SWP_NOSIZE | SWP_NOMOVE)) {
         RECT m = MonitorRect(hwnd);
@@ -343,6 +351,7 @@ BOOL WINAPI SetWindowPos_detour(HWND hwnd, HWND after, int x, int y, int w, int 
         w = m.right - m.left;
         h = m.bottom - m.top;
         flags &= ~(SWP_NOSIZE | SWP_NOMOVE);
+        return own_SetWindowPos(hwnd, after, x, y, w, h, flags);
     }
     return o_SetWindowPos(hwnd, after, x, y, w, h, flags);
 }
@@ -360,6 +369,7 @@ BOOL WINAPI MoveWindow_detour(HWND hwnd, int x, int y, int w, int h, BOOL repain
         y = m.top;
         w = m.right - m.left;
         h = m.bottom - m.top;
+        return own_MoveWindow(hwnd, x, y, w, h, repaint);
     }
     return o_MoveWindow(hwnd, x, y, w, h, repaint);
 }
@@ -450,7 +460,7 @@ void PlaceWindowed()
     int cw = cfg->window_w > 0 ? cfg->window_w : ww * 3 / 4, ch = cfg->window_h > 0 ? cfg->window_h : wh * 3 / 4;
     cw = cw < kMinClientW ? kMinClientW : cw;
     ch = ch < kMinClientH ? kMinClientH : ch;
-    o_SetWindowLongA(g_hwnd, GWL_STYLE, (GetWindowLongA(g_hwnd, GWL_STYLE) & ~WS_POPUP) | kFrameStyles | WS_VISIBLE);
+    own_SetWindowLongA(g_hwnd, GWL_STYLE, (GetWindowLongA(g_hwnd, GWL_STYLE) & ~WS_POPUP) | kFrameStyles | WS_VISIBLE);
     RECT r = OuterFor(0, 0, cw, ch);
     const int ow = r.right - r.left, oh = r.bottom - r.top;
     int x = cfg->window_x != CORE_WINDOW_CENTER ? cfg->window_x : work.left + (ww - ow) / 2;
@@ -459,26 +469,43 @@ void PlaceWindowed()
         x = x < work.left ? work.left : x; // a window larger than the work area starts at its top left
         y = y < work.top ? work.top : y;
     }
-    o_SetWindowPos(g_hwnd, HWND_NOTOPMOST, x, y, ow, oh, SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+    own_SetWindowPos(g_hwnd, HWND_NOTOPMOST, x, y, ow, oh, SWP_FRAMECHANGED | SWP_SHOWWINDOW);
     Settle(false);
     core_log("display: windowed, client %dx%d at (%d,%d)%s", cw, ch, x, y,
              cfg->window_w > 0 ? "" : " (automatic size: three quarters of the monitor's work area)");
 }
 
+// Full screen: the window must cover its monitor exactly (otherwise Windows keeps the taskbar above it). Logs where
+// it really is when not (0.1.1: a compatibility shim had moved it 30 px up).
+void CheckCovering(const char *when)
+{
+    if (g_windowed || !g_hwnd || IsIconic(g_hwnd)) {
+        return;
+    }
+    RECT wr{};
+    o_GetWindowRect(g_hwnd, &wr);
+    const RECT m = MonitorRect(g_hwnd);
+    if (!EqualRect(&wr, &m)) {
+        core_log("display: %s the window is at [%ld,%ld,%ld,%ld], not on the monitor [%ld,%ld,%ld,%ld]", when, wr.left,
+                 wr.top, wr.right, wr.bottom, m.left, m.top, m.right, m.bottom);
+    }
+}
+
 void PlaceFullscreen()
 {
-    o_SetWindowLongA(g_hwnd, GWL_STYLE, (GetWindowLongA(g_hwnd, GWL_STYLE) & ~kFrameStyles) | WS_POPUP | WS_VISIBLE);
+    own_SetWindowLongA(g_hwnd, GWL_STYLE, (GetWindowLongA(g_hwnd, GWL_STYLE) & ~kFrameStyles) | WS_POPUP | WS_VISIBLE);
     if (IsZoomed(g_hwnd) || IsIconic(g_hwnd)) {
         ShowWindow(g_hwnd, SW_RESTORE);
     }
     MONITORINFO mi{};
     mi.cbSize = sizeof(mi);
     GetMonitorInfoW(MonitorFromWindow(g_hwnd, MONITOR_DEFAULTTONEAREST), &mi);
-    o_SetWindowPos(g_hwnd, nullptr, mi.rcMonitor.left, mi.rcMonitor.top, mi.rcMonitor.right - mi.rcMonitor.left,
-                   mi.rcMonitor.bottom - mi.rcMonitor.top, SWP_FRAMECHANGED | SWP_NOZORDER | SWP_SHOWWINDOW);
+    own_SetWindowPos(g_hwnd, nullptr, mi.rcMonitor.left, mi.rcMonitor.top, mi.rcMonitor.right - mi.rcMonitor.left,
+                     mi.rcMonitor.bottom - mi.rcMonitor.top, SWP_FRAMECHANGED | SWP_NOZORDER | SWP_SHOWWINDOW);
     g_settled = SIZE{0, 0};
     core_log("display: fullscreen (covering the monitor [%ld,%ld,%ld,%ld])", mi.rcMonitor.left, mi.rcMonitor.top,
              mi.rcMonitor.right, mi.rcMonitor.bottom);
+    CheckCovering("after going fullscreen");
 }
 
 // The window came to rest (a move or size ended, maximised, restored): its client size is what the layout uses from
@@ -724,6 +751,52 @@ void WakeForSettings()
     }
 }
 
+// Full screen: something other than our placement moved or sized the window off its monitor: it is put back. With
+// GOG's compatibility layer that happens after every mode change of the game (the shim moves the window 30 px up
+// once more), so there is no limit per run; only more than kKeepsPerSecond in one second stop it for the rest of
+// that second, so a tool that keeps moving the window cannot make the two fight. The log has the first kLogged and
+// then every 100th.
+void KeepOnMonitor(const WINDOWPOS *wp)
+{
+    static bool busy = false;
+    static long keeps = 0;
+    static DWORD second = 0;
+    static int inSecond = 0;
+    constexpr int kKeepsPerSecond = 10;
+    constexpr long kLogged = 5;
+    if (busy || !wp || (wp->flags & SWP_NOMOVE && wp->flags & SWP_NOSIZE) || IsIconic(g_hwnd)) {
+        return;
+    }
+    RECT wr{};
+    o_GetWindowRect(g_hwnd, &wr);
+    const RECT mon = MonitorRect(g_hwnd);
+    if (EqualRect(&wr, &mon)) {
+        return;
+    }
+    const DWORD now = GetTickCount();
+    if (now - second >= 1000) {
+        second = now;
+        inSecond = 0;
+    }
+    if (++inSecond > kKeepsPerSecond) {
+        if (inSecond == kKeepsPerSecond + 1) {
+            core_log("display: the window keeps being moved off the monitor; left alone for the rest of this second");
+        }
+        return;
+    }
+    ++keeps;
+    if (keeps <= kLogged || keeps % 100 == 0) {
+        core_log("display: the window was moved to [%ld,%ld,%ld,%ld] in full screen; put back on the monitor "
+                 "[%ld,%ld,%ld,%ld] (%ld so far)%s",
+                 wr.left, wr.top, wr.right, wr.bottom, mon.left, mon.top, mon.right, mon.bottom, keeps,
+                 keeps == kLogged ? "; from now on only every 100th is logged" : "");
+    }
+    busy = true;
+    own_SetWindowPos(g_hwnd, nullptr, mon.left, mon.top, mon.right - mon.left, mon.bottom - mon.top,
+                     SWP_NOZORDER | SWP_NOACTIVATE);
+    busy = false;
+}
+
 LRESULT CALLBACK SubclassProc(HWND hwnd, UINT m, WPARAM w, LPARAM l)
 {
     if (m == g_settingsMessage && m != 0 && hwnd == g_hwnd) {
@@ -732,6 +805,9 @@ LRESULT CALLBACK SubclassProc(HWND hwnd, UINT m, WPARAM w, LPARAM l)
     }
     if (hwnd == g_hwnd) {
         core::diag::LogWindowEvent(m, w, l); // alt-tab, focus, minimise (R2b.1)
+    }
+    if (hwnd == g_hwnd && !g_windowed && m == WM_WINDOWPOSCHANGED) {
+        KeepOnMonitor(reinterpret_cast<const WINDOWPOS *>(l));
     }
     if (hwnd == g_hwnd && g_windowed) {
         if (m == WM_GETMINMAXINFO) {
@@ -809,17 +885,24 @@ void CoverMonitor(HWND hwnd)
     RECT wr{};
     o_GetWindowRect(hwnd, &wr);
     if (!EqualRect(&wr, &mi.rcMonitor)) {
-        SetWindowPos(hwnd, nullptr, mi.rcMonitor.left, mi.rcMonitor.top, mi.rcMonitor.right - mi.rcMonitor.left,
-                     mi.rcMonitor.bottom - mi.rcMonitor.top, SWP_NOZORDER | SWP_NOACTIVATE);
+        own_SetWindowPos(hwnd, nullptr, mi.rcMonitor.left, mi.rcMonitor.top, mi.rcMonitor.right - mi.rcMonitor.left,
+                         mi.rcMonitor.bottom - mi.rcMonitor.top, SWP_NOZORDER | SWP_NOACTIVATE);
         core_log("display: window moved from [%ld,%ld,%ld,%ld] to cover monitor [%ld,%ld,%ld,%ld]", wr.left, wr.top,
                  wr.right, wr.bottom, mi.rcMonitor.left, mi.rcMonitor.top, mi.rcMonitor.right, mi.rcMonitor.bottom);
+        CheckCovering("after moving it");
     }
 }
 
-template <typename F> void Hook(const char *name, F detour, F &original)
+template <typename F> void Hook(const char *name, F detour, F &original, F *own = nullptr)
 {
     core_hook_install_api(name, L"user32.dll", name, reinterpret_cast<void *>(detour),
                           reinterpret_cast<void **>(&original));
+    if (own) {
+        // Behind a shim, user32's own function is not hooked: call it directly. Otherwise the trampoline.
+        void *real = core_real_export(L"user32.dll", name);
+        void *seen = reinterpret_cast<void *>(GetProcAddress(GetModuleHandleW(L"user32.dll"), name));
+        *own = real && real != seen ? reinterpret_cast<F>(real) : original;
+    }
 }
 
 } // namespace
@@ -837,9 +920,9 @@ void InstallHooks()
     Hook("GetClientRect", &GetClientRect_detour, o_GetClientRect);
     Hook("GetWindowRect", &GetWindowRect_detour, o_GetWindowRect);
     Hook("WindowFromPoint", &WindowFromPoint_detour, o_WindowFromPoint);
-    Hook("SetWindowPos", &SetWindowPos_detour, o_SetWindowPos);
-    Hook("MoveWindow", &MoveWindow_detour, o_MoveWindow);
-    Hook("SetWindowLongA", &SetWindowLongA_detour, o_SetWindowLongA);
+    Hook("SetWindowPos", &SetWindowPos_detour, o_SetWindowPos, &own_SetWindowPos);
+    Hook("MoveWindow", &MoveWindow_detour, o_MoveWindow, &own_MoveWindow);
+    Hook("SetWindowLongA", &SetWindowLongA_detour, o_SetWindowLongA, &own_SetWindowLongA);
     Hook("SetCursor", &SetCursor_detour, o_SetCursor);
     Hook("GetAsyncKeyState", &GetAsyncKeyState_detour, o_GetAsyncKeyState);
     Hook("GetKeyState", &GetKeyState_detour, o_GetKeyState);
@@ -975,7 +1058,7 @@ void SetWindowClient(int w, int h)
     y = y + oh > work.bottom ? work.bottom - oh : y;
     x = x < work.left ? work.left : x;
     y = y < work.top ? work.top : y;
-    o_SetWindowPos(g_hwnd, nullptr, x, y, ow, oh, SWP_NOZORDER | SWP_NOACTIVATE);
+    own_SetWindowPos(g_hwnd, nullptr, x, y, ow, oh, SWP_NOZORDER | SWP_NOACTIVATE);
     Settle(true);
     UpdateClip();
 }

@@ -150,15 +150,15 @@ void RegisterCoreItems()
     g_windowH = Add(Item{"display", "window_height", "Window height", "The windowed client height in pixels.",
                          Type::Int, "auto", Effect::Live, false, true, 768, 16384, 1, "auto", nullptr, nullptr, 0});
     g_windowX = Add(Item{"display", "window_x", "Window position x",
-                         "The window's left edge (center: centred on its monitor). Kept when you move the window.",
+                         "The window's left edge (center: centered on its monitor). Kept when you move the window.",
                          Type::Int, "center", Effect::Live, false, true, -32000, 32000, 1, "center", nullptr, nullptr,
                          0});
-    g_windowY = Add(Item{"display", "window_y", "Window position y", "The window's top edge (center: centred).",
+    g_windowY = Add(Item{"display", "window_y", "Window position y", "The window's top edge (center: centered).",
                          Type::Int, "center", Effect::Live, false, true, -32000, 32000, 1, "center", nullptr, nullptr,
                          0});
     g_windowLock = Add(Item{"display", "window_lock_cursor", "Window: keep the cursor inside",
                             "Windowed: the cursor cannot leave the window while it is the active one (released when "
-                            "you switch to another program, minimise it or go fullscreen). The window's border cannot "
+                            "you switch to another program, minimize it or go fullscreen). The window's border cannot "
                             "be reached then: switch this off, or use F5, to move or size it.",
                             Type::Bool, "off", Effect::Live, true, true, 0, 0, 0, nullptr, nullptr, nullptr, 0});
     g_timer = Add(Item{"timing", "high_resolution_timer", "High-resolution timer",

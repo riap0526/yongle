@@ -30,7 +30,7 @@ body:
         - Display and interface
         - Game speed, scrolling, controls
         - Settings
-        - Localisation / languages
+        - Localization / languages
         - Limits or bugs of the original game
         - Something else
     validations:

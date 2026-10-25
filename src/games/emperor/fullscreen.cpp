@@ -838,7 +838,7 @@ void RegisterSettings()
     core::settings::Retire("display", "fullscreen_pictures", &MigrateFullscreenPictures);
     int i = core::settings::Register(Item{
         "display", "loading_screen", "Loading screens",
-        "The pictures shown while a game loads. native: their own size, centred, black around; framed: as large as "
+        "The pictures shown while a game loads. native: their own size, centered, black around; framed: as large as "
         "fits, in a fret border on parchment; black: the whole 1024x768 frame scaled to fit, black bars.",
         Type::Choice, "native", Effect::Live, true, true, 0, 0, 0, nullptr, kLoadingLooks, kLoadingLabels, 3});
     core::settings::OnChange(i, [](int, const char *v, bool) {
