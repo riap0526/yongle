@@ -33,7 +33,7 @@ This follows the [OpenRCT2](https://github.com/OpenRCT2/OpenRCT2) approach: star
 - **No more display mode changes.** The desktop resolution is never touched; the game is shown in a borderless full-screen window on your monitor, scaled sharply (nearest pixels with a one-pixel blend at their edges).
 - **Smooth frame rate.** Frames follow your monitor's refresh rate instead of the original's ~20 per second. The game's own timing (simulation, animations) is unchanged.
 - **Any resolution, laid out for your screen.** The game draws at your native resolution divided by a display scale (100–250 % in 5 % steps, or *Auto*: 1080 pixels high on taller screens, e.g. 1920×1080 on a 2560×1440 monitor). The sidebar and top bar extend to the screen's edges, the city fills the rest, and dialogs are centred.
-- **Full-screen pictures** (main menu, loading screens) are shown at their own size in a frame instead of being stretched. Around the menus: a blurred, darkened picture of the last city you played — or your own picture (see [Your own menu background](#your-own-menu-background)).
+- **Full-screen pictures** (main menu, loading screens) are shown at their own size in a frame instead of being stretched. Around the menus: a blurred, darkened picture of the last city you played — or your own picture (see [MENU_BACKGROUND.md](MENU_BACKGROUND.md)).
 
   ![The main menu over a blurred picture of the last city](screenshots/main-menu.webp)
 
@@ -78,10 +78,6 @@ This follows the [OpenRCT2](https://github.com/OpenRCT2/OpenRCT2) approach: star
 
 Files Yongle creates in the game folder: `ddraw_proxy.log` (log; it grows over sessions and can be deleted at any time), `emperor_engine.ini` (settings; a backup `emperor_engine.ini.bak` when old settings are cleaned up), `menu_background_auto.png` (the last city, for the menu backdrop) and `shots\` (F11 / F12).
 
-## Your own menu background
-
-By default the menus are shown over a blurred, darkened picture of the last city you played (saved as `menu_background_auto.png` when you leave a city). To use a picture of your own instead, put it in the game folder as **`menu_background.png`** (or **`menu_background.bmp`**). Any size works: it is scaled to cover the screen (cropped, not stretched), then blurred and darkened the same way. Delete it to go back to your last city. (Setting: `[display] menu_screens = native_city`, the default.)
-
 ## Keys
 
 | Key | Action |
@@ -123,28 +119,7 @@ Longer term:
 
 ## Building from source
 
-Yongle is C++20 (with a small C entry point), built as a 32-bit DLL with [llvm-mingw](https://github.com/mstorsjo/llvm-mingw).
-
-Tools (the versions used; paths are parameters of the scripts):
-- llvm-mingw `20261006` (ucrt, x86_64 host)
-- CMake 4.4.4
-- Python 3 (for the symbol table `ddraw.syms`)
-- SDL3 3.4.18 source release
-
-Steps (PowerShell, in the repository folder):
-
-```powershell
-# 1. Build SDL3 once (static, 32-bit) into build\sdl3-i686-install
-powershell -File tools\build_sdl3.ps1 -Source <SDL3-3.4.18 folder> -Toolchain <llvm-mingw folder> -CMake <cmake.exe>
-# 2. Build the DLL (build\engine\ddraw.dll, ddraw.syms) and the offline tests
-powershell -File proxy\ddraw\build.ps1 -Toolchain <llvm-mingw folder> -CMake <cmake.exe>
-# 3. Run the offline tests (they do not need the game)
-powershell -File proxy\ddraw\run_tests.ps1
-```
-
-Layout: `proxy/` is the DLL's entry point; `src/core/` is the game-independent engine (hooks, DirectDraw emulation and output, settings, panel, diagnostics); `src/games/emperor/` holds everything specific to Emperor (addresses, hooks). The core contains no game addresses, so other games can be added later. Vendored libraries are in `third_party/`.
-
-The design notes and reverse-engineering records are kept in Traditional Chinese for now and are not published yet; they will follow once translated. Comments in the code refer to them (`docs/...`).
+See **[BUILDING.md](BUILDING.md)** for the tools, the build steps, the offline tests and the code layout.
 
 ## Reporting problems
 
