@@ -169,7 +169,7 @@ Contributions are welcome. For anything beyond a small fix, please open an issue
 
 ## Disclaimer
 
-Yongle is an unofficial fan project. It is not affiliated with or endorsed by the owners of *Emperor: Rise of the Middle Kingdom*. You need your own copy of the game; Yongle contains none of its files.
+Yongle is an unofficial fan project. It is not affiliated with or endorsed by the owners of *Emperor: Rise of the Middle Kingdom*. You need your own copy of the game; Yongle contains none of its files. If you don't own one, I suggest you buy a copy via GOG.
 
 **This project is developed with AI assistance** (Anthropic's Claude writes much of the code and analysis). Every stage is tested by a human in the actual game before it is accepted, with a check that the original game still starts and loads its saves without the DLL. Still, use it at your own risk and keep backups of your saves.
 
