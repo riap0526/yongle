@@ -4,7 +4,7 @@
 
 Yongle runs the original game at your monitor's resolution and refresh rate, lays its interface out for wide and high-resolution screens, scrolls the city smoothly and keeps the game speed steady in large cities. It is named after the Yongle Emperor of the Ming dynasty, who built the Forbidden City — in the tradition of [Julius](https://github.com/bvschaik/julius), [Augustus](https://github.com/Keriew/augustus) and [Akhenaten](https://github.com/dalerank/Akhenaten) for the other Impressions city builders.
 
-> **Status: early (v0.1.0).** Tested on the GOG release of Emperor (version 1.0.1.0) on Windows 11. Expect rough edges; please report what you find (see [Reporting problems](#reporting-problems)).
+> **Status: early (v0.1.1).** Tested on the GOG release of Emperor (version 1.0.1.0) on Windows 11. Expect rough edges; please report what you find (see [Reporting problems](#reporting-problems)).
 
 ![A city at 2560×1440 with Yongle (display scale 100 %)](screenshots/city-1440p.webp)
 *A city at 2560×1440 with Yongle, display scale 100 %. Click any screenshot for full size.*
