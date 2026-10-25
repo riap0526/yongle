@@ -167,11 +167,6 @@ Contributions are welcome. For anything beyond a small fix, please open an issue
 
 ## Credits
 
-**Contributors**
-
-- **[riap0526](https://github.com/riap0526)**: creator and maintainer; direction, design decisions and all in-game testing.
-- **Claude** (Anthropic): AI assistant for reverse engineering, code and documentation, under the maintainer's direction (see [Disclaimer](#disclaimer)).
-
 **Projects and libraries**
 
 - **[Augustus](https://github.com/Keriew/augustus)** (AGPL-3.0): its speed easing code (`core/speed.c`) is used for smooth scrolling (see `third_party/augustus/`), and its display scale, game speed and configuration designs were the models for ours.
