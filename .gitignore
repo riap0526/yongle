@@ -1,0 +1,63 @@
+# --- Game files: never commit (copyrighted, large) ---------------------------
+# Read-only copy of the GOG install.
+original/
+# Writable copy of the game install used for DLL testing.
+testbed/
+# A fresh copy of the GOG install for the release test (docs/testing/v0_1_0_release.md).
+testbed_clean/
+testbed-clean/
+
+# Game asset/data formats, in case a copy ends up anywhere else in the tree.
+*.555
+*.sg2
+*.sg3
+*.sav
+*.map
+*.pak
+*.eng
+*.inf
+*.wav
+*.mp3
+*.bik
+*.smk
+*.jpg
+*.bmp
+*.asi
+*.m3d
+*.sdb
+*.hashdb
+# Executables and libraries (game binaries and our own build outputs alike).
+*.exe
+*.dll
+*.ico
+*.pdf
+
+# --- Build outputs -------------------------------------------------------------
+# Root build tree only; vendored libraries keep their own build/ folders (e.g. third_party/minhook/build).
+/build/
+*.obj
+*.o
+*.pdb
+*.ilk
+*.lib
+*.exp
+
+# --- Logs and tool caches ------------------------------------------------------
+*.log
+__pycache__/
+*.pyc
+# Analysis projects (e.g. Ghidra) live outside the repo; ignore any strays.
+*.gpr
+*.rep/
+*.lock
+*.lock~
+
+# Our screenshot key's output (testbed\shots\, or next to a test DLL; game art: never commit); testbed/ is ignored
+# anyway
+shots/
+
+# Public export and release packages (tools/release/export_public.py)
+/release/
+
+# README screenshots: the published files are the .webp next to it; the full PNG originals stay local
+screenshots/source/
