@@ -1,0 +1,145 @@
+name: Bug report
+description: Something looks or behaves wrong with Yongle installed.
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a problem. Yongle is tested by hand on a few machines only, so your report really helps.
+
+        **Before you start, please follow these steps** (they are the same steps we use in our own tests):
+
+        1. Close the game. Delete `ddraw_proxy.log` in the game folder (it keeps growing over sessions; a fresh one is much easier to read).
+        2. Start the game and do what causes the problem.
+        3. **The moment you see the problem, press F12** (problem report: it marks the log and saves screenshots as `shots\report1_*.png`). For a plain screenshot press F11.
+        4. If you can, quit the game normally (File → Exit game). After a crash, just continue.
+        5. Attach the files listed below to this issue (drag and drop them into the text boxes).
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I am using the latest Yongle release.
+          required: true
+        - label: I searched the existing issues for this problem.
+          required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Yongle version
+      description: The first line of `ddraw_proxy.log` (e.g. `Yongle 0.1.0 ...`), or Properties → Details of `ddraw.dll`.
+      placeholder: "0.1.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: game
+    attributes:
+      label: Your copy of the game
+      options:
+        - GOG (version 1.0.1.0)
+        - CD / retail, patched to 1.0.1.0
+        - Other / not sure
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where does it happen?
+      options:
+        - Start-up or crash
+        - City screen (layout, sidebar, top bar, information windows)
+        - Scrolling or game speed
+        - Main menu, loading screens or other full-screen pictures
+        - China map or campaign map
+        - Dialogs, including Options → Display options
+        - Windowed mode (F5 / Alt+Enter)
+        - Settings panel (Insert)
+        - Screen flicker or black blocks
+        - Something else
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+      description: A screenshot says more than words (F11 or the F12 report files).
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: From starting the game. Mention the save or scenario if it matters.
+      placeholder: |
+        1. Start the game, load the save "..."
+        2. Open Options → Display options, press the up arrow twice
+        3. ...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: always
+    attributes:
+      label: How often?
+      options:
+        - Every time
+        - Sometimes
+        - Once so far
+    validations:
+      required: true
+
+  - type: dropdown
+    id: without
+    attributes:
+      label: Does it also happen without Yongle?
+      description: Rename or remove `ddraw.dll` and try the same thing in the original game (if the original runs on your system).
+      options:
+        - "No, only with Yongle"
+        - "Yes, the original game does it too"
+        - "Not tried / the original does not run on my system"
+    validations:
+      required: true
+
+  - type: textarea
+    id: display
+    attributes:
+      label: Display
+      description: Your screen resolution and refresh rate, Windows display scaling (e.g. 150 %), number of monitors, and whether the game ran full screen or in a window. Your Yongle resolution settings if you changed them.
+      placeholder: "2560x1440 at 144 Hz, Windows scaling 125 %, one monitor, full screen, Yongle display scale 100 %"
+    validations:
+      required: true
+
+  - type: textarea
+    id: system
+    attributes:
+      label: System
+      description: Windows version, graphics card and driver version.
+      placeholder: "Windows 11 24H2, AMD Radeon RX 7800 XT, driver 25.x"
+    validations:
+      required: true
+
+  - type: textarea
+    id: files
+    attributes:
+      label: Files
+      description: |
+        Drag and drop into this box:
+        - `ddraw_proxy.log` (required; from the game folder)
+        - `emperor_engine.ini` (if you changed any settings)
+        - the screenshots from `shots\` (the `report*` ones if you pressed F12)
+        - a save game, zipped, if the problem depends on it
+    validations:
+      required: true
+
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else?
+      description: Other mods or tools running (overlays, recorders, Steam as a non-Steam game, ...), and anything you already tried.

@@ -1,0 +1,42 @@
+name: Feature request
+description: An idea for Yongle.
+title: "[Idea] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ideas are welcome. Please check the [Roadmap](../blob/main/README.md#roadmap) and the existing issues first: it may already be planned.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What would you like, and why?
+      description: The problem it solves or what it would make better in play.
+    validations:
+      required: true
+
+  - type: textarea
+    id: how
+    attributes:
+      label: How could it work?
+      description: Where in the game it would appear (which screen or dialog), what it would look like. A sketch or a screenshot of a similar feature in another game or mod (e.g. Augustus) helps.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Display and interface
+        - Game speed, scrolling, controls
+        - Settings
+        - Localisation / languages
+        - Limits or bugs of the original game
+        - Something else
+    validations:
+      required: true
+
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else?
