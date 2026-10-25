@@ -46,7 +46,7 @@ In `build\engine\`:
 
 - `proxy/` — the DLL's entry point (C), its export and the offline tests.
 - `src/core/` — the game-independent engine: hooks, the DirectDraw emulation and output (SDL3), settings, the panel (Dear ImGui), diagnostics. **No game addresses here**, so other games can be added later.
-- `src/games/emperor/` — everything specific to Emperor: addresses, structures and the hooks on the game's functions. Every hook checks the game's bytes before installing and falls back to the original behaviour on failure.
+- `src/games/emperor/` — everything specific to Emperor: addresses, structures and the hooks on the game's functions. Every hook checks the game's bytes before installing and falls back to the original behavior on failure.
 - `third_party/` — vendored libraries (licenses in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)).
 
 The design notes and reverse-engineering records are kept in Traditional Chinese for now and are not published yet; they will follow once translated. Comments in the code refer to them (`docs/...`).

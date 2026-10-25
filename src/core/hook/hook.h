@@ -18,6 +18,11 @@ int core_hook_install(const char *name, void *target, void *detour, void **origi
 /* Same for an exported function of a module that is already loaded (e.g. L"user32.dll", "CreateWindowExA"). */
 int core_hook_install_api(const char *name, const wchar_t *module, const char *proc, void *detour, void **original);
 
+/* The function a module itself exports, read from its export table (not through GetProcAddress, which a Windows
+   compatibility shim such as GOG's DWM8And16BitMitigation layer redirects to its own code, e.g. AcGenral.dll).
+   nullptr when the module is not loaded or does not export proc; a forwarded export falls back to GetProcAddress. */
+void *core_real_export(const wchar_t *module, const char *proc);
+
 /* Disables and removes every hook. Only for DLL unload (FreeLibrary); on process exit nothing is restored. */
 void core_hook_remove_all(void);
 

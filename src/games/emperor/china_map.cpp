@@ -94,7 +94,7 @@ const int kPhase = core::diag::perf::Register("China map layer (ours)", core::di
 
 enum Mode { kScaled, kNative, kOriginal };
 const char *const kModes[] = {"scaled", "native", "original"};
-const char *const kModeLabels[] = {"scaled (fills the map area)", "native (the picture's own size, centred)",
+const char *const kModeLabels[] = {"scaled (fills the map area)", "native (the picture's own size, centered)",
                                    "original (as the game draws it)"};
 int g_mode = kNative; // R2d.1: the picture's own size by default (playtest 2026-10-25)
 bool g_integer = false;
@@ -519,7 +519,7 @@ void RegisterSettings()
     int i = core::settings::Register(Item{
         "display", "china_map", "China map",
         "The map of China at resolutions larger than the map. scaled: as large as the map area allows, in a fret "
-        "border, over the same map blurred and darkened; native: the picture's own size, centred, the same "
+        "border, over the same map blurred and darkened; native: the picture's own size, centered, the same "
         "background; original: as the game draws it (top left, the rest of the screen not redrawn).",
         Type::Choice, "native", Effect::Live, true, true, 0, 0, 0, nullptr, kModes, kModeLabels, 3});
     core::settings::OnChange(i, &ApplyMode);
