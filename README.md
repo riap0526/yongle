@@ -108,7 +108,7 @@ All settings are in `emperor_engine.ini` next to `ddraw.dll`; the file explains 
 
 ## Known issues
 
-- Stuttering could happen while using the default render option (Direct3D11) on some PC. If you encounter this issue, please try changing renderer method to Direct3D, either via setting panel (Insert), or editing emperor_engine.ini (find the line: renderer = direct3d11, change direct3d11 into direct3d). Next update will address such issue.
+- Stuttering could happen while using the default renderer option (which is Direct3D11 currently) on some PCs. If you encounter this issue, please try changing renderer method to Direct3D, either via setting panel (Insert), or editing emperor_engine.ini (find the line: renderer = direct3d11, change direct3d11 into direct3d). Next update will address such issue.
 - **Flashing black blocks** have been seen occasionally after playing for a while on one system (AMD graphics); screenshots do not show them, and switching windows (Alt+Tab) clears them. The cause is not known yet. If you see them, press F12 and send the log and `shots\` folder.
 - The map and campaign editors and the multiplayer screens run at 1024×768 (centered), not at your resolution.
 - The campaign map screen has not been tested in play yet.
