@@ -117,7 +117,7 @@ The full list is in **[docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md)**. The main p
 
 ## Roadmap
 
-Next: smoother frame pacing and more display and sound options, then **city zoom**, **export of the whole city as one image**, original-style settings screens and key rebinding; longer term, **localization** (starting with Traditional Chinese, with open language packs), **Zeus & Poseidon**, and eventually a reimplementation. Details and status: **[docs/ROADMAP.md](docs/ROADMAP.md)**.
+See **[docs/ROADMAP.md](docs/ROADMAP.md)** for what is planned next and what comes later.
 
 ## Building from source
 
