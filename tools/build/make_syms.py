@@ -29,7 +29,11 @@ def build_id(path):
         name = d[o:o + 8].rstrip(b'\0')
         vs, va, rs, ra = struct.unpack_from('<IIII', d, o + 8)
         if name == b'.buildid':
-            return base, d[ra:ra + min(vs, rs)].hex()
+            # Bytes 24-27 are the debug directory's PointerToRawData, a file offset: llvm-strip changes it in
+            # ddraw.dll (made from ddraw.dbg.dll, which this reads), so it is left out on both sides (0).
+            b = bytearray(d[ra:ra + min(vs, rs)])
+            b[24:28] = bytes(len(b[24:28]))
+            return base, b.hex()
     raise SystemExit('%s: no .buildid section' % path)
 
 

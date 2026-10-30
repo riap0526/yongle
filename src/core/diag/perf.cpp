@@ -18,13 +18,17 @@ struct Phase {
     std::atomic<std::int64_t> current{0}; // ticks in the sample being timed (its thread only adds)
     float history[kHistory];              // ms per sample, by its thread's ring position
     double windowMs;                       // since the last TakeWindow
+    double windowMaxMs;                    // the longest sample since the last TakeWindow
 };
 
 struct Ring {
     std::int64_t when[kHistory]; // when each sample ended
     int next = 0, filled = 0;
     long windowSamples = 0;
+    long windowOver[2] = {0, 0}; // samples whose total phase took more than kSlowMs[0] / kSlowMs[1]
 };
+
+constexpr double kSlowMs[2] = {50.0, 100.0};
 
 Phase g_phase[kMaxPhases];
 std::atomic<int> g_count{0};
@@ -44,6 +48,42 @@ double TicksPerMs()
 int Index(Thread t)
 {
     return t == Thread::Game ? 0 : 1;
+}
+
+// "per pass: total 52.0 (3 over 50 ms, 1 over 100 ms), city 21.0, ...; per output frame: ..." -- the longest sample of
+// each phase since the last TakeWindow (g_lock held by the caller).
+void WindowMax(char *out, std::size_t size)
+{
+    const int n = g_count.load();
+    size_t len = 0;
+    for (int t = 0; t < 2 && len < size; ++t) {
+        const Ring &r = g_ring[t];
+        if (r.windowSamples <= 0) {
+            continue;
+        }
+        int w = std::snprintf(out + len, size - len, "%s%s", len ? "; " : "", t == 0 ? "per pass:" : "per output frame:");
+        len += w > 0 ? static_cast<size_t>(w) : 0;
+        bool first = true;
+        for (int i = 0; i < n && len < size; ++i) {
+            const Phase &p = g_phase[i];
+            if (Index(p.thread) != t) {
+                continue;
+            }
+            if (p.total) {
+                w = std::snprintf(out + len, size - len, "%s total %.1f (%ld over %.0f ms, %ld over %.0f ms)",
+                                  first ? "" : ",", p.windowMaxMs, r.windowOver[0], kSlowMs[0], r.windowOver[1],
+                                  kSlowMs[1]);
+            }
+            else {
+                w = std::snprintf(out + len, size - len, "%s %s %.1f", first ? "" : ",", p.name, p.windowMaxMs);
+            }
+            len += w > 0 ? static_cast<size_t>(w) : 0;
+            first = false;
+        }
+    }
+    if (len >= size) {
+        out[size - 1] = 0;
+    }
 }
 
 } // namespace
@@ -74,6 +114,7 @@ int Register(const char *name, Thread thread, bool total)
         p.current = 0;
         std::memset(p.history, 0, sizeof(p.history));
         p.windowMs = 0;
+        p.windowMaxMs = 0;
         g_count.store(n + 1);
     }
     ReleaseSRWLockExclusive(&g_lock);
@@ -102,6 +143,14 @@ void EndSample(Thread thread)
         const double ms = static_cast<double>(p.current.exchange(0)) / perMs;
         p.history[pos] = static_cast<float>(ms);
         p.windowMs += ms;
+        if (ms > p.windowMaxMs) {
+            p.windowMaxMs = ms;
+        }
+        if (p.total) {
+            for (int k = 0; k < 2; ++k) {
+                r.windowOver[k] += ms > kSlowMs[k] ? 1 : 0;
+            }
+        }
     }
     r.when[pos] = Now();
     r.next = (pos + 1) % kHistory;
@@ -190,13 +239,19 @@ int Find(const char *name)
     return -1;
 }
 
-void TakeWindow(char *out, std::size_t size)
+void TakeWindow(char *out, std::size_t size, char *maxOut, std::size_t maxSize)
 {
     if (!size) {
         return;
     }
     out[0] = 0;
+    if (maxOut && maxSize) {
+        maxOut[0] = 0;
+    }
     AcquireSRWLockExclusive(&g_lock);
+    if (maxOut && maxSize) {
+        WindowMax(maxOut, maxSize);
+    }
     const int n = g_count.load();
     size_t len = 0;
     for (int t = 0; t < 2; ++t) {
@@ -241,8 +296,12 @@ void TakeWindow(char *out, std::size_t size)
     }
     for (int i = 0; i < n; ++i) {
         g_phase[i].windowMs = 0;
+        g_phase[i].windowMaxMs = 0;
     }
-    g_ring[0].windowSamples = g_ring[1].windowSamples = 0;
+    for (Ring &r : g_ring) {
+        r.windowSamples = 0;
+        r.windowOver[0] = r.windowOver[1] = 0;
+    }
     ReleaseSRWLockExclusive(&g_lock);
 }
 

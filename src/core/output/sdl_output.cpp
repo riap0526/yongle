@@ -4,13 +4,18 @@
 #include "core/output/sdl_output.h"
 
 #include "core/capture/screenshot.h"
+#include "core/diag/environment.h"
 #include "core/diag/guard.h"
+#include "core/diag/stall.h"
 #include "core/display/framing.h"
 #include "core/log.h"
 #include "core/ui/panel.h"
 
 #include <SDL3/SDL.h>
+#include <d3d9.h>
+#include <dxgi.h>
 
+#include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <cstdio>
@@ -159,12 +164,18 @@ void ReadBackForCapture(int ow, int oh)
     std::memcpy(stem, g_captureStem, sizeof(stem));
     std::memcpy(time, g_captureTime, sizeof(time));
     ReleaseSRWLockShared(&g_captureLock);
+    char what[120];
+    std::snprintf(what, sizeof(what), "%s_screen_%s", stem, time);
+    if (!core::capture::HasRoom(what)) {
+        return;
+    }
+    const DWORD t = GetTickCount();
     SDL_Surface *s = SDL_RenderReadPixels(g_renderer, nullptr);
     if (!s) {
         core_log("screenshot: reading back the %dx%d screen failed: %s", ow, oh, SDL_GetError());
         return;
     }
-    core::capture::SaveScreen(s, stem, time);
+    core::capture::SaveScreen(s, stem, time, GetTickCount() - t);
 }
 
 bool MakeTexture(int w, int h)
@@ -184,12 +195,26 @@ bool MakeTexture(int w, int h)
     // output pixel wide), so non-integer scales stay sharp without uneven pixel sizes.
     SDL_ScaleMode mode = g_scaling == CORE_SCALING_NEAREST ? SDL_SCALEMODE_NEAREST : SDL_SCALEMODE_PIXELART;
     const char *name = mode == SDL_SCALEMODE_NEAREST ? "nearest" : "sharp bilinear (SDL_SCALEMODE_PIXELART)";
+    const bool d3d9 = std::strcmp(SDL_GetRendererName(g_renderer), "direct3d") == 0;
+    if (mode == SDL_SCALEMODE_PIXELART && d3d9) {
+        name = "nearest (direct3d samples SDL_SCALEMODE_PIXELART as nearest: no sharp bilinear)"; // SDL 3.4.18
+    }
     if (!SDL_SetTextureScaleMode(g_texture, mode)) {
         core_log("output: scale mode %s not supported (%s); using linear", name, SDL_GetError());
         SDL_SetTextureScaleMode(g_texture, SDL_SCALEMODE_LINEAR);
         name = "linear (fallback)";
     }
-    core_log("output: texture %dx%d RGB565, scaling %s", w, h, name);
+    // RGB565 straight into the GPU texture, or converted by SDL on this thread first (direct3d offers only ARGB8888):
+    // the conversion is part of "upload to the texture" in the time log.
+    const auto *formats = static_cast<const SDL_PixelFormat *>(SDL_GetPointerProperty(
+        SDL_GetRendererProperties(g_renderer), SDL_PROP_RENDERER_TEXTURE_FORMATS_POINTER, nullptr));
+    bool native = false;
+    for (const SDL_PixelFormat *f = formats; f && *f != SDL_PIXELFORMAT_UNKNOWN; ++f) {
+        native = native || *f == SDL_PIXELFORMAT_RGB565;
+    }
+    core_log("output: texture %dx%d RGB565 (%s%s), scaling %s", w, h,
+             native ? "used as it is" : "converted by SDL on the CPU to ",
+             native || !formats ? "" : SDL_GetPixelFormatName(formats[0]), name);
     return true;
 }
 
@@ -207,6 +232,380 @@ int VsyncFor(int refresh)
     return n < 1 ? 1 : n > 4 ? 4 : n;
 }
 
+// ---------------------------------------------------------------------------------------------
+// O1g (docs/optimization.md): how Direct3D 9 is paced, an experiment ([debug] d3d9_pacing). With vsync its present
+// took 7.5 ms on average at 200 Hz (5 ms per refresh) and the game handed over fewer frames while the output was
+// still presenting (FrameWanted). timer: vsync off, and before each present we wait until one refresh (cap60: N) after
+// the last one: a high-resolution waitable timer up to about 1 ms before, then a busy wait on the performance
+// counter. dwmflush: vsync off, and after each present DwmFlush (the desktop's next composition; cap60: N times).
+// Direct3D 9 in a window is composed by the desktop, so no vsync should not tear [to be checked in the test].
+
+enum Pacing { kPaceVsync = 0, kPaceTimer = 1, kPaceDwmFlush = 2 };
+int g_pacing = kPaceVsync; // in effect for the current renderer (output thread)
+HANDLE g_paceTimer = nullptr;
+std::int64_t g_paceTarget = 0; // performance counter of the next present (timer)
+using DwmFlush_fn = HRESULT(WINAPI *)();
+DwmFlush_fn g_dwmFlush = nullptr;
+
+std::int64_t Qpc()
+{
+    LARGE_INTEGER c;
+    QueryPerformanceCounter(&c);
+    return c.QuadPart;
+}
+
+std::int64_t QpcPerSecond()
+{
+    static const std::int64_t f = [] {
+        LARGE_INTEGER q;
+        QueryPerformanceFrequency(&q);
+        return q.QuadPart;
+    }();
+    return f;
+}
+
+// Refreshes per frame shown: 1 (display), or N so that refresh / N <= 60 (cap60).
+int PaceRefreshes()
+{
+    const int refresh = g_refreshHz.load();
+    if (g_mode != CORE_PRESENT_CAP60 || refresh <= 61) {
+        return 1;
+    }
+    int n = static_cast<int>(std::ceil(refresh / 60.0 - 0.02));
+    return n < 1 ? 1 : n > 8 ? 8 : n;
+}
+
+std::int64_t PaceInterval()
+{
+    const int refresh = g_refreshHz.load();
+    return QpcPerSecond() * PaceRefreshes() / (refresh > 0 ? refresh : 60);
+}
+
+// After the renderer is made (output thread): which pacing applies to it; logged when it changes.
+void SetupPacing()
+{
+    const int want = core_config_get()->d3d9_pacing;
+    int now = kPaceVsync;
+    static int logged = -1;
+    const char *note = "";
+    if (want != kPaceVsync && g_mode != CORE_PRESENT_ORIGINAL) {
+        if (std::strcmp(SDL_GetRendererName(g_renderer), "direct3d") != 0) {
+            note = " (has no effect on this renderer: Direct3D 11 keeps vsync)";
+        }
+        else if (want == kPaceTimer) {
+            if (!g_paceTimer) {
+                g_paceTimer = CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
+                                                     TIMER_ALL_ACCESS);
+                if (g_paceTimer) {
+                    core_log("output: pacing timer: high-resolution waitable timer");
+                }
+                else {
+                    g_paceTimer = CreateWaitableTimerExW(nullptr, nullptr, 0, TIMER_ALL_ACCESS);
+                    core_log("output: pacing timer: no high-resolution waitable timer (%lu); %s", GetLastError(),
+                             g_paceTimer ? "a normal one (about 1 ms late at most; the busy wait makes up for it)"
+                                         : "none either: busy wait only");
+                }
+            }
+            now = kPaceTimer;
+        }
+        else {
+            if (!g_dwmFlush) {
+                HMODULE m = LoadLibraryW(L"dwmapi.dll");
+                g_dwmFlush = m ? reinterpret_cast<DwmFlush_fn>(GetProcAddress(m, "DwmFlush")) : nullptr;
+            }
+            if (g_dwmFlush) {
+                now = kPaceDwmFlush;
+            }
+            else {
+                note = " (DwmFlush not found: vsync kept)";
+            }
+        }
+    }
+    g_pacing = now;
+    g_paceTarget = 0;
+    if (want != kPaceVsync && logged != now) {
+        logged = now;
+        core_log("output: [debug] d3d9_pacing = %s: %s%s", core_d3d9_pacing_names[want],
+                 now == kPaceTimer      ? "vsync off, frames spaced by our timer"
+                 : now == kPaceDwmFlush ? "vsync off, DwmFlush after each present"
+                                        : "vsync as usual",
+                 note);
+    }
+}
+
+// Before the present (timer): until one interval after the last present.
+void PaceBeforePresent()
+{
+    if (g_pacing != kPaceTimer || g_paceTarget == 0) {
+        return;
+    }
+    const std::int64_t rest = g_paceTarget - Qpc();
+    const std::int64_t spin = QpcPerSecond() / 1000; // the last ms: busy
+    if (rest > spin && g_paceTimer) {
+        LARGE_INTEGER due;
+        due.QuadPart = -((rest - spin) * 10000000 / QpcPerSecond()); // relative, in 100 ns
+        if (SetWaitableTimer(g_paceTimer, &due, 0, nullptr, nullptr, FALSE)) {
+            WaitForSingleObject(g_paceTimer, 1000);
+        }
+    }
+    while (Qpc() < g_paceTarget) {
+        YieldProcessor();
+    }
+}
+
+// After a present: the next target (timer: one interval on, or from now when this one came late, so a late frame is
+// not followed by a burst); dwmflush: wait for the composition(s).
+void PaceAfterPresent()
+{
+    if (g_pacing == kPaceTimer) {
+        const std::int64_t t = Qpc(), iv = PaceInterval();
+        g_paceTarget = g_paceTarget != 0 && t - g_paceTarget < iv / 4 ? g_paceTarget + iv : t + iv;
+    }
+    else if (g_pacing == kPaceDwmFlush) {
+        for (int i = PaceRefreshes(); i > 0; --i) {
+            g_dwmFlush();
+        }
+    }
+}
+
+// Frame intervals (O1g, all renderers): the time between presents, kept for the rate log (TakeIntervals).
+SRWLOCK g_ivLock = SRWLOCK_INIT;
+constexpr int kIvMax = 8192;
+float g_iv[kIvMax];
+int g_ivCount = 0;
+long g_ivTotal = 0;
+double g_ivSum = 0;
+float g_ivMax = 0;
+std::int64_t g_ivLast = 0;
+
+void RecordInterval()
+{
+    const std::int64_t t = Qpc();
+    if (g_ivLast != 0) {
+        const float ms = static_cast<float>((t - g_ivLast) * 1000.0 / QpcPerSecond());
+        AcquireSRWLockExclusive(&g_ivLock);
+        if (g_ivCount < kIvMax) {
+            g_iv[g_ivCount++] = ms;
+        }
+        ++g_ivTotal;
+        g_ivSum += ms;
+        if (ms > g_ivMax) {
+            g_ivMax = ms;
+        }
+        ReleaseSRWLockExclusive(&g_ivLock);
+    }
+    g_ivLast = t;
+}
+
+// Sets the vsync interval: logs what was asked, whether SDL took it (an interval the device does not offer falls back
+// to 1), and then, once, the frames per second actually presented over the next seconds while frames keep coming (O1:
+// Direct3D 9 in a window may accept 4 and still present every refresh, so cap60 would not cap).
+std::atomic<long> g_measureFrames{-1}; // frames presented since the measurement started; -1: not measuring
+DWORD g_measureStart = 0;
+std::atomic<bool> g_measureArmed{false}; // MeasureFromNow was called: measurements are made
+
+void ApplyVsync(int interval)
+{
+    if (g_pacing != kPaceVsync && interval > 0) {
+        interval = 0; // O1g: paced by us
+    }
+    const bool ok = SDL_SetRenderVSync(g_renderer, interval);
+    g_vsync = ok ? interval : 1;
+    if (!ok) {
+        const char *why = SDL_GetError();
+        SDL_SetRenderVSync(g_renderer, 1);
+        core_log("output: vsync interval %d asked, not accepted by %s (%s); using 1", interval,
+                 SDL_GetRendererName(g_renderer), why);
+    }
+    else {
+        core_log("output: vsync interval %d asked, accepted by %s%s", interval, SDL_GetRendererName(g_renderer),
+                 g_measureArmed ? "; measuring the frames presented" : "");
+    }
+    g_measureStart = 0;
+    g_measureFrames = g_measureArmed ? 0 : -1;
+}
+
+// Output thread, after each frame presented: the measurement's end (3 s of frames; pauses longer than 200 ms between
+// frames restart it, so a paused game does not lower the figure).
+void MeasureVsync()
+{
+    static DWORD lastFrame = 0;
+    long n = g_measureFrames.load();
+    if (n < 0) {
+        return;
+    }
+    const DWORD now = GetTickCount();
+    if (g_measureStart == 0 || now - lastFrame > 200) {
+        g_measureStart = now;
+        g_measureFrames = 0;
+        lastFrame = now;
+        return;
+    }
+    lastFrame = now;
+    g_measureFrames = ++n;
+    if (now - g_measureStart >= 3000) {
+        const double fps = n * 1000.0 / (now - g_measureStart);
+        const int refresh = g_refreshHz.load();
+        core_log("output: measured %.1f frames/s presented with vsync interval %d (display %d Hz: expected about "
+                 "%.0f when frames come faster)%s",
+                 fps, g_vsync, refresh, g_vsync > 0 && refresh > 0 ? static_cast<double>(refresh) / g_vsync : 0.0,
+                 g_vsync > 1 && refresh > 0 && fps > 1.3 * refresh / g_vsync ? "; the interval is not honoured" : "");
+        g_measureFrames = -1;
+    }
+}
+
+// O1 (docs/optimization.md §1.4, 2026-10-28): in a window Direct3D 9 showed the picture out of proportion after a
+// resize, Direct3D 11 did not. Direct3D 9's back buffer has the size SDL gives it (SDL's idea of the window, which
+// never hears of size changes: its window procedure is not in the chain); Direct3D 11's swap chain follows the
+// window. Logged after each creation and device reset: the real back buffer, the window's client area and SDL's sizes;
+// and, checked every second (CheckWindowState, when is null), whenever the two differ in a way not logged yet.
+//
+// The second test (2026-10-28) showed why: the rebuild runs on the output thread while the window is still being
+// dragged on the game thread, so Direct3D 9 took the client size of that moment (say 1701 wide) and the drag went on
+// (to 1024). SDL's render output size for Direct3D 9 is the window's live size, not the back buffer's, so it matched
+// the client and no rebuild followed; Direct3D 11's output size is its swap chain's, so it rebuilt once more. The
+// rebuild is now decided on the real back buffer (g_backW/H, read after each creation and device reset).
+int g_backW = -1, g_backH = -1; // the renderer's back buffer; -1: not known (then its output size is used)
+
+// 2026-10-29: and no rebuild while the window is being dragged. During a size-move (SetSizing, from the game
+// thread) the frames are drawn at the old size and stretched; at its end the output is rebuilt once. Outside a
+// size-move (maximise, restore, F5, a resize by another program) it is rebuilt when the client size has stayed the
+// same for kSettleMs. A size-move longer than kSizingMaxMs counts as ended (should WM_EXITSIZEMOVE never come).
+constexpr ULONGLONG kSettleMs = 100;
+constexpr ULONGLONG kSizingMaxMs = 5000;
+std::atomic<ULONGLONG> g_sizingSince{0}; // GetTickCount64 at WM_ENTERSIZEMOVE; 0: not sizing
+std::atomic<bool> g_sizingEnded{false};  // WM_EXITSIZEMOVE came: rebuild at the next frame if the size differs
+
+// The real back buffer of the renderer: Direct3D 9's present parameters, Direct3D 11's swap chain. False when neither.
+bool QueryBackBuffer(int *bw, int *bh, const char **how)
+{
+    *bw = *bh = -1;
+    *how = "not known";
+    SDL_PropertiesID props = SDL_GetRendererProperties(g_renderer);
+    if (auto *dev = static_cast<IDirect3DDevice9 *>(
+            SDL_GetPointerProperty(props, SDL_PROP_RENDERER_D3D9_DEVICE_POINTER, nullptr))) {
+        IDirect3DSwapChain9 *sc = nullptr;
+        D3DPRESENT_PARAMETERS pp{};
+        if (SUCCEEDED(dev->GetSwapChain(0, &sc)) && sc) {
+            if (SUCCEEDED(sc->GetPresentParameters(&pp))) {
+                *bw = static_cast<int>(pp.BackBufferWidth);
+                *bh = static_cast<int>(pp.BackBufferHeight);
+                *how = pp.Windowed ? "Direct3D 9, windowed" : "Direct3D 9, full screen";
+            }
+            sc->Release();
+        }
+    }
+    else if (auto *sc = static_cast<IDXGISwapChain *>(
+                 SDL_GetPointerProperty(props, SDL_PROP_RENDERER_D3D11_SWAPCHAIN_POINTER, nullptr))) {
+        DXGI_SWAP_CHAIN_DESC d{};
+        if (SUCCEEDED(sc->GetDesc(&d))) {
+            *bw = static_cast<int>(d.BufferDesc.Width);
+            *bh = static_cast<int>(d.BufferDesc.Height);
+            *how = "Direct3D 11 swap chain";
+        }
+    }
+    return *bw >= 0;
+}
+
+void LogBackBuffer(const char *when)
+{
+    if (!g_renderer || !g_window) {
+        return;
+    }
+    int bw, bh;
+    const char *how;
+    if (QueryBackBuffer(&bw, &bh, &how) && when) {
+        g_backW = bw; // after a creation or device reset: what DrawFrame compares with the client area
+        g_backH = bh;
+    }
+    RECT cr{};
+    GetClientRect(g_hwnd, &cr);
+    int sw = 0, sh = 0, pw = 0, ph = 0, ow = 0, oh = 0;
+    SDL_GetWindowSize(g_window, &sw, &sh);
+    SDL_GetWindowSizeInPixels(g_window, &pw, &ph);
+    SDL_GetCurrentRenderOutputSize(g_renderer, &ow, &oh);
+    const bool same = bw == cr.right && bh == cr.bottom;
+    static long lastDiff[4] = {};
+    if (!when) {
+        const long diff[4] = {bw, bh, cr.right, cr.bottom};
+        // a 0x0 client: the window is closing (2026-10-30), not worth a line
+        if (bw < 0 || same || cr.right <= 0 || cr.bottom <= 0 || std::memcmp(diff, lastDiff, sizeof(diff)) == 0) {
+            return;
+        }
+        std::memcpy(lastDiff, diff, sizeof(diff));
+        when = "check";
+    }
+    core_log("output: %s: back buffer %dx%d (%s), window client %ldx%ld, SDL window %dx%d (pixels %dx%d, density "
+             "%.3f), render output %dx%d%s",
+             when, bw, bh, how, cr.right, cr.bottom, sw, sh, pw, ph, SDL_GetWindowPixelDensity(g_window), ow, oh,
+             bw < 0 || same ? "" : " -- THE BACK BUFFER DIFFERS FROM THE CLIENT AREA (the picture is stretched)");
+}
+
+} // namespace
+
+void TakeIntervals(char *out, std::size_t size)
+{
+    static float iv[kIvMax];
+    AcquireSRWLockExclusive(&g_ivLock);
+    const int n = g_ivCount;
+    const long total = g_ivTotal;
+    const double sum = g_ivSum;
+    const float mx = g_ivMax;
+    std::memcpy(iv, g_iv, sizeof(float) * n);
+    g_ivCount = 0;
+    g_ivTotal = 0;
+    g_ivSum = 0;
+    g_ivMax = 0;
+    ReleaseSRWLockExclusive(&g_ivLock);
+    out[0] = 0;
+    if (n == 0) {
+        return;
+    }
+    std::sort(iv, iv + n);
+    const float median = iv[n / 2], p95 = iv[(n * 95) / 100 < n ? (n * 95) / 100 : n - 1];
+    const int refresh = g_refreshHz.load();
+    const double period = 1000.0 / (refresh > 0 ? refresh : 60);
+    const double limit = period * PaceRefreshes();
+    const double steady = limit > median ? limit : median;
+    int over = 0;
+    int bins[6] = {}; // 1, 2, 3, 4, 5-9, 10+ refresh periods
+    for (int i = 0; i < n; ++i) {
+        over += iv[i] > 1.5 * steady;
+        const int k = static_cast<int>(iv[i] / period + 0.5);
+        bins[k <= 1 ? 0 : k <= 4 ? k - 1 : k <= 9 ? 4 : 5]++;
+    }
+    auto pc = [n](int c) { return 100.0 * c / n; };
+    std::snprintf(out, size,
+                  "%ld frames, mean %.1f, median %.1f, p95 %.1f, max %.1f; over 1.5x the steady interval (%.1f ms = "
+                  "the larger of the limit %.1f and the median): %.1f%% (%d); in refresh periods of %.2f ms: 1: "
+                  "%.1f%%, 2: %.1f%%, 3: %.1f%%, 4: %.1f%%, 5-9: %.1f%%, 10+: %.1f%%%s",
+                  total, sum / total, median, p95, mx, steady, limit, pc(over), over, period, pc(bins[0]),
+                  pc(bins[1]), pc(bins[2]), pc(bins[3]), pc(bins[4]), pc(bins[5]),
+                  total > n ? " (the share figures from the first 8192)" : "");
+}
+
+void SetSizing(bool on)
+{
+    if (on) {
+        const ULONGLONG t = GetTickCount64();
+        g_sizingSince = t ? t : 1;
+    }
+    else {
+        g_sizingSince = 0;
+        g_sizingEnded = true;
+    }
+}
+
+void MeasureFromNow()
+{
+    if (!g_measureArmed.exchange(true)) {
+        g_measureStart = 0;
+        g_measureFrames = 0;
+    }
+}
+
+namespace {
+
 // Wraps the window and creates the renderer. SDL sizes its swap chain from the window at this moment and, because
 // its window procedure is not in the chain, never hears of later size changes; DrawFrame rebuilds when they happen.
 bool Create(bool first)
@@ -222,14 +621,34 @@ bool Create(bool first)
     }
     bool restored = GetWindowLongPtrA(g_hwnd, GWLP_WNDPROC) != proc;
     SetWindowLongPtrA(g_hwnd, GWLP_WNDPROC, proc);
-    const char *wanted = core_renderer_names[core_config_get()->renderer];
-    g_renderer = SDL_CreateRenderer(g_window, wanted);
+    // auto: Direct3D 11, but Direct3D 9 when the Steam overlay is in the process (O1, docs/optimization.md §1.4: with
+    // it Direct3D 11 stopped for about 2.5 s every 10-30 s; Direct3D 9 did not). If the first cannot start, the other
+    // one, then SDL's default.
+    const int setting = core_config_get()->renderer;
+    const bool steam = GetModuleHandleW(L"gameoverlayrenderer.dll") != nullptr;
+    const char *wanted = setting == 1 || (setting == 0 && steam) ? "direct3d" : "direct3d11";
+    if (first && setting == 0) {
+        core_log("output: renderer auto -> %s (%s)", wanted,
+                 steam ? "the Steam overlay (gameoverlayrenderer.dll) is loaded: Direct3D 11 stutters with it"
+                       : "no Steam overlay");
+    }
+    if (std::strcmp(wanted, "direct3d") == 0 && core_config_get()->fail_direct3d9) {
+        SDL_SetError("made to fail by [debug] fail_direct3d9 = on");
+        g_renderer = nullptr;
+    }
+    else {
+        g_renderer = SDL_CreateRenderer(g_window, wanted);
+    }
     if (!g_renderer) {
-        core_log("output: %s renderer failed (%s); trying direct3d11, then SDL's default", wanted, SDL_GetError());
-        g_renderer = SDL_CreateRenderer(g_window, "direct3d11");
-        if (!g_renderer) {
-            g_renderer = SDL_CreateRenderer(g_window, nullptr);
+        const char *other = std::strcmp(wanted, "direct3d") == 0 ? "direct3d11" : "direct3d";
+        core_log("output: %s renderer failed (%s); trying %s", wanted, SDL_GetError(), other);
+        if (std::strcmp(other, "direct3d") != 0 || !core_config_get()->fail_direct3d9) {
+            g_renderer = SDL_CreateRenderer(g_window, other);
         }
+    }
+    if (!g_renderer) {
+        core_log("output: renderer failed (%s); trying SDL's default", SDL_GetError());
+        g_renderer = SDL_CreateRenderer(g_window, nullptr);
     }
     if (!g_renderer) {
         Fail("SDL_CreateRenderer");
@@ -238,27 +657,25 @@ bool Create(bool first)
     const SDL_DisplayMode *dm = SDL_GetCurrentDisplayMode(SDL_GetDisplayForWindow(g_window));
     int refresh = dm ? static_cast<int>(dm->refresh_rate + 0.5f) : 0;
     g_refreshHz = refresh;
-    g_vsync = VsyncFor(refresh);
-    if (!SDL_SetRenderVSync(g_renderer, g_vsync)) {
-        core_log("output: vsync %d not supported (%s); using 1", g_vsync, SDL_GetError());
-        g_vsync = 1;
-        SDL_SetRenderVSync(g_renderer, 1);
-    }
+    SetupPacing();
+    ApplyVsync(VsyncFor(refresh));
     int ow = 0, oh = 0;
     SDL_GetCurrentRenderOutputSize(g_renderer, &ow, &oh);
     if (first) {
         static const char *const kMode[] = {"original (game thread)", "display (output thread)",
                                             "cap60 (output thread)"};
         int v = SDL_GetVersion();
-        core_log("output: SDL %d.%d.%d, video driver %s, renderer %s, output %dx%d, display %d Hz, present %s, "
-                 "vsync interval %d; window procedure %s",
+        core_log("output: SDL %d.%d.%d, video driver %s, renderer %s (setting %s), output %dx%d, display %d Hz, "
+                 "present %s, vsync interval %d; window procedure %s",
                  SDL_VERSIONNUM_MAJOR(v), SDL_VERSIONNUM_MINOR(v), SDL_VERSIONNUM_MICRO(v),
-                 SDL_GetCurrentVideoDriver(), SDL_GetRendererName(g_renderer), ow, oh, refresh, kMode[g_mode],
-                 g_vsync, restored ? "given back to the game after SDL's subclass" : "was not subclassed by SDL");
+                 SDL_GetCurrentVideoDriver(), SDL_GetRendererName(g_renderer), core_renderer_names[setting], ow, oh,
+                 refresh, kMode[g_mode], g_vsync,
+                 restored ? "given back to the game after SDL's subclass" : "was not subclassed by SDL");
     }
     else {
         core_log("output: rebuilt for the new window size, output %dx%d", ow, oh);
     }
+    LogBackBuffer(first ? "created" : "rebuilt");
     return true;
 }
 
@@ -275,6 +692,7 @@ bool Rebuild()
     }
     SDL_DestroyRenderer(g_renderer);
     g_renderer = nullptr;
+    g_backW = g_backH = -1;
     SDL_DestroyWindow(g_window);
     g_window = nullptr;
     SetWindowLongPtrA(g_hwnd, GWLP_WNDPROC, proc);
@@ -363,17 +781,56 @@ void DrawFrame(const void *pixels, int pitch, int w, int h, const RECT &dst, SIZ
     static const int kUpload = perf::Register("upload to the texture", perf::Thread::Output);
     static const int kDraw = perf::Register("draw (and overlays)", perf::Thread::Output);
     static const int kPresent = perf::Register("present (incl. vsync wait)", perf::Thread::Output);
+    static const int kPace = perf::Register("pacing wait (ours)", perf::Thread::Output);
     if (!g_renderer || w <= 0 || h <= 0) {
         return;
     }
+    struct Watched { // O1: a frame of a second or more is sampled (core/diag/stall)
+        Watched() { core::diag::stall::Begin(core::diag::stall::Thread::Output); }
+        ~Watched() { core::diag::stall::End(core::diag::stall::Thread::Output); }
+    } watched;
     const std::int64_t t0 = perf::Now();
+    core::diag::env::NoteCore(core::diag::env::Thread::Output);
     int ow = 0, oh = 0;
     SDL_GetCurrentRenderOutputSize(g_renderer, &ow, &oh);
-    if ((ow != client.cx || oh != client.cy) && client.cx > 0 && client.cy > 0) {
+    // The back buffer (see LogBackBuffer) decides too; but if rebuilding three times for the same client size does
+    // not make it fit, it is left as it is (logged once) rather than rebuilt on every frame.
+    static SIZE lastTry{};
+    static int tries = 0;
+    static SIZE seen{};
+    static ULONGLONG seenAt = 0;
+    static long deferred = 0; // frames drawn at the old size while waiting
+    const ULONGLONG now = GetTickCount64();
+    if (client.cx != seen.cx || client.cy != seen.cy) {
+        seen = client;
+        seenAt = now;
+    }
+    const ULONGLONG sizing = g_sizingSince.load();
+    const bool ended = g_sizingEnded.exchange(false);
+    const bool settled = sizing != 0 ? now - sizing >= kSizingMaxMs : ended || now - seenAt >= kSettleMs;
+    const bool useBack = g_backW >= 0 && tries < 3;
+    const int bw = useBack ? g_backW : ow, bh = useBack ? g_backH : oh;
+    const bool differs = (ow != client.cx || oh != client.cy || bw != client.cx || bh != client.cy) &&
+                         client.cx > 0 && client.cy > 0;
+    if (differs && !settled) {
+        ++deferred;
+    }
+    else if (differs) {
+        if (deferred > 0) {
+            core_log("output: rebuilding for %ldx%ld %s; %ld frames were drawn at the old size meanwhile", client.cx,
+                     client.cy, ended ? "after the drag" : "once the size stayed the same", deferred);
+            deferred = 0;
+        }
+        tries = lastTry.cx == client.cx && lastTry.cy == client.cy ? tries + 1 : 1;
+        lastTry = client;
         if (!Rebuild()) {
             return;
         }
         SDL_GetCurrentRenderOutputSize(g_renderer, &ow, &oh);
+        if (tries == 3 && (g_backW != client.cx || g_backH != client.cy)) {
+            core_log("output: the back buffer is %dx%d after 3 rebuilds for the client %ldx%ld; left as it is",
+                     g_backW, g_backH, client.cx, client.cy);
+        }
     }
     const RECT &b = fr.picture;
     const int pw = b.right - b.left, ph = b.bottom - b.top;
@@ -442,15 +899,46 @@ void DrawFrame(const void *pixels, int pitch, int w, int h, const RECT &dst, SIZ
     }
     perf::Add(kDraw, perf::Now() - t);
     t = perf::Now();
-    ok = SDL_RenderPresent(g_renderer) && ok;
+    PaceBeforePresent();
+    perf::Add(kPace, perf::Now() - t);
+    t = perf::Now();
+    const bool presented = SDL_RenderPresent(g_renderer);
+    ok = presented && ok;
     perf::Add(kPresent, perf::Now() - t);
+    if (presented && g_pacing != kPaceVsync) {
+        t = perf::Now();
+        PaceAfterPresent();
+        perf::Add(kPace, perf::Now() - t);
+    }
     perf::Add(kTotal, perf::Now() - t0);
     perf::EndSample(perf::Thread::Output);
+    // A present that fails returns at once (Direct3D 9 while its device is lost: Ctrl+Alt+Del, a sleep, another
+    // program in exclusive full screen): wait about one refresh instead of spinning, and log only the start and the
+    // end of such a spell (O1).
+    static DWORD failingSince = 0;
+    static long failures = 0;
+    if (!presented) {
+        if (failures++ == 0) {
+            failingSince = GetTickCount();
+            core_log("output: present failing (%s); waiting a refresh each time until it works again", SDL_GetError());
+        }
+        const int hz = g_refreshHz.load();
+        Sleep(hz > 0 ? static_cast<DWORD>(1000 / hz) + 1 : 16);
+    }
+    else {
+        if (failures > 0) {
+            core_log("output: present works again after %ld failed frames (%lu ms)", failures,
+                     GetTickCount() - failingSince);
+            failures = 0;
+        }
+        MeasureVsync();
+        RecordInterval();
+    }
     if (ok) {
         ++g_shown;
     }
-    else if (++g_presentErrors <= 16) {
-        core_log("output: present failed (%ld so far): %s", g_presentErrors, SDL_GetError());
+    else if (presented && ++g_presentErrors <= 16) {
+        core_log("output: drawing the frame failed (%ld so far): %s", g_presentErrors, SDL_GetError());
     }
 }
 
@@ -528,16 +1016,26 @@ void ScreenshotHere(const char *label = nullptr)
         core_log("screenshot: no picture to save yet");
         return;
     }
+    // The screen picture is the game picture when the frame fills the window 1:1 with nothing drawn around or over it
+    // (e.g. the city at Display scale 100 %): then only one is saved (O1b).
+    bool caption;
+    AcquireSRWLockShared(&g_captionLock);
+    caption = g_caption[0] != 0;
+    ReleaseSRWLockShared(&g_captionLock);
+    const bool same = !f.framing.on && !caption && f.dst.left == 0 && f.dst.top == 0 && f.dst.right == f.w &&
+                      f.dst.bottom == f.h && f.client.cx == f.w && f.client.cy == f.h;
     struct Shot {
         const Frame *f;
         const char *label;
-    } shot{&f, label};
+        bool screen;
+    } shot{&f, label, !same};
     if (core::diag::Guarded(g_shotFeature,
                             [](void *p) {
                                 auto *s = static_cast<Shot *>(p);
-                                core::capture::Save(s->f->bits, s->f->pitch, s->f->w, s->f->h, s->label);
+                                core::capture::Save(s->f->bits, s->f->pitch, s->f->w, s->f->h, s->label, s->screen);
                             },
-                            &shot)) {
+                            &shot) &&
+        !same) {
         DrawFrame(f.bits, f.pitch, f.w, f.h, f.dst, f.client, f.framing); // reads the screen back
     }
 }
@@ -553,8 +1051,90 @@ void DrawChecked(const Frame &f)
     }
 }
 
+// SDL's render events (O1, docs/resolution_ui/sdl_output_comparison.md §2). Direct3D 9 loses its device on Ctrl+Alt+Del,
+// a sleep, a display change or a full-screen switch: SDL resets it in the next present and keeps our textures (it
+// re-uploads them from its own copies), then sends RENDER_TARGETS_RESET; we draw into no target textures, so that
+// is only logged. Direct3D 11 after a driver reset sends RENDER_DEVICE_RESET with every texture gone: ours are made
+// again (the frame texture on the next frame, the backgrounds and the panel's on their next use). RENDER_DEVICE_LOST
+// (the device could not be made again): the renderer is built anew. Nothing else reads SDL's event queue, so the
+// other events are dropped here (this thread pumps no game window).
+void HandleRenderEvents()
+{
+    SDL_Event ev[16];
+    int n;
+    while ((n = SDL_PeepEvents(ev, 16, SDL_GETEVENT, SDL_EVENT_FIRST, SDL_EVENT_LAST)) > 0) {
+        for (int i = 0; i < n; ++i) {
+            switch (ev[i].type) {
+            case SDL_EVENT_RENDER_TARGETS_RESET:
+                core_log("output: the renderer's device was reset (render targets reset); SDL keeps our textures");
+                LogBackBuffer("after the reset");
+                break;
+            case SDL_EVENT_RENDER_DEVICE_RESET:
+                core_log("output: the renderer's device was made again (device reset): our textures are made again");
+                core::ui::RendererLost();
+                DropBackgroundTextures();
+                if (g_texture) {
+                    SDL_DestroyTexture(g_texture);
+                    g_texture = nullptr;
+                }
+                break;
+            case SDL_EVENT_RENDER_DEVICE_LOST:
+                core_log("output: the renderer's device is lost: building the renderer anew");
+                if (!Rebuild()) {
+                    core_log("output: building the renderer anew failed: %s", SDL_GetError());
+                }
+                break;
+            default:
+                break;
+            }
+        }
+    }
+}
+
+// O1a (docs/optimization.md): whether Windows treats the game window as hidden -- minimized, not in front, cloaked by
+// the desktop window manager, or occluded for Direct3D 11 (a test present) -- logged when it changes, checked once a
+// second on this thread (the swap chain is this thread's).
+void CheckWindowState()
+{
+    static DWORD last = 0;
+    static char logged[160] = "";
+    const DWORD now = GetTickCount();
+    if (now - last < 1000 || !g_renderer) {
+        return;
+    }
+    last = now;
+    LogBackBuffer(nullptr); // O1: a back buffer that no longer fits the window (Direct3D 9 after a resize)
+    using DwmAttr_fn = HRESULT(WINAPI *)(HWND, DWORD, PVOID, DWORD);
+    static DwmAttr_fn dwmAttr = [] {
+        HMODULE m = LoadLibraryW(L"dwmapi.dll");
+        return m ? reinterpret_cast<DwmAttr_fn>(GetProcAddress(m, "DwmGetWindowAttribute")) : nullptr;
+    }();
+    DWORD cloaked = 0;
+    constexpr DWORD kDwmCloaked = 14; // DWMWA_CLOAKED
+    if (dwmAttr && FAILED(dwmAttr(g_hwnd, kDwmCloaked, &cloaked, sizeof(cloaked)))) {
+        cloaked = 0;
+    }
+    const char *occluded = "not tested (not direct3d11)";
+    auto *swap = static_cast<IDXGISwapChain *>(
+        SDL_GetPointerProperty(SDL_GetRendererProperties(g_renderer), SDL_PROP_RENDERER_D3D11_SWAPCHAIN_POINTER, nullptr));
+    if (swap) {
+        HRESULT hr = swap->Present(0, DXGI_PRESENT_TEST);
+        occluded = hr == DXGI_STATUS_OCCLUDED ? "yes" : SUCCEEDED(hr) ? "no" : "test failed";
+    }
+    char state[160];
+    std::snprintf(state, sizeof(state), "in front %s, minimized %s, cloaked %s, occluded %s",
+                  GetForegroundWindow() == g_hwnd ? "yes" : "no", IsIconic(g_hwnd) ? "yes" : "no",
+                  cloaked ? "yes" : "no", occluded);
+    if (std::strcmp(state, logged) != 0) {
+        core_log("output: window %s", state);
+        std::memcpy(logged, state, sizeof(logged));
+    }
+}
+
 DWORD WINAPI OutputThread(void *)
 {
+    core::diag::env::RegisterThread(core::diag::env::Thread::Output);
+    core::diag::stall::RegisterThread(core::diag::stall::Thread::Output);
     g_threadOk = StartSdl();
     SetEvent(g_readyEvent);
     if (!g_threadOk) {
@@ -566,10 +1146,8 @@ DWORD WINAPI OutputThread(void *)
         int want = g_wantedMode.exchange(-1);
         if (want >= 0 && want != g_mode && g_renderer) {
             g_mode = static_cast<core_present_mode>(want);
-            g_vsync = VsyncFor(g_refreshHz.load());
-            bool ok = SDL_SetRenderVSync(g_renderer, g_vsync);
-            core_log("output: present %s, vsync interval %d%s", want == CORE_PRESENT_CAP60 ? "cap60" : "display",
-                     g_vsync, ok ? "" : " (not supported by the renderer)");
+            core_log("output: present %s", want == CORE_PRESENT_CAP60 ? "cap60" : "display");
+            ApplyVsync(VsyncFor(g_refreshHz.load()));
         }
         bool panel = core::ui::IsOpen();
         DWORD w = WaitForSingleObject(g_frameEvent, panel ? 0 : 100);
@@ -586,6 +1164,8 @@ DWORD WINAPI OutputThread(void *)
             std::snprintf(label, sizeof(label), "report%d", core::diag::BeginReport("report key"));
             ScreenshotHere(label);
         }
+        HandleRenderEvents();
+        CheckWindowState();
         int r = g_ready.load();
         if (!(r & kNew) && panel) {
             const Frame &f = g_slots[g_read];

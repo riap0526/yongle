@@ -24,6 +24,12 @@
 #   test_guard  core/diag/guard: the exception log and feature guards (no DLL; writes test_guard.log)
 #   test_restore the failure fallbacks of M4, R1 and P2: real detours on a copy of the game's address range with
 #               fake game functions that fault on purpose; one child process per scenario (no DLL)
+#   test_env    core/diag/environment: modules, processor time per thread, priorities, affinity and its changes,
+#               where our files are (no DLL; ~4 s)
+#   test_stall  core/diag/stall: long passes sampled with their call stack (no DLL)
+#   test_screenshot core/capture/screenshot: the writer's queue limit, PNG level and processor time (no DLL; writes
+#               and deletes shots\t8_*.png)
+#   test_log    core/log: a log over 4 MB is renamed at start-up (no DLL; writes and deletes test_log*.log)
 #   test_sg3    core/assets/sg3 on testbed\DATA\China_Interface.sg3, if present (no DLL; nothing written)
 $ErrorActionPreference = 'Stop'
 $dir = Resolve-Path (Join-Path $PSScriptRoot '..\..\build\engine')
@@ -63,6 +69,10 @@ Run 'test_surface_memory' 'emulated' @()
 Run 'test_perf' 'emulated' @()
 Run 'test_report' 'emulated' @()
 Run 'test_guard' 'emulated' @()
+Run 'test_env' 'emulated' @()
+Run 'test_stall' 'emulated' @()
+Run 'test_screenshot' 'emulated' @()
+Run 'test_log' 'emulated' @()
 # The sidebar edge scenario of test_restore reads the player's own China_Interface pack when the testbed has it.
 $pack = Join-Path $PSScriptRoot '..\..\testbed\DATA\China_Interface.sg3'
 if (Test-Path $pack) { $env:TEST_RESTORE_PACK = (Resolve-Path $pack).Path }

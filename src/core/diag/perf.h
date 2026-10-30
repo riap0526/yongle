@@ -63,7 +63,9 @@ int History(int id, float *out, int max);
 int Find(const char *name); // -1 when not registered
 
 // For the rate log: "pass 11.8 ms = simulation 0.9 + city draw 7.1 + ... + other 1.2; output frame: upload 1.5,
-// draw 0.4, present 4.0" averaged since the last call (empty when nothing was timed).
-void TakeWindow(char *out, std::size_t size);
+// draw 0.4, present 4.0" averaged since the last call (empty when nothing was timed). maxOut (O1a, optional): the
+// longest sample of each phase in the same window, and how many passes or frames took more than 50 and 100 ms --
+// the averages hide single long frames.
+void TakeWindow(char *out, std::size_t size, char *maxOut = nullptr, std::size_t maxSize = 0);
 
 } // namespace core::diag::perf

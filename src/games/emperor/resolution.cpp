@@ -270,12 +270,12 @@ int LargeColumns(int w)
 // 775 at 768) or the next half row past the bottom; never more than a row pair.
 int g_lastAllowance = -1;
 int g_extRight = 0, g_extBottom = 0;
-bool StandardWidth(int w); // below
+bool StandardSize(int w, int h); // below
 
 void UpdateCityExtent(bool viewport)
 {
     const int w = *kScreenWidth, h = *kScreenHeight;
-    const bool ours = !(StandardWidth(w) || w < 1024) && core::diag::Enabled(g_layout);
+    const bool ours = !(StandardSize(w, h) || w < 1024) && core::diag::Enabled(g_layout);
     const bool small = *kSmallTiles == 1;
     const int right = ours ? (small ? w : *kSidebarX) : 0, bottom = ours ? h : 0;
     g_extRight = right;
@@ -372,15 +372,17 @@ void Viewport(ViewportCall c, ViewportCall at1024)
     LayoutFallBack("the city viewport could not be set");
 }
 
-bool StandardWidth(int w)
+// The game's own sizes, laid out by the game itself. Not the width alone (before O1): a window 1024 wide and taller
+// than 768 got the game's 1024x768 viewport, and the city ended at row 760 with black below (playtest 2026-10-28).
+bool StandardSize(int w, int h)
 {
-    return w == 640 || w == 800 || w == 1024;
+    return (w == 640 && h == 480) || (w == 800 && h == 600) || (w == 1024 && h == 768);
 }
 
 void __cdecl ViewportSmall_detour() // 58x30 tiles: 640/800/1024 -> 10x31, 13x39, 17x50
 {
     int w = *kScreenWidth, h = *kScreenHeight;
-    if (StandardWidth(w) || w < 1024) {
+    if (StandardSize(w, h) || w < 1024) {
         Original(o_ViewportSmall, kViewportSmall)();
     }
     else {
@@ -392,7 +394,7 @@ void __cdecl ViewportSmall_detour() // 58x30 tiles: 640/800/1024 -> 10x31, 13x39
 void __cdecl ViewportLarge_detour() // 78x40 tiles: 800 -> 7x29, 1024 -> 10x37 (up to the sidebar)
 {
     int w = *kScreenWidth, h = *kScreenHeight;
-    if (StandardWidth(w) || w < 1024) {
+    if (StandardSize(w, h) || w < 1024) {
         Original(o_ViewportLarge, kViewportLarge)();
         UpdateCityExtent(true);
         return;
@@ -456,7 +458,7 @@ Void_fn o_FrameBars, o_SidebarDraw, o_InfoPlace;
 void __cdecl FrameBars_detour()
 {
     int w = *kScreenWidth;
-    if (w <= 1024) {
+    if (w < 1024 || (w == 1024 && *kScreenHeight == 768)) { // 1024 and taller: the bottom edge would be mid-city
         Original(o_FrameBars, kFrameBars)();
         return;
     }

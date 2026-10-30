@@ -797,6 +797,64 @@ void KeepOnMonitor(const WINDOWPOS *wp)
     busy = false;
 }
 
+// O1 (2026-10-28): changes of the display made outside the game (Windows' resolution or scale, the window moved
+// to another monitor) were not in the log. The window event lines (core/diag/report, at most 400) were used up by
+// the WM_SIZE of a window being dragged and by the WM_DISPLAYCHANGE/WM_SIZE our emulated modes send (SetMode,
+// ClearMode; logged there already): those are no longer passed on, and Windows' own changes get lines of their own.
+int g_ownMessages = 0;          // > 0 while SetMode/ClearMode send the game their WM_DISPLAYCHANGE and WM_SIZE
+HMONITOR g_lastMonitor = nullptr;
+int g_displayLines = 0;
+constexpr int kDisplayLines = 100;
+
+void DescribeMonitor(HMONITOR mon, char *out, size_t size)
+{
+    MONITORINFOEXA mi{};
+    mi.cbSize = sizeof(mi);
+    if (!mon || !GetMonitorInfoA(mon, &mi)) {
+        std::snprintf(out, size, "(unknown)");
+        return;
+    }
+    DEVMODEA dm{};
+    dm.dmSize = sizeof(dm);
+    const bool hz = EnumDisplaySettingsA(mi.szDevice, ENUM_CURRENT_SETTINGS, &dm) != 0;
+    std::snprintf(out, size, "%s [%ld,%ld,%ld,%ld]%s, %lu Hz", mi.szDevice, mi.rcMonitor.left, mi.rcMonitor.top,
+                  mi.rcMonitor.right, mi.rcMonitor.bottom, mi.dwFlags & MONITORINFOF_PRIMARY ? " (primary)" : "",
+                  hz ? dm.dmDisplayFrequency : 0ul);
+}
+
+void LogDisplayEvent(HWND hwnd, UINT m, WPARAM w, LPARAM l)
+{
+    if (g_displayLines >= kDisplayLines) {
+        return;
+    }
+    char mon[160];
+    if (m == WM_DISPLAYCHANGE && g_ownMessages == 0) {
+        ++g_displayLines;
+        DescribeMonitor(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), mon, sizeof(mon));
+        core_log("display: Windows changed the display: WM_DISPLAYCHANGE %dx%d, %u bits; the window's monitor %s",
+                 static_cast<int>(LOWORD(l)), static_cast<int>(HIWORD(l)), static_cast<unsigned>(w), mon);
+    }
+    else if (m == WM_DPICHANGED) {
+        ++g_displayLines;
+        const RECT *r = reinterpret_cast<const RECT *>(l);
+        core_log("display: WM_DPICHANGED %u dpi (%u%%); Windows suggests the window at [%ld,%ld,%ld,%ld]",
+                 static_cast<unsigned>(LOWORD(w)), static_cast<unsigned>(LOWORD(w)) * 100 / 96, r->left, r->top,
+                 r->right, r->bottom);
+    }
+    if (m == WM_WINDOWPOSCHANGED || m == WM_DISPLAYCHANGE || m == WM_DPICHANGED) {
+        HMONITOR now = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+        if (now != g_lastMonitor) {
+            char was[160];
+            DescribeMonitor(now, mon, sizeof(mon));
+            DescribeMonitor(g_lastMonitor, was, sizeof(was));
+            ++g_displayLines;
+            core_log("display: the window is now on monitor %s%s%s", mon, g_lastMonitor ? "; was " : "",
+                     g_lastMonitor ? was : "");
+            g_lastMonitor = now;
+        }
+    }
+}
+
 LRESULT CALLBACK SubclassProc(HWND hwnd, UINT m, WPARAM w, LPARAM l)
 {
     if (m == g_settingsMessage && m != 0 && hwnd == g_hwnd) {
@@ -804,7 +862,11 @@ LRESULT CALLBACK SubclassProc(HWND hwnd, UINT m, WPARAM w, LPARAM l)
         return 0;
     }
     if (hwnd == g_hwnd) {
-        core::diag::LogWindowEvent(m, w, l); // alt-tab, focus, minimise (R2b.1)
+        const bool ours = g_ownMessages > 0 && (m == WM_DISPLAYCHANGE || m == WM_SIZE);
+        if (!ours && !(m == WM_SIZE && g_inSizeMove)) {
+            core::diag::LogWindowEvent(m, w, l); // alt-tab, focus, minimise (R2b.1)
+        }
+        LogDisplayEvent(hwnd, m, w, l);
     }
     if (hwnd == g_hwnd && !g_windowed && m == WM_WINDOWPOSCHANGED) {
         KeepOnMonitor(reinterpret_cast<const WINDOWPOS *>(l));
@@ -819,9 +881,11 @@ LRESULT CALLBACK SubclassProc(HWND hwnd, UINT m, WPARAM w, LPARAM l)
         }
         if (m == WM_ENTERSIZEMOVE) {
             g_inSizeMove = true;
+            core::output::SetSizing(true);
         }
         else if (m == WM_EXITSIZEMOVE) {
             g_inSizeMove = false;
+            core::output::SetSizing(false);
             Settle(true);
         }
         else if (m == WM_SIZE && !g_inSizeMove && (w == SIZE_MAXIMIZED || w == SIZE_RESTORED)) {
@@ -973,8 +1037,10 @@ void SetMode(int w, int h)
              w, h, v.left, v.top, v.right, v.bottom, w > 0 ? double(v.right - v.left) / w : 0.0);
     if (g_hwnd) {
         // What a real mode change sends: the game updates its screen size and client rectangle from these.
+        ++g_ownMessages;
         SendMessageA(g_hwnd, WM_DISPLAYCHANGE, 16, MAKELPARAM(w, h));
         SendMessageA(g_hwnd, WM_SIZE, SIZE_RESTORED, MAKELPARAM(w, h));
+        --g_ownMessages;
     }
 }
 
@@ -993,7 +1059,9 @@ void ClearMode()
     core_log("display: emulated mode %ldx%ld cleared; game sees the real %dx%dx%d desktop again", g_mode.cx,
              g_mode.cy, w, h, bpp);
     if (g_hwnd) {
+        ++g_ownMessages;
         SendMessageA(g_hwnd, WM_DISPLAYCHANGE, bpp, MAKELPARAM(w, h));
+        --g_ownMessages;
     }
 }
 

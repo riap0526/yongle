@@ -30,6 +30,7 @@
 #pragma once
 
 #define WIN32_LEAN_AND_MEAN
+#include <cstddef>
 #include <windows.h>
 
 #include "core/config.h"
@@ -78,6 +79,22 @@ bool SetPresentMode(core_present_mode mode);
 
 // Display refresh rate seen by the output (0 until known).
 int RefreshHz();
+
+// Game thread, when the game shows its main screen (the city) for the first time: from then on the output measures
+// the frames per second it presents (once now, and again after each vsync change or rebuild) and logs the figure.
+// Before (O1 test 2026-10-28) it measured on the loading screens, where the figure says nothing.
+void MeasureFromNow();
+
+// Game thread (the window's subclass): the user started (true) or ended (false) moving or sizing the window with the
+// mouse (WM_ENTERSIZEMOVE, WM_EXITSIZEMOVE). While it lasts the output is not rebuilt for the new size; it is once,
+// at the end (O1, docs/optimization.md §1.5).
+void SetSizing(bool on);
+
+// For the rate log (one caller): the intervals between the frames presented since the last call (O1g): count, mean,
+// median, 95th percentile and maximum in ms, the share over 1.5 times the steady interval (the larger of the
+// output's limit -- one refresh, or N for cap60 -- and the median), and the share by whole refresh periods. "" when
+// no frame was presented.
+void TakeIntervals(char *out, std::size_t size);
 
 // Any thread: the background layers for a framed picture of pictureW x pictureH on a screenW x screenH output, laid
 // out by core::display::ComputeFrameLayout: the outer fill (outerU x outerV) and the frame (frameU x frameV), RGB565

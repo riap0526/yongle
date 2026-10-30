@@ -27,6 +27,7 @@
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <mmsystem.h>
 
 #include <cstdio>
 #include <cstdlib>
@@ -61,6 +62,8 @@ bool FrameWanted() { return false; }
 void HoldNextFrame(DWORD) {}
 void TakeCounts(long *a, long *b) { *a = *b = 0; }
 int RefreshHz() { return 60; }
+void MeasureFromNow() {}
+void TakeIntervals(char *out, std::size_t) { out[0] = 0; }
 } // namespace core::output
 
 namespace core::ui {
@@ -77,6 +80,7 @@ namespace core::capture {
 using TagProvider = void (*)(char *, size_t);
 void SetTagProvider(TagProvider) {}
 bool SaveOne(const void *, int, int, int, const char *, const char *) { return true; }
+int Flush(unsigned long) { return 0; }
 } // namespace core::capture
 
 extern "C" unsigned core_timer_resolution_us(void) { return 1000; }
@@ -1616,6 +1620,45 @@ void R2cChinaMap()
 }
 
 // R3: the display scale steps and the status lines of our Display options dialog (pure parts).
+// ---------------------------------------------------------------------------------------------
+// O1: the simulation pace while falling behind (games/emperor/emperor.cpp, DueBody)
+
+// sim_tick_due as game_frame calls it: from a call whose return address is 0x536ba8 (kDueFromFrame).
+int CallDueFromFrame()
+{
+    using Fn = int(__cdecl *)();
+    BYTE *call = reinterpret_cast<BYTE *>(0x536ba3 + g_imageShift);
+    call[0] = 0xe8;
+    *reinterpret_cast<DWORD *>(call + 1) =
+        reinterpret_cast<DWORD>(Main<Fn>("sim_tick_due")) - reinterpret_cast<DWORD>(call + 5);
+    call[5] = 0xc3;
+    return reinterpret_cast<Fn>(call)();
+}
+
+void O1FallingBehind()
+{
+    At<int>(0x10de0dc) = 90;           // game_speed 90 %: tick_interval_table[1] + 2 ms
+    At<int>(0x855214 + 4) = 20;        // 22 ms a tick
+    At<DWORD>(0x115f540) = timeGetTime(); // sim_last_tick_time
+    for (int i = 0; i < 20; ++i) {     // a pass every 10 ms
+        CallDueFromFrame();
+        Sleep(10);
+    }
+    Check(!LogContains("falling behind"), "a pass every 10 ms: not behind");
+    for (int i = 0; i < 25; ++i) {     // a pass every 80 ms: 3 ticks owed per pass
+        CallDueFromFrame();
+        Sleep(80);
+    }
+    Check(LogContains("emperor: falling behind (a pass every") && LogContains("at most 2 ticks per pass"),
+          "a pass every 80 ms: falling behind, at most 2 ticks per pass (logged)");
+    for (int i = 0; i < 40; ++i) {     // fast again
+        CallDueFromFrame();
+        Sleep(10);
+    }
+    Check(LogContains("emperor: no longer behind (a pass every") && !LogContains("ticks are made up again; 0 dropped"),
+          "fast again: no longer behind, the ticks dropped meanwhile logged");
+}
+
 void R3DisplayOptions()
 {
     namespace o = emperor::display_options;
@@ -1658,6 +1701,7 @@ const Scenario kScenarios[] = {
     {"r2b_fixed_original", &R2bFixedOriginal}, {"r2b_sidebar_edges", &R2bSidebarEdges},
     {"r2b_unknown_class", &R2bUnknownClass}, {"r2b17_ui_fixes", &R2b17UiFixes},
     {"r2c_china_map", &R2cChinaMap},   {"r3_display_options", &R3DisplayOptions},
+    {"o1_falling_behind", &O1FallingBehind},
 };
 
 } // namespace
