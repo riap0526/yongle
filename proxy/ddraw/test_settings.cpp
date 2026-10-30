@@ -107,6 +107,7 @@ int main()
           "loaded: typed values (present, scale, resolution)");
     Check(cfg->panel_key_vk == 0x2D && cfg->panel_scale_percent == 0 && cfg->high_resolution_timer,
           "defaults for keys not in the file (panel_key Insert, panel_scale auto)");
+    Check(cfg->renderer == 0 && Value("display", "renderer") == "auto", "renderer: auto by default (O1)");
 
     int smooth = cs::Find("gameplay", "smooth_scroll");
     cs::OnChange(smooth, &OnSmooth);

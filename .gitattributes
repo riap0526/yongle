@@ -1,0 +1,2 @@
+# Kept byte for byte as verified (docs/third_party.md; tools/verify/text_check.py compares its SHA256).
+third_party/miniz/miniz.h -text

@@ -22,12 +22,23 @@ constexpr wchar_t kFileName[] = L"emperor_engine.ini";
 core_config g_config = {CORE_BACKEND_EMULATED, CORE_SCALING_SHARP_BILINEAR, CORE_PRESENT_DISPLAY,
                         CORE_RESOLUTION_SCALED, 1024, 768, 100, 1, 1, 0x2D /* Insert */, 0, 0,
                         0x7A /* F11 */, 0, 0x7B /* F12 */, 0, 0, 0, 0, 0,
-                        0, 0, 0, CORE_WINDOW_CENTER, CORE_WINDOW_CENTER, 0};
+                        0 /* fail_direct3d9 */, 0 /* d3d9_pacing */, 0, 0, 0, CORE_WINDOW_CENTER, CORE_WINDOW_CENTER, 0};
 
 const char *const kBackend[] = {"emulated", "system"};
-const char *const kRendererLabels[] = {"direct3d11 (default)", "direct3d12", "direct3d (Direct3D 9: no flip model)",
-                                       "opengl", "vulkan", "gpu (SDL GPU)"};
+const char *const kRendererLabels[] = {"auto (Direct3D 11; Direct3D 9 with the Steam overlay)", "direct3d (Direct3D 9)",
+                                       "direct3d11 (Direct3D 11, flip model)"};
 const char *const kScaling[] = {"nearest", "sharp_bilinear"};
+
+// [debug] renderer (0.1.1) became [display] renderer (O1). Only direct3d, a choice the player made, is carried over:
+// direct3d11 was the default of the time (and in the shipped file), and the others are no longer offered.
+int MigrateRenderer(const char *old, core::settings::Migration *out, int max)
+{
+    if (_stricmp(old, "direct3d") != 0 || max < 1) {
+        return 0;
+    }
+    out[0] = core::settings::Migration{"display", "renderer", "direct3d"};
+    return 1;
+}
 const char *const kWindow[] = {"fullscreen", "windowed"};
 const char *const kWindowLabels[] = {"fullscreen (covering the screen)", "windowed (move and size it freely)"};
 const char *const kPresent[] = {"original", "display", "cap60"};
@@ -45,7 +56,7 @@ int Index(const char *const *list, int n, const char *v)
 }
 
 int g_backend, g_scaling, g_present, g_resolution, g_scale, g_timer, g_smooth, g_panelScale, g_panelKey,
-    g_shotKey, g_reportKey, g_labels, g_loadingHold, g_perfOverlay, g_renderer, g_window, g_windowW, g_windowH,
+    g_shotKey, g_reportKey, g_labels, g_loadingHold, g_perfOverlay, g_renderer, g_failD3d9, g_d3d9Pacing, g_window, g_windowW, g_windowH,
     g_windowX, g_windowY, g_windowLock;
 
 // Keeps core_config in step with the model (registered first, so owners' callbacks see the new typed value).
@@ -83,7 +94,9 @@ bool Sync(int i, const char *v, bool)
     else if (i == g_labels) g_config.frame_labels = std::strcmp(v, "on") == 0;
     else if (i == g_loadingHold) g_config.loading_stage_ms = std::atoi(v);
     else if (i == g_perfOverlay) g_config.perf_overlay = std::strcmp(v, "on") == 0;
-    else if (i == g_renderer) g_config.renderer = Index(core_renderer_names, 6, v);
+    else if (i == g_renderer) g_config.renderer = Index(core_renderer_names, 3, v);
+    else if (i == g_failD3d9) g_config.fail_direct3d9 = std::strcmp(v, "on") == 0;
+    else if (i == g_d3d9Pacing) g_config.d3d9_pacing = Index(core_d3d9_pacing_names, 3, v);
     else if (i == g_shotKey) {
         core::ui::Hotkey key{0x7A, 0};
         core::ui::ParseHotkey(v, v + std::strlen(v), &key);
@@ -192,13 +205,30 @@ void RegisterCoreItems()
                              "FPS, a graph of the time per main-loop pass and where the time goes (the game's "
                              "simulation and drawing, our copies, the output), in the top left corner while playing.",
                              Type::Bool, "off", Effect::Live, true, true, 0, 0, 0, nullptr, nullptr, nullptr, 0});
-    g_renderer = Add(Item{"debug", "renderer", "Output renderer",
-                          "For diagnosing display problems (e.g. flashing black blocks that screenshots do not show): "
-                          "the SDL renderer that puts the picture on the screen. direct3d uses Direct3D 9, which does "
-                          "not use the flip model. Takes effect after a restart; if it cannot start, the default is "
-                          "used.",
-                          Type::Choice, "direct3d11", Effect::Restart, true, true, 0, 0, 0, nullptr, core_renderer_names,
-                          kRendererLabels, 6});
+    // O1 (docs/optimization.md §1.4): moved from [debug] (0.1.1). Direct3D 11 ran best in the tests, but with the
+    // Steam overlay in the process it stopped for about 2.5 s every 10-30 s, where Direct3D 9 did not.
+    core::settings::Retire("debug", "renderer", &MigrateRenderer);
+    g_renderer = Add(Item{"display", "renderer", "Renderer",
+                          "What puts the picture on the screen. auto (default): Direct3D 11, or Direct3D 9 when the "
+                          "Steam overlay is in the game (Direct3D 11 stutters with it); the other one if the first "
+                          "cannot start. direct3d: Direct3D 9. direct3d11: Direct3D 11. Takes effect after a restart.",
+                          Type::Choice, "auto", Effect::Restart, true, true, 0, 0, 0, nullptr, core_renderer_names,
+                          kRendererLabels, 3});
+    // O1: for testing auto's fall-back to direct3d11 once; not in the panel.
+    g_failD3d9 = Add(Item{"debug", "fail_direct3d9", "Fail Direct3D 9 (test)",
+                          "on: the Direct3D 9 renderer is made to fail at start, so renderer = direct3d (or auto "
+                          "with the Steam overlay) falls back to direct3d11 (for testing that path). Takes effect "
+                          "after a restart.",
+                          Type::Bool, "off", Effect::Restart, false, false, 0, 0, 0, nullptr, nullptr, nullptr, 0});
+    // O1g (docs/optimization.md): the experiment with Direct3D 9's pacing; not in the panel.
+    g_d3d9Pacing = Add(Item{"debug", "d3d9_pacing", "Direct3D 9 pacing (test)",
+                            "How the Direct3D 9 output is paced. vsync (default): each present waits for the "
+                            "refresh. timer: no vsync; our own high-resolution timer spaces the frames one refresh "
+                            "apart (cap60: so that at most 60 per second are shown). dwmflush: no vsync; after each "
+                            "present we wait for the desktop's next composition. Direct3D 11 is not affected. Takes "
+                            "effect after a restart.",
+                            Type::Choice, "vsync", Effect::Restart, false, false, 0, 0, 0, nullptr,
+                            core_d3d9_pacing_names, core_d3d9_pacing_names, 3});
     g_labels = Add(Item{"debug", "frame_labels", "Frame labels",
                         "For checking the framed pictures' layout (tools/verify/frame_check.py): the border's dark "
                         "lines red, the rest of the border green, padding yellow, the picture white, outside blue.",
@@ -212,7 +242,8 @@ void RegisterCoreItems()
 
 } // namespace
 
-extern "C" const char *const core_renderer_names[6] = {"direct3d11", "direct3d12", "direct3d", "opengl", "vulkan", "gpu"};
+extern "C" const char *const core_renderer_names[3] = {"auto", "direct3d", "direct3d11"};
+extern "C" const char *const core_d3d9_pacing_names[3] = {"vsync", "timer", "dwmflush"};
 
 extern "C" void core_config_load(void *module)
 {

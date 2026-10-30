@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Ideas are welcome. Please check the [Roadmap](../blob/main/README.md#roadmap) and the existing issues first: it may already be planned.
+        Ideas are welcome. Please check the [Roadmap](../blob/main/docs/ROADMAP.md) and the existing issues first: it may already be planned.
 
   - type: textarea
     id: problem

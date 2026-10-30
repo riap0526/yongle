@@ -16,12 +16,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName",      "Yongle contributors"
             VALUE "FileDescription",  "Yongle: modern display and quality-of-life layer for Emperor: Rise of the Middle Kingdom"
-            VALUE "FileVersion",      "@PROJECT_VERSION@"
+            VALUE "FileVersion",      "@YONGLE_VERSION_STRING@"
             VALUE "InternalName",     "ddraw"
             VALUE "LegalCopyright",   "GNU AGPL-3.0; see LICENSE and THIRD_PARTY_NOTICES.md"
             VALUE "OriginalFilename", "ddraw.dll"
             VALUE "ProductName",      "Yongle"
-            VALUE "ProductVersion",   "@PROJECT_VERSION@"
+            VALUE "ProductVersion",   "@YONGLE_VERSION_STRING@"
         END
     END
     BLOCK "VarFileInfo"

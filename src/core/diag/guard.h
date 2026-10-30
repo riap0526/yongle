@@ -58,6 +58,12 @@ inline bool Enabled(const Feature &f)
 // Switches the feature off (logged once with the reason).
 void Disable(Feature &f, const char *why);
 
+// Logs a stack copied from another thread (core/diag/stall: suspended, copied, resumed): eip, the frame-pointer chain
+// and the code addresses on its top that follow a call, as module+offset with our symbols. copy holds size bytes read
+// from esp up. Any thread but the one the copy is of.
+void LogCapturedStack(const char *label, unsigned long eip, unsigned long esp, unsigned long ebp,
+                      const unsigned char *copy, unsigned long size);
+
 // Values in the game's memory (or ours) that a guarded call changes: 1, 2 or 4 bytes each, at most kMax.
 class Restore {
 public:

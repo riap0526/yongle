@@ -5,6 +5,7 @@
 
 #include <cstdarg>
 #include <cstdio>
+#include <cstring>
 
 namespace {
 
@@ -35,10 +36,34 @@ extern "C" void core_log_open(void *module, const char *file_name)
         return;
     }
     strcpy(slash + 1, file_name);
+    // O5a (docs/optimization.md, TODO 10): a log over kRotateBytes at start-up becomes <name>.old.log (replacing the
+    // previous one) and a new one starts; never during a run. When the file is open elsewhere (the game that started
+    // the editor), the rename fails and this run appends as before.
+    constexpr ULONGLONG kRotateBytes = 4ull * 1024 * 1024;
+    char old[MAX_PATH] = "";
+    WIN32_FILE_ATTRIBUTE_DATA a;
+    if (GetFileAttributesExA(path, GetFileExInfoStandard, &a) &&
+        ((static_cast<ULONGLONG>(a.nFileSizeHigh) << 32) | a.nFileSizeLow) > kRotateBytes) {
+        const char *dot = strrchr(slash + 1, '.');
+        const size_t stem = dot ? static_cast<size_t>(dot - path) : strlen(path);
+        if (stem + strlen(".old") + strlen(dot ? dot : "") + 1 <= MAX_PATH) {
+            memcpy(old, path, stem);
+            old[stem] = '\0';
+            strcat(old, ".old");
+            strcat(old, dot ? dot : "");
+            if (!MoveFileExA(path, old, MOVEFILE_REPLACE_EXISTING)) {
+                old[0] = '\0';
+            }
+        }
+    }
     // FILE_SHARE_WRITE: the editor (EmperorEdit.exe) starts while the game that launched it still has the log open;
     // both append whole lines (every line has its thread id; the first one of a process has its pid).
     g_file = CreateFileA(path, FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_ALWAYS,
                          FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (old[0]) {
+        core_log("log: the previous log was over %llu MB and is now %s", kRotateBytes / (1024 * 1024),
+                 strrchr(old, '\\') ? strrchr(old, '\\') + 1 : old);
+    }
 }
 
 extern "C" void core_log_close(void)

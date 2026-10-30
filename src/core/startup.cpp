@@ -1,6 +1,8 @@
 #include "core/startup.h"
 
 #include "core/config.h"
+#include "core/diag/environment.h"
+#include "core/diag/stall.h"
 #include "core/diag/guard.h"
 #include "core/display/virtual_display.h"
 #include "core/hook/hook.h"
@@ -66,6 +68,11 @@ __attribute__((used)) void core_startup_on_entry(void)
     core_log("exe entry point reached (loader lock released); system timer resolution %u us",
              core_timer_resolution_us());
     core_dpi_apply("exe entry point");
+    // O1a (docs/optimization.md): the modules, power and priority the game starts with; the game runs on this thread.
+    core::diag::env::Start();
+    core::diag::env::RegisterThread(core::diag::env::Thread::Game);
+    core::diag::stall::RegisterThread(core::diag::stall::Thread::Game);
+    core::diag::stall::Start();
     if (core_config_get()->high_resolution_timer) {
         core_timer_begin();
     }

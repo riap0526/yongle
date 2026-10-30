@@ -3,7 +3,10 @@
 # or simply run proxy/ddraw/build.ps1.
 cmake_minimum_required(VERSION 3.25)
 # Yongle: the public name (v0.1.0 onwards). The version is shown in the log, the panel and the DLL's properties.
-project(emperor_engine VERSION 0.1.1 LANGUAGES C CXX RC)
+project(emperor_engine VERSION 0.1.2 LANGUAGES C CXX RC)
+# Test builds carry a suffix (e.g. "-dev") so their logs are not taken for a release; empty for a release.
+set(YONGLE_VERSION_SUFFIX "")
+set(YONGLE_VERSION_STRING "${PROJECT_VERSION}${YONGLE_VERSION_SUFFIX}")
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 20)
@@ -60,6 +63,8 @@ add_library(ddraw SHARED
     src/core/diag/guard.cpp
     src/core/diag/report.cpp
     src/core/diag/perf.cpp
+    src/core/diag/environment.cpp
+    src/core/diag/stall.cpp
     src/core/assets/sg3.cpp
     src/core/assets/image_file.cpp
     src/core/output/sdl_output.cpp
@@ -86,6 +91,10 @@ add_library(ddraw SHARED
 # Augustus code (AGPL-3.0): third_party/augustus/README.md. Compiled as part of the DLL.
 add_library(augustus_core STATIC third_party/augustus/src/core/speed.c)
 target_include_directories(augustus_core PUBLIC third_party/augustus/src)
+# PNG encoding with a chosen level (O1b): miniz from SDL 3.4.18 (third_party/miniz, public domain; docs/third_party.md).
+add_library(png_encode STATIC src/core/capture/png_encode.c)
+target_include_directories(png_encode PRIVATE src third_party/miniz)
+target_link_libraries(png_encode PRIVATE SDL3::SDL3-static)
 set_target_properties(ddraw PROPERTIES PREFIX "" OUTPUT_NAME "ddraw")
 target_include_directories(ddraw PRIVATE src)
 target_compile_options(ddraw PRIVATE
@@ -98,7 +107,7 @@ target_compile_options(ddraw PRIVATE
 )
 # Static C++ runtime: the DLL depends only on system DLLs (and the UCRT API set).
 target_link_options(ddraw PRIVATE -static -Wl,--subsystem,windows)
-target_link_libraries(ddraw PRIVATE minhook augustus_core imgui SDL3::SDL3-static dxguid user32 gdi32 winmm)
+target_link_libraries(ddraw PRIVATE minhook augustus_core png_encode imgui SDL3::SDL3-static dxguid user32 gdi32 winmm)
 # Debug information (docs/hooks.md): ddraw.dbg.dll keeps the DWARF (for llvm-symbolizer), ddraw.syms is the table the
 # exception log reads (function and source line for addresses in our DLL; tools/build/make_syms.py), and ddraw.dll
 # itself is stripped of the debug sections (the code is the same).
@@ -111,7 +120,7 @@ add_custom_command(TARGET ddraw POST_BUILD
     COMMAND ${LLVM_BIN}/llvm-strip.exe --strip-debug $<TARGET_FILE:ddraw>
     VERBATIM)
 # The version: in the code (log, panel) and as the DLL's version resource.
-target_compile_definitions(ddraw PRIVATE YONGLE_VERSION="${PROJECT_VERSION}")
+target_compile_definitions(ddraw PRIVATE YONGLE_VERSION="${YONGLE_VERSION_STRING}")
 configure_file(proxy/ddraw/version.rc.in ${CMAKE_CURRENT_BINARY_DIR}/version.rc @ONLY)
 target_sources(ddraw PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/version.rc)
 # Default settings file, copied next to the DLL (copy it into testbed\ together with ddraw.dll).
@@ -186,7 +195,28 @@ add_executable(test_perf proxy/ddraw/test_perf.cpp src/core/diag/perf.cpp)
 target_include_directories(test_perf PRIVATE src)
 target_link_options(test_perf PRIVATE -static)
 
+# Offline test of core/diag/environment (O1a, docs/optimization.md): start-up lines, processor time, resources.
+add_executable(test_env proxy/ddraw/test_env.cpp src/core/diag/environment.cpp src/core/log.cpp)
+target_include_directories(test_env PRIVATE src)
+target_link_options(test_env PRIVATE -static)
+
 # Offline test of core/diag/guard (exception log, feature guards).
+add_executable(test_stall proxy/ddraw/test_stall.cpp src/core/diag/stall.cpp src/core/diag/guard.cpp src/core/log.cpp)
+target_include_directories(test_stall PRIVATE src)
+target_link_options(test_stall PRIVATE -static)
+
+# Offline test of the screenshot writer: the queue limit and the processor time per picture (O1, 2026-10-30).
+add_executable(test_screenshot proxy/ddraw/test_screenshot.cpp src/core/capture/screenshot.cpp
+    src/core/diag/environment.cpp src/core/log.cpp)
+target_include_directories(test_screenshot PRIVATE src)
+target_link_options(test_screenshot PRIVATE -static)
+target_link_libraries(test_screenshot PRIVATE png_encode SDL3::SDL3-static)
+
+# Offline test of the log's size limit at start-up (O5a, 2026-10-30).
+add_executable(test_log proxy/ddraw/test_log.cpp src/core/log.cpp)
+target_include_directories(test_log PRIVATE src)
+target_link_options(test_log PRIVATE -static)
+
 add_executable(test_guard proxy/ddraw/test_guard.cpp src/core/diag/guard.cpp src/core/log.cpp)
 target_include_directories(test_guard PRIVATE src)
 target_link_options(test_guard PRIVATE -static)
@@ -203,7 +233,7 @@ add_executable(test_restore proxy/ddraw/test_restore.cpp
     src/games/emperor/scroll.cpp src/games/emperor/resolution.cpp src/games/emperor/emperor.cpp
     src/games/emperor/ui_fixes.cpp src/games/emperor/china_map.cpp src/games/emperor/display_options.cpp
     src/core/scroll/smooth_scroll.cpp src/core/diag/guard.cpp src/core/diag/report.cpp src/core/diag/perf.cpp
-    src/core/log.cpp
+    src/core/diag/environment.cpp src/core/diag/stall.cpp src/core/log.cpp
     src/core/display/logical_size.cpp
     src/core/display/moved_rect.cpp src/core/display/scaled_rect.cpp src/core/ddraw/surface_memory.cpp
     src/core/assets/sg3.cpp src/core/config.cpp src/core/settings/settings.cpp src/core/settings/ini_text.cpp

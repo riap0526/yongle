@@ -64,7 +64,9 @@ struct core_config {
     int frame_labels;          /* nonzero: framed pictures in label colours (layout check) */
     int loading_stage_ms;      /* each loading stage shown at least this long (0: as fast as the game loads) */
     int perf_overlay;          /* nonzero: the performance overlay while playing (R2b.1-3, core/ui/perf_view.h) */
-    int renderer;              /* index into core_renderer_names: SDL's renderer for the output (diagnosis) */
+    int renderer;              /* index into core_renderer_names: SDL's renderer for the output (O1: auto) */
+    int fail_direct3d9;        /* [debug] fail_direct3d9 (hidden): Direct3D 9 fails on purpose (tests auto's fall-back) */
+    int d3d9_pacing;           /* [debug] d3d9_pacing (hidden, O1g): index into core_d3d9_pacing_names */
     int windowed;              /* R2e: nonzero: a window that can be moved and sized; 0: covering the monitor */
     int window_w, window_h;    /* the window's client size in pixels; 0: automatic */
     int window_x, window_y;    /* its top left corner (outer); CORE_WINDOW_CENTER: centred on its monitor */
@@ -73,8 +75,15 @@ struct core_config {
 
 #define CORE_WINDOW_CENTER (-2147483647 - 1)
 
-/* SDL renderer names for core_config.renderer (index 0, direct3d11, is the default). */
-extern const char *const core_renderer_names[6];
+/* [display] renderer values for core_config.renderer: 0 auto (default: direct3d11; direct3d when the Steam overlay
+   is loaded), 1 direct3d
+   (SDL's Direct3D 9 renderer), 2 direct3d11. */
+extern const char *const core_renderer_names[3];
+
+/* [debug] d3d9_pacing (O1g, docs/optimization.md): how the Direct3D 9 output is paced. 0 vsync (present waits for the
+   refresh; the default), 1 timer (vsync off, our own high-resolution timer), 2 dwmflush (vsync off, DwmFlush after
+   each present). Direct3D 11 always uses vsync. */
+extern const char *const core_d3d9_pacing_names[3];
 
 /* Registers the core's settings, loads the file next to module (an HMODULE) and logs the result. Kernel32 only:
    safe from DllMain. */

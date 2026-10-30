@@ -101,7 +101,9 @@ const IMAGE_SECTION_HEADER *Section(HMODULE m, const char *name)
     return nullptr;
 }
 
-// The module's .buildid section in hex, as make_syms.py writes it ("" when there is none).
+// The module's .buildid section in hex, as make_syms.py writes it ("" when there is none). Bytes 24-27, the debug
+// directory's PointerToRawData (a file offset that llvm-strip changes), are written as 0 on both sides: the table is
+// made from ddraw.dbg.dll, before ddraw.dll is stripped (found in O1's second test, 2026-10-28).
 void BuildId(HMODULE m, char *out, size_t size)
 {
     out[0] = 0;
@@ -114,8 +116,9 @@ void BuildId(HMODULE m, char *out, size_t size)
     static const char kHex[] = "0123456789abcdef";
     size_t o = 0;
     for (DWORD i = 0; i < n && o + 2 < size; ++i) {
-        out[o++] = kHex[p[i] >> 4];
-        out[o++] = kHex[p[i] & 15];
+        const BYTE v = i >= 24 && i < 28 ? 0 : p[i];
+        out[o++] = kHex[v >> 4];
+        out[o++] = kHex[v & 15];
     }
     out[o] = 0;
 }
@@ -327,6 +330,67 @@ void LogException(EXCEPTION_POINTERS *ep, GuardFrame *guard)
         }
     }
 }
+
+// A code address that a call returns to: the bytes before it are a call (E8 rel32, or FF /2 with a ModRM of 1-6
+// bytes). Fewer false addresses than "in an executable module" alone when the whole top of a stack is scanned.
+bool FollowsCall(DWORD a)
+{
+    const BYTE *p = reinterpret_cast<const BYTE *>(a);
+    if (!Readable(p - 7, 7)) {
+        return false;
+    }
+    if (p[-5] == 0xE8) {
+        return true;
+    }
+    static const int kBack[] = {2, 3, 4, 6, 7};
+    for (int k : kBack) {
+        if (p[-k] == 0xFF && ((p[-k + 1] >> 3) & 7) == 2) {
+            return true;
+        }
+    }
+    return false;
+}
+
+} // namespace
+
+void LogCapturedStack(const char *label, unsigned long eip, unsigned long esp, unsigned long ebp,
+                      const unsigned char *copy, unsigned long size)
+{
+    char where[kWhereSize];
+    core_log("  %s: eip %s; esp %08lx ebp %08lx", label, Where(reinterpret_cast<void *>(eip), where, sizeof(where)),
+             esp, ebp);
+    auto at = [&](unsigned long addr) { return *reinterpret_cast<const DWORD *>(copy + (addr - esp)); };
+    // 1. The frame-pointer chain, inside the copy: exact where every function on the way keeps ebp as its frame
+    // pointer (the game's VC6 code does); it goes wrong or stops at the first one that does not (system DLLs,
+    // drivers and overlays are often built without frame pointers).
+    for (int i = 0; i < 12; ++i) {
+        if (ebp < esp || ebp + 8 > esp + size) {
+            break;
+        }
+        DWORD ret = at(ebp + 4);
+        core_log("  %s frame %d (ebp chain): return to %s", label, i,
+                 Where(reinterpret_cast<void *>(ret), where, sizeof(where), true));
+        DWORD next = at(ebp);
+        if (next <= ebp) {
+            break;
+        }
+        ebp = next;
+    }
+    // 2. A scan of the copy from the top: every value that is a code address in a loaded module and follows a call
+    // instruction. Works without frame pointers, but is a guess: a value can be left over from an earlier call, or be
+    // data that happens to look like one; the real callers are among them, in order, nearest first.
+    int shown = 0;
+    for (unsigned long o = 0; o + 4 <= size && shown < 16; o += 4) {
+        DWORD v = *reinterpret_cast<const DWORD *>(copy + o);
+        if (InExecutableModule(v) && FollowsCall(v)) {
+            core_log("  %s stack scan [esp+0x%04lx] (a guess): %s", label, o,
+                     Where(reinterpret_cast<void *>(v), where, sizeof(where), true));
+            ++shown;
+        }
+    }
+}
+
+namespace {
 
 // Runs on the faulting thread after the handler moved it here: puts the SEH chain back and jumps to Guarded.
 [[noreturn]] void __cdecl Recover()

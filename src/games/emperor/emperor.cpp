@@ -29,9 +29,11 @@
 #include "core/capture/screenshot.h"
 #include "core/config.h"
 #include "core/ddraw/surface_memory.h"
+#include "core/diag/environment.h"
 #include "core/diag/guard.h"
 #include "core/diag/perf.h"
 #include "core/diag/report.h"
+#include "core/diag/stall.h"
 #include "core/display/virtual_display.h"
 #include "core/log.h"
 #include "core/output/sdl_output.h"
@@ -132,6 +134,13 @@ struct Pace {
     bool valid = false;
     int extra = 0;    // ticks owed beyond the game's own one in this frame
     long caughtUp = 0; // extra ticks run (for the rate log)
+    int mostInOnePass = 0; // the most ticks one pass ran (its own and the extra ones; for the rate log)
+    // Falling behind (O1): the time between passes, smoothed; while it is long, few ticks per pass (see DueBody).
+    DWORD lastPass = 0;
+    double passMs = 0;
+    bool behind = false;
+    long dropped = 0;       // ticks owed and not run while behind (for the rate log)
+    long droppedSpell = 0;  // the same, for the current spell of falling behind
 };
 Pace g_pace;
 
@@ -149,10 +158,17 @@ void LogRates(const char *why)
     }
     char scroll[256];
     emperor::scroll::TakeStats(scroll, sizeof(scroll));
-    char paceNote[64] = "";
+    char paceNote[128] = "";
     if (g_pace.caughtUp > 0) {
-        std::snprintf(paceNote, sizeof(paceNote), "; %ld ticks made up", g_pace.caughtUp);
+        std::snprintf(paceNote, sizeof(paceNote), "; %ld ticks made up (at most %d ticks in one pass)", g_pace.caughtUp,
+                      g_pace.mostInOnePass);
         g_pace.caughtUp = 0;
+    }
+    g_pace.mostInOnePass = 0;
+    if (g_pace.dropped > 0) {
+        const size_t len = std::strlen(paceNote);
+        std::snprintf(paceNote + len, sizeof(paceNote) - len, "; %ld ticks dropped (falling behind)", g_pace.dropped);
+        g_pace.dropped = 0;
     }
     long multi = 0, torn = 0;
     core::diag::TakeIntegrity(&multi, &torn);
@@ -164,10 +180,21 @@ void LogRates(const char *why)
              why, g_loops / s, g_ticks / s, presented / s, shown / s, ms, kPresent[core_config_get()->present],
              core::output::RefreshHz(), *kGameSpeed, static_cast<int>(*kGameScreen), core_timer_resolution_us(),
              multi, torn, scroll, paceNote);
-    char times[768];
-    perf::TakeWindow(times, sizeof(times));
+    char times[768], longest[768];
+    perf::TakeWindow(times, sizeof(times), longest, sizeof(longest));
     if (times[0]) {
         core_log("time%s (ms): %s", why, times);
+        core_log("time max%s (ms): %s", why, longest);
+    }
+    char intervals[512];
+    core::output::TakeIntervals(intervals, sizeof(intervals)); // O1g: how evenly the frames were shown
+    if (intervals[0]) {
+        core_log("intervals%s (ms): %s", why, intervals);
+    }
+    char cpu[512];
+    core::diag::env::TakeWindow(cpu, sizeof(cpu)); // O1a: processor time actually given to our threads
+    if (cpu[0]) {
+        core_log("cpu%s: %s", why, cpu);
     }
     g_loops = 0;
     g_ticks = 0;
@@ -178,6 +205,7 @@ int WINAPI GameMain_detour(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int show)
 {
     int r = o_GameMain(inst, prev, cmd, show);
     emperor::fullscreen::OnGameEnd();
+    core::capture::Flush(15000); // O1: screenshots still being written (e.g. F12 just before Exit)
     LogRates(" (game ended)");
     core_log("emperor: game_main returned %d", r);
     core_timer_end();
@@ -249,8 +277,20 @@ int __cdecl LoopStep_detour()
     emperor::ui_fixes::OnLoop();
     emperor::display_options::OnLoop();
     core::diag::GameFrameBegin(); // frame check (core/diag/report.h): presents within one pass
+    core::diag::env::NoteCore(core::diag::env::Thread::Game);
     const std::int64_t t0 = perf::Now();
+    // O1: a city pass of a second or more is sampled (core/diag/stall); other screens load files in one pass.
+    const bool watched = *kGameScreen == 1;
+    if (watched) {
+        core::output::MeasureFromNow(); // the output's frames per second, measured in the city (once per change)
+    }
+    if (watched) {
+        core::diag::stall::Begin(core::diag::stall::Thread::Game);
+    }
     int r = Original(o_LoopStep, kLoopStep)();
+    if (watched) {
+        core::diag::stall::End(core::diag::stall::Thread::Game);
+    }
     perf::Add(kPassPhase, perf::Now() - t0);
     perf::EndSample(perf::Thread::Game);
     core::diag::GameFrameEnd();
@@ -298,6 +338,13 @@ int __cdecl LoopStep_detour()
 // while scrolling).
 
 constexpr int kMaxTicksPerFrame = 20;
+// Falling behind (O1, docs/optimization.md): a player's log showed passes every 70 ms (the output blocked) and 300+
+// ticks made up per 10 s -- three or four ticks per picture, so the city jumped instead of moving. While the smoothed
+// time between passes is above kBehindMs, a pass runs at most kBehindTicks ticks and what is owed beyond them is
+// dropped (the game runs slower, as the original does when frames are slow); below kCaughtUpMs it catches up again.
+constexpr double kBehindMs = 50.0;    // fewer than 20 passes a second
+constexpr double kCaughtUpMs = 35.0;  // about 28 passes a second
+constexpr int kBehindTicks = 2;
 constexpr DWORD kCappedMs = 16;
 core::diag::Feature g_paceFeature{"simulation pace (games/emperor)"};
 bool g_catchUp = true;
@@ -332,6 +379,23 @@ void DueBody(DueCall &c)
         g_pace.last = *kSimLastTick;
         g_pace.valid = true;
     }
+    if (g_pace.lastPass != 0) {
+        double dt = static_cast<double>(now - g_pace.lastPass);
+        dt = dt > 200 ? 200 : dt; // a pause (panel, loading) counts as one slow pass, not as many
+        g_pace.passMs = g_pace.passMs * 0.9 + dt * 0.1;
+        if (!g_pace.behind && g_pace.passMs > kBehindMs) {
+            g_pace.behind = true;
+            g_pace.droppedSpell = 0;
+            core_log("emperor: falling behind (a pass every %.0f ms): at most %d ticks per pass, the rest is dropped "
+                     "(the game runs slower instead of jumping)", g_pace.passMs, kBehindTicks);
+        }
+        else if (g_pace.behind && g_pace.passMs < kCaughtUpMs) {
+            g_pace.behind = false;
+            core_log("emperor: no longer behind (a pass every %.0f ms): ticks are made up again; %ld dropped",
+                     g_pace.passMs, g_pace.droppedSpell);
+        }
+    }
+    g_pace.lastPass = now;
     if (static_cast<int>(now - g_pace.last) < 0) {
         g_pace.last = now - interval; // the clock went back: one tick owed
     }
@@ -342,14 +406,22 @@ void DueBody(DueCall &c)
     c.r.Undo();
     if (c.result > 0) {
         DWORD n = (now - g_pace.last) / interval;
-        if (n > static_cast<DWORD>(kMaxTicksPerFrame)) {
-            n = kMaxTicksPerFrame;
+        const DWORD cap = g_pace.behind ? kBehindTicks : kMaxTicksPerFrame;
+        if (n > cap) {
+            if (g_pace.behind) {
+                g_pace.dropped += static_cast<long>(n - cap);
+                g_pace.droppedSpell += static_cast<long>(n - cap);
+            }
+            n = cap;
             g_pace.last = now - (now - g_pace.last) % interval; // more is not made up (Augustus: at most 20)
         }
         else {
             g_pace.last += n * interval;
         }
         g_pace.extra = *kFastForward ? 0 : static_cast<int>(n) - 1;
+        if (g_pace.extra + 1 > g_pace.mostInOnePass) {
+            g_pace.mostInOnePass = g_pace.extra + 1;
+        }
     }
     else if (owed) {
         g_pace.last = now - interval; // held back (pause, another screen, scrolling): one tick as soon as allowed

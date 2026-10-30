@@ -194,6 +194,16 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ------------------------------------------------------------------------------
 ```
 
+## miniz (the copy included in SDL 3.4.18)
+
+- Source: `src/video/miniz.h` of SDL 3.4.18 (https://github.com/libsdl-org/SDL, release-3.4.18), unchanged; used for PNG screenshots
+- License: public domain (Unlicense); no notice is required. The dedication at the end of the file:
+
+```
+This is free and unencumbered software released into the public domain.
+For more information, please refer to <http://unlicense.org/>
+```
+
 ## Augustus
 
 Files `third_party/augustus/src/core/speed.c`, `speed.h` and `time.h` are taken from Augustus

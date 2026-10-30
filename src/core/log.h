@@ -6,7 +6,8 @@
 extern "C" {
 #endif
 
-/* Opens the log next to the DLL identified by module (an HMODULE). Safe to call from DllMain. */
+/* Opens the log next to the DLL identified by module (an HMODULE). Safe to call from DllMain. A log over 4 MB is first
+   renamed to <name>.old.<ext> (replacing the previous one) and a new one starts. */
 void core_log_open(void *module, const char *file_name);
 void core_log_close(void);
 void core_log(const char *fmt, ...) __attribute__((format(printf, 1, 2)));

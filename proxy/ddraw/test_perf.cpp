@@ -87,6 +87,23 @@ int main()
           "rate log window: averages since the last call");
     perf::TakeWindow(text, sizeof(text));
     Check(text[0] == 0, "nothing timed since: empty");
+    // O1a: the longest sample of each phase and the slow passes in the same window.
+    const double passes[] = {12.0, 60.0, 130.0, 8.0};
+    for (double ms : passes) {
+        perf::Add(pass, Ms(ms));
+        perf::Add(sim, Ms(ms / 10));
+        perf::EndSample(perf::Thread::Game);
+    }
+    char longest[512];
+    perf::TakeWindow(text, sizeof(text), longest, sizeof(longest));
+    std::printf("max: %s\n", longest);
+    Check(std::strstr(longest, "per pass: total 130.0 (2 over 50 ms, 1 over 100 ms)") &&
+              std::strstr(longest, "simulation 13.0") && !std::strstr(longest, "per output frame"),
+          "window max: the longest per phase, passes over 50 and 100 ms");
+    perf::Add(pass, Ms(5));
+    perf::EndSample(perf::Thread::Game);
+    perf::TakeWindow(text, sizeof(text), longest, sizeof(longest));
+    Check(std::strstr(longest, "total 5.0 (0 over 50 ms, 0 over 100 ms)") != nullptr, "window max: reset per window");
     Sleep(1100);
     perf::Read(&v);
     Check(v.gamePerSecond == 0 && v.phase[pass].avgMs == 0, "older than a second: not in the averages");
