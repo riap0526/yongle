@@ -32,6 +32,9 @@
 //   loading_stage_ms = 0   ; 0..5000: each start-up loading stage stays on screen at least this long (for looking)
 //   perf_overlay = off     ; on: FPS and where the time goes, in the top left corner while playing
 //
+//   [compat]
+//   cpu_affinity = auto    ; auto: our threads on the other processors, the game's on its original one | original
+//
 //   [timing]
 //   high_resolution_timer = on ; on: timeBeginPeriod(1) for the whole run (timeEndPeriod when the game ends) | off
 #pragma once
@@ -71,12 +74,12 @@ struct core_config {
     int window_w, window_h;    /* the window's client size in pixels; 0: automatic */
     int window_x, window_y;    /* its top left corner (outer); CORE_WINDOW_CENTER: centred on its monitor */
     int window_lock_cursor;    /* nonzero: windowed, the cursor is kept inside the window while it is active */
+    int cpu_affinity;          /* [compat] cpu_affinity (B plan, docs/affinity.md): 0 auto, 1 original */
 };
 
 #define CORE_WINDOW_CENTER (-2147483647 - 1)
 
-/* [display] renderer values for core_config.renderer: 0 auto (default: direct3d11; direct3d when the Steam overlay
-   is loaded), 1 direct3d
+/* [display] renderer values for core_config.renderer: 0 auto (default: direct3d11; direct3d if it cannot start), 1 direct3d
    (SDL's Direct3D 9 renderer), 2 direct3d11. */
 extern const char *const core_renderer_names[3];
 
@@ -97,5 +100,16 @@ const struct core_config *core_config_get(void);
 void core_config_force_system_backend(void);
 
 #ifdef __cplusplus
+}
+
+/* Live settings that the output thread reads while the game thread applies a change (panel_scale_percent,
+   perf_overlay; docs/affinity.md §6): read and written whole, so the two threads never see a value in between. */
+inline int core_config_live(const int &field)
+{
+    return __atomic_load_n(&field, __ATOMIC_RELAXED);
+}
+inline void core_config_set_live(int *field, int value)
+{
+    __atomic_store_n(field, value, __ATOMIC_RELAXED);
 }
 #endif

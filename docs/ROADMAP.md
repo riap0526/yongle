@@ -10,7 +10,7 @@ Back to the [README](../README.md). Plans change with what players report; ideas
 
 ## In progress: performance and feedback
 
-- Smoother frame pacing with both Direct3D 11 and Direct3D 9.
+- Smoother frame pacing and a higher frame rate with both Direct3D 11 and Direct3D 9: our drawing moves to the other processor cores, while the game itself keeps the single core its compatibility settings give it.
 - Display options for the loading screens, the menus and the China map's backdrop.
 - Switching the output scaling (sharp, nearest, smooth) at once from Display options.
 - Sound: pausing the music when you switch away from the game; the ambient sounds.

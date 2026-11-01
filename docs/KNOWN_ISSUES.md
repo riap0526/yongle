@@ -5,9 +5,8 @@ Back to the [README](../README.md). If you run into something not listed here, p
 ## Performance
 
 - **Laptops and slower computers: lower the resolution first.** Raise the display scale (Options → Display options, or the settings panel with Insert), or choose *Auto* (1080 pixels high on taller screens). The game then draws fewer pixels; this helps more than any other setting.
-- **Steam's in-game FPS counter stutters with Direct3D 11.** With the counter on, the game stops for about 2.5 seconds at a time; the Steam overlay itself, with the counter off, runs smoothly. Because the counter cannot be detected, Yongle plays it safe: when the Steam overlay is in the game (for example when you start Emperor through Steam as a non-Steam game), it uses Direct3D 9, which runs at about 25 % fewer frames per second. **If you do not use Steam's FPS counter**, set `renderer = direct3d11` in the `[display]` section of `emperor_engine.ini` and restart the game to get that performance back.
 - **Stutters with Direct3D 11 on some systems.** If the game stutters badly although the log shows nothing unusual, try Direct3D 9: set `renderer = direct3d` in the `[display]` section of `emperor_engine.ini` and restart the game. Please also report it, with the log.
-- **The frame rate drops for a second or two while a screenshot is saved** (F11, F12). The GOG release runs the whole game on one processor core (a Windows compatibility setting it installs), so saving the picture takes time from the game. The game does not freeze.
+- **Troubleshooting crashes or sound problems after updating to 0.1.3**: Yongle now runs its own work (putting the picture on the screen, saving screenshots) and the graphics driver's on the other processor cores, while the game itself stays on the one core the GOG release gives it. To rule this out, set `cpu_affinity = original` in the `[compat]` section of `emperor_engine.ini` and restart the game. Please also report it, with the log.
 
 ## Display
 

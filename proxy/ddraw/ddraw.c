@@ -20,6 +20,7 @@
 #include "core/ddraw/ddraw_emu.h"
 #include "core/ddraw/ddraw_wrap.h"
 #include "core/log.h"
+#include "core/platform/affinity.h"
 #include "core/platform/timing.h"
 #include "core/startup.h"
 #include "games/emperor/emperor.h"
@@ -79,7 +80,8 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved)
 {
     switch (reason) {
     case DLL_PROCESS_ATTACH:
-        DisableThreadLibraryCalls(inst);
+        /* Thread notifications stay on: DLL_THREAD_ATTACH puts each new thread on the original processor mask
+           (core/platform/affinity, docs/affinity.md section 3.4). */
         core_log_open(inst, "ddraw_proxy.log");
         core_log("Yongle " YONGLE_VERSION " (ddraw proxy: emulated DirectDraw + SDL3 output thread, or logging "
                  "wrapper) attached (module %p, pid %lu, exe %s)",
@@ -90,6 +92,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved)
            DLL from the game folder too: the real DirectDraw behind the logging wrapper and nothing else, so it runs
            as without the DLL (R2d; docs/resolution_ui/r2d.md). */
         if (emperor_editor_exe()) {
+            DisableThreadLibraryCalls(inst);
             core_config_force_system_backend();
             core_log("startup: EmperorEdit.exe: only the logging wrapper around the real DirectDraw (no display "
                      "hooks, no game hooks)");
@@ -97,6 +100,12 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved)
         }
         core_startup_attach(inst);
         emperor_attach();
+        break;
+    case DLL_THREAD_ATTACH:
+        core_affinity_thread_attach();
+        break;
+    case DLL_THREAD_DETACH:
+        core_affinity_thread_detach();
         break;
     case DLL_PROCESS_DETACH:
         core_ddraw_write_summary(reserved ? "process exit" : "DLL unload");

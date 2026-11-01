@@ -22,12 +22,13 @@ constexpr wchar_t kFileName[] = L"emperor_engine.ini";
 core_config g_config = {CORE_BACKEND_EMULATED, CORE_SCALING_SHARP_BILINEAR, CORE_PRESENT_DISPLAY,
                         CORE_RESOLUTION_SCALED, 1024, 768, 100, 1, 1, 0x2D /* Insert */, 0, 0,
                         0x7A /* F11 */, 0, 0x7B /* F12 */, 0, 0, 0, 0, 0,
-                        0 /* fail_direct3d9 */, 0 /* d3d9_pacing */, 0, 0, 0, CORE_WINDOW_CENTER, CORE_WINDOW_CENTER, 0};
+                        0 /* fail_direct3d9 */, 0 /* d3d9_pacing */, 0, 0, 0, CORE_WINDOW_CENTER, CORE_WINDOW_CENTER, 0, 0 /* cpu_affinity */};
 
 const char *const kBackend[] = {"emulated", "system"};
-const char *const kRendererLabels[] = {"auto (Direct3D 11; Direct3D 9 with the Steam overlay)", "direct3d (Direct3D 9)",
+const char *const kRendererLabels[] = {"auto (Direct3D 11; Direct3D 9 if it cannot start)", "direct3d (Direct3D 9)",
                                        "direct3d11 (Direct3D 11, flip model)"};
 const char *const kScaling[] = {"nearest", "sharp_bilinear"};
+const char *const kCpuAffinity[] = {"auto", "original"};
 
 // [debug] renderer (0.1.1) became [display] renderer (O1). Only direct3d, a choice the player made, is carried over:
 // direct3d11 was the default of the time (and in the shipped file), and the others are no longer offered.
@@ -57,7 +58,7 @@ int Index(const char *const *list, int n, const char *v)
 
 int g_backend, g_scaling, g_present, g_resolution, g_scale, g_timer, g_smooth, g_panelScale, g_panelKey,
     g_shotKey, g_reportKey, g_labels, g_loadingHold, g_perfOverlay, g_renderer, g_failD3d9, g_d3d9Pacing, g_window, g_windowW, g_windowH,
-    g_windowX, g_windowY, g_windowLock;
+    g_windowX, g_windowY, g_windowLock, g_cpuAffinity;
 
 // Keeps core_config in step with the model (registered first, so owners' callbacks see the new typed value).
 bool Sync(int i, const char *v, bool)
@@ -84,7 +85,7 @@ bool Sync(int i, const char *v, bool)
     else if (i == g_scale) g_config.scale_percent = std::strcmp(v, "auto") == 0 ? 0 : std::atoi(v);
     else if (i == g_timer) g_config.high_resolution_timer = std::strcmp(v, "on") == 0;
     else if (i == g_smooth) g_config.smooth_scroll = std::strcmp(v, "on") == 0;
-    else if (i == g_panelScale) g_config.panel_scale_percent = std::strcmp(v, "auto") == 0 ? 0 : std::atoi(v);
+    else if (i == g_panelScale) core_config_set_live(&g_config.panel_scale_percent, std::strcmp(v, "auto") == 0 ? 0 : std::atoi(v));
     else if (i == g_panelKey) {
         core::ui::Hotkey key{0x2D, 0};
         core::ui::ParseHotkey(v, v + std::strlen(v), &key);
@@ -93,10 +94,11 @@ bool Sync(int i, const char *v, bool)
     }
     else if (i == g_labels) g_config.frame_labels = std::strcmp(v, "on") == 0;
     else if (i == g_loadingHold) g_config.loading_stage_ms = std::atoi(v);
-    else if (i == g_perfOverlay) g_config.perf_overlay = std::strcmp(v, "on") == 0;
+    else if (i == g_perfOverlay) core_config_set_live(&g_config.perf_overlay, std::strcmp(v, "on") == 0);
     else if (i == g_renderer) g_config.renderer = Index(core_renderer_names, 3, v);
     else if (i == g_failD3d9) g_config.fail_direct3d9 = std::strcmp(v, "on") == 0;
     else if (i == g_d3d9Pacing) g_config.d3d9_pacing = Index(core_d3d9_pacing_names, 3, v);
+    else if (i == g_cpuAffinity) g_config.cpu_affinity = Index(kCpuAffinity, 2, v);
     else if (i == g_shotKey) {
         core::ui::Hotkey key{0x7A, 0};
         core::ui::ParseHotkey(v, v + std::strlen(v), &key);
@@ -205,20 +207,20 @@ void RegisterCoreItems()
                              "FPS, a graph of the time per main-loop pass and where the time goes (the game's "
                              "simulation and drawing, our copies, the output), in the top left corner while playing.",
                              Type::Bool, "off", Effect::Live, true, true, 0, 0, 0, nullptr, nullptr, nullptr, 0});
-    // O1 (docs/optimization.md §1.4): moved from [debug] (0.1.1). Direct3D 11 ran best in the tests, but with the
-    // Steam overlay in the process it stopped for about 2.5 s every 10-30 s, where Direct3D 9 did not.
+    // O1 (docs/optimization.md §1.4): moved from [debug] (0.1.1). auto is Direct3D 11 also with the Steam overlay
+    // since the B plan (docs/affinity.md section 7.5): the stops with Steam's FPS counter came from the driver's threads
+    // waiting on the game's processor.
     core::settings::Retire("debug", "renderer", &MigrateRenderer);
     g_renderer = Add(Item{"display", "renderer", "Renderer",
-                          "What puts the picture on the screen. auto (default): Direct3D 11, or Direct3D 9 when the "
-                          "Steam overlay is in the game (Direct3D 11 stutters with it); the other one if the first "
-                          "cannot start. direct3d: Direct3D 9. direct3d11: Direct3D 11. Takes effect after a restart.",
+                          "What puts the picture on the screen. auto (default): Direct3D 11, or Direct3D 9 if Direct3D "
+                          "11 cannot start. direct3d: Direct3D 9 (Direct3D 11 if it cannot start). direct3d11: "
+                          "Direct3D 11. Takes effect after a restart.",
                           Type::Choice, "auto", Effect::Restart, true, true, 0, 0, 0, nullptr, core_renderer_names,
                           kRendererLabels, 3});
     // O1: for testing auto's fall-back to direct3d11 once; not in the panel.
     g_failD3d9 = Add(Item{"debug", "fail_direct3d9", "Fail Direct3D 9 (test)",
-                          "on: the Direct3D 9 renderer is made to fail at start, so renderer = direct3d (or auto "
-                          "with the Steam overlay) falls back to direct3d11 (for testing that path). Takes effect "
-                          "after a restart.",
+                          "on: the Direct3D 9 renderer is made to fail at start, so renderer = direct3d falls back "
+                          "to direct3d11 (for testing that path). Takes effect after a restart.",
                           Type::Bool, "off", Effect::Restart, false, false, 0, 0, 0, nullptr, nullptr, nullptr, 0});
     // O1g (docs/optimization.md): the experiment with Direct3D 9's pacing; not in the panel.
     g_d3d9Pacing = Add(Item{"debug", "d3d9_pacing", "Direct3D 9 pacing (test)",
@@ -238,6 +240,17 @@ void RegisterCoreItems()
                              "or screenshot them (they flash by on a fast computer). 0: as fast as the game loads. "
                              "Only at start-up, so set it in emperor_engine.ini before starting the game.",
                              Type::Int, "0", Effect::Restart, true, false, 0, 5000, 100, nullptr, nullptr, nullptr, 0});
+    // B plan (docs/affinity.md): only in the file (troubleshooting), not in the panel. [debug] cpu_affinity_graphics
+    // (the 0.1.3 test builds) is part of auto now.
+    core::settings::Retire("debug", "cpu_affinity_graphics", nullptr);
+    g_cpuAffinity = Add(Item{"compat", "cpu_affinity", "Processor affinity",
+                             "For troubleshooting only. auto (default): the game's own threads stay on the one "
+                             "processor its compatibility settings give it; ours (the output, screenshots) and the "
+                             "graphics driver's run on the others. original: everything stays on the process's "
+                             "original processors, as without this setting. If the game crashes or the sound goes "
+                             "wrong, try original to see whether this is the cause. Takes effect after a restart.",
+                             Type::Choice, "auto", Effect::Restart, false, false, 0, 0, 0, nullptr, kCpuAffinity,
+                             nullptr, 2});
 }
 
 } // namespace

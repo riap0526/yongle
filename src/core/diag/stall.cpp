@@ -2,6 +2,7 @@
 
 #include "core/diag/guard.h"
 #include "core/log.h"
+#include "core/platform/affinity.h"
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -94,8 +95,11 @@ void Report(int which, DWORD ms)
 
 DWORD WINAPI Watchdog(void *)
 {
+    core::platform::affinity::OurThread("stall watchdog");
     for (;;) {
         Sleep(kPollMs);
+        // The affinity scan (Toolhelp allocates) runs here between samples, never while a thread is suspended.
+        core::platform::affinity::Poll();
         for (int i = 0; i < 2; ++i) {
             Watched &w = g_thread[i];
             const DWORD since = w.since.load();

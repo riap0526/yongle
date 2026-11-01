@@ -9,6 +9,7 @@
 #include "core/diag/stall.h"
 #include "core/display/framing.h"
 #include "core/log.h"
+#include "core/platform/affinity.h"
 #include "core/ui/panel.h"
 
 #include <SDL3/SDL.h>
@@ -39,7 +40,7 @@ core_present_mode g_mode = CORE_PRESENT_ORIGINAL;
 int g_vsync = 0;
 std::atomic<int> g_wantedMode{-1}; // SetPresentMode: the mode the output thread switches to (-1: none)
 std::atomic<int> g_refreshHz{0};
-bool g_failed = false;
+std::atomic<bool> g_failed{false}; // set by the output thread, read by Init on the game thread
 long g_presentErrors = 0;
 
 std::atomic<long> g_presented{0}; // frames handed over by the game
@@ -401,8 +402,9 @@ void RecordInterval()
 // to 1), and then, once, the frames per second actually presented over the next seconds while frames keep coming (O1:
 // Direct3D 9 in a window may accept 4 and still present every refresh, so cap60 would not cap).
 std::atomic<long> g_measureFrames{-1}; // frames presented since the measurement started; -1: not measuring
-DWORD g_measureStart = 0;
-std::atomic<bool> g_measureArmed{false}; // MeasureFromNow was called: measurements are made
+DWORD g_measureStart = 0;                 // output thread only
+std::atomic<bool> g_measureArmed{false};  // MeasureFromNow was called: measurements are made
+std::atomic<bool> g_measureRestart{false}; // MeasureFromNow: start again at the next frame (g_measureStart is the output thread's)
 
 void ApplyVsync(int interval)
 {
@@ -435,7 +437,7 @@ void MeasureVsync()
         return;
     }
     const DWORD now = GetTickCount();
-    if (g_measureStart == 0 || now - lastFrame > 200) {
+    if (g_measureRestart.exchange(false) || g_measureStart == 0 || now - lastFrame > 200) {
         g_measureStart = now;
         g_measureFrames = 0;
         lastFrame = now;
@@ -599,7 +601,7 @@ void SetSizing(bool on)
 void MeasureFromNow()
 {
     if (!g_measureArmed.exchange(true)) {
-        g_measureStart = 0;
+        g_measureRestart = true;
         g_measureFrames = 0;
     }
 }
@@ -621,16 +623,15 @@ bool Create(bool first)
     }
     bool restored = GetWindowLongPtrA(g_hwnd, GWLP_WNDPROC) != proc;
     SetWindowLongPtrA(g_hwnd, GWLP_WNDPROC, proc);
-    // auto: Direct3D 11, but Direct3D 9 when the Steam overlay is in the process (O1, docs/optimization.md §1.4: with
-    // it Direct3D 11 stopped for about 2.5 s every 10-30 s; Direct3D 9 did not). If the first cannot start, the other
-    // one, then SDL's default.
+    // auto: Direct3D 11, also with the Steam overlay (until the B plan Direct3D 9 was chosen then: with Steam's FPS
+    // counter Direct3D 11 stopped for about 2.5 s every 10-30 s; docs/affinity.md section 7.5). If the first cannot
+    // start, the other one, then SDL's default.
     const int setting = core_config_get()->renderer;
     const bool steam = GetModuleHandleW(L"gameoverlayrenderer.dll") != nullptr;
-    const char *wanted = setting == 1 || (setting == 0 && steam) ? "direct3d" : "direct3d11";
+    const char *wanted = setting == 1 ? "direct3d" : "direct3d11";
     if (first && setting == 0) {
         core_log("output: renderer auto -> %s (%s)", wanted,
-                 steam ? "the Steam overlay (gameoverlayrenderer.dll) is loaded: Direct3D 11 stutters with it"
-                       : "no Steam overlay");
+                 steam ? "the Steam overlay (gameoverlayrenderer.dll) is loaded" : "no Steam overlay");
     }
     if (std::strcmp(wanted, "direct3d") == 0 && core_config_get()->fail_direct3d9) {
         SDL_SetError("made to fail by [debug] fail_direct3d9 = on");
@@ -696,7 +697,10 @@ bool Rebuild()
     SDL_DestroyWindow(g_window);
     g_window = nullptr;
     SetWindowLongPtrA(g_hwnd, GWLP_WNDPROC, proc);
-    return Create(false);
+    core::platform::affinity::BeginGraphicsSetup();
+    const bool ok = Create(false);
+    core::platform::affinity::EndGraphicsSetup();
+    return ok;
 }
 
 bool StartSdl()
@@ -706,7 +710,10 @@ bool StartSdl()
         Fail("SDL_Init(VIDEO)");
         return false;
     }
-    return Create(true);
+    core::platform::affinity::BeginGraphicsSetup(); // the modules loaded meanwhile: the graphics stack
+    const bool ok = Create(true);
+    core::platform::affinity::EndGraphicsSetup();
+    return ok;
 }
 
 // Our features drawn here, each under core/diag's guard: on an exception the feature is switched off (logged) and the
@@ -888,7 +895,7 @@ void DrawFrame(const void *pixels, int pitch, int w, int h, const RECT &dst, SIZ
             core::ui::Abandon();
         }
     }
-    else if (core_config_get()->perf_overlay && core::diag::Enabled(g_overlayFeature)) {
+    else if (core_config_live(core_config_get()->perf_overlay) && core::diag::Enabled(g_overlayFeature)) {
         int size[2] = {ow, oh};
         core::diag::Guarded(g_overlayFeature,
                             [](void *p) {
@@ -1133,6 +1140,7 @@ void CheckWindowState()
 
 DWORD WINAPI OutputThread(void *)
 {
+    core::platform::affinity::OurThread("output");
     core::diag::env::RegisterThread(core::diag::env::Thread::Output);
     core::diag::stall::RegisterThread(core::diag::stall::Thread::Output);
     g_threadOk = StartSdl();
@@ -1202,6 +1210,11 @@ bool Init(HWND hwnd, core_scaling scaling, core_present_mode mode)
     if (g_failed) {
         return false;
     }
+    // B plan (docs/affinity.md): before our output thread starts, the process is widened; the game's threads stay on
+    // its original processor, ours use the others.
+    const core_config *cfg = core_config_get();
+    core::platform::affinity::Start(cfg->cpu_affinity == 1 ? core::platform::affinity::Mode::Original
+                                                           : core::platform::affinity::Mode::Auto);
     g_hwnd = hwnd;
     g_scaling = scaling;
     g_mode = mode;
