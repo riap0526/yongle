@@ -79,6 +79,10 @@ void TakeCounts(long *presented, long *shown);
 // before its next frame). Returns false for a switch to or from original, which needs a restart.
 bool SetPresentMode(core_present_mode mode);
 
+// Settings (O3): nearest, linear or sharp bilinear from the next frame on (any thread). Direct3D 9 has no sharp
+// bilinear of its own: there it is drawn in two passes (core/display/scaled_rect.h TwoPassFactor).
+void SetScaling(core_scaling scaling);
+
 // Display refresh rate seen by the output (0 until known).
 int RefreshHz();
 

@@ -214,6 +214,18 @@ int main()
     }
     Check(eights == 1024 && nines == 1024, "dithering: between two levels, half each (no bands)");
 
+    // O3: the two passes' factor -- the smallest whole number at least the scale, lowered to fit the largest texture.
+    Check(d::TwoPassFactor(1.0, 1.0, 1920, 1080, 8192) == 1 && d::TwoPassFactor(2.0, 2.0, 1280, 720, 8192) == 1 &&
+              d::TwoPassFactor(0.96, 0.96, 1024, 768, 8192) == 1,
+          "two passes: not for its own size, a whole multiple, or smaller");
+    Check(d::TwoPassFactor(1.3333, 1.3333, 1920, 1080, 8192) == 2 && d::TwoPassFactor(1.875, 1.875, 1024, 768, 8192) == 2 &&
+              d::TwoPassFactor(2.5, 2.5, 1024, 768, 8192) == 3 && d::TwoPassFactor(1.0, 1.25, 1024, 768, 8192) == 2,
+          "two passes: k = the scale rounded up (133% -> 2, 187.5% -> 2, 250% -> 3, uneven -> the larger)");
+    Check(d::TwoPassFactor(3.0, 3.0, 1280, 720, 4096) == 1 && d::TwoPassFactor(1.3333, 1.3333, 2880, 1620, 8192) == 2 &&
+              d::TwoPassFactor(2.6667, 2.6667, 1440, 810, 4096) == 2 &&
+              d::TwoPassFactor(1.3333, 1.3333, 2880, 1620, 4096) == -1,
+          "two passes: k lowered to fit the largest texture; -1 when even 2 does not fit (4K at 133%, 4096)");
+
     // O2b: blur 0 and brightness 100 % at the picture's own size: the picture itself, pixel for pixel.
     std::vector<WORD> pattern(64 * 32);
     for (size_t k = 0; k < pattern.size(); ++k) {

@@ -2,10 +2,12 @@
 // the DLL (the game folder), with the same time in their names:
 //   <tag>_game_<w>x<h>_<time>.png    the frame the game last presented, at its own resolution (e.g. 1024x768 on a
 //                                    front-end screen, 1920x1080 in the city): for debugging
-//   <tag>_screen_<w>x<h>_<time>.png  what the output shows on the screen (e.g. 2560x1440): the framed layout, the
-//                                    status line; read back from the next frame drawn, before our panel is drawn
-//                                    (the panel is never in either picture). For checking layouts.
-// e.g. screen_0x00_game_1024x768_20261023-213045-123.png and screen_0x00_screen_2560x1440_20261023-213045-123.png.
+//   <tag>_screen-<renderer>_<w>x<h>_<time>.png  what the output shows on the screen (e.g. 2560x1440): the framed
+//                                    layout, the status line; read back from the next frame drawn, before our panel
+//                                    is drawn (the panel is never in either picture). For checking layouts. The
+//                                    renderer (d3d9, d3d11; O3) tells which drew it: their scaling differs.
+// e.g. screen_0x00_game_1024x768_20261023-213045-123.png and
+// screen_0x00_screen-d3d11_2560x1440_20261023-213045-123.png.
 // The screen picture is read back before our panel and our performance overlay are drawn, so neither is in it; when
 // the frame fills the window 1:1 with nothing around or over it, it equals the game picture and is not saved (O1b).
 // The game layer supplies the tag (SetTagProvider; "frame" without one). The game frame is copied on the calling
@@ -49,7 +51,9 @@ int Flush(unsigned long timeoutMs);
 // a frame is copied or the screen read back, so a picture that would be dropped costs nothing (O1, 2026-10-30).
 bool HasRoom(const char *what);
 
-// Output thread: the screen picture read back for a Save (takes ownership of the surface); readBackMs for the log.
-void SaveScreen(SDL_Surface *surface, const char *stem, const char *time, unsigned long readBackMs);
+// Output thread: the screen picture read back for a Save (takes ownership of the surface); readBackMs for the log;
+// renderer: a short name for the file name (nullptr: none, "screen" alone).
+void SaveScreen(SDL_Surface *surface, const char *stem, const char *time, unsigned long readBackMs,
+                const char *renderer = nullptr);
 
 } // namespace core::capture

@@ -230,7 +230,7 @@ bool Saved(const char *file)
 }
 
 // Presses F11 (or vk: F12, the report key) and waits up to 3 s (presenting frames meanwhile) for the two PNGs of one
-// press: the game frame (<tag>_game_...) and the screen (<tag>_screen_...), both written completely. Their names go
+// press: the game frame (<tag>_game_...) and the screen (<tag>_screen-<renderer>_...), both written completely. Their names go
 // to game and screen.
 bool TakeShot(HWND hwnd, char *game, char *screen, WORD vk = VK_F11)
 {
@@ -291,7 +291,7 @@ bool TakeShot(HWND hwnd, char *game, char *screen, WORD vk = VK_F11)
             if (old || !Saved(fd.cFileName)) {
                 continue;
             }
-            char *slot = std::strstr(fd.cFileName, "_game_") ? game : std::strstr(fd.cFileName, "_screen_") ? screen : nullptr;
+            char *slot = std::strstr(fd.cFileName, "_game_") ? game : std::strstr(fd.cFileName, "_screen-") ? screen : nullptr;
             if (slot && !slot[0]) {
                 std::snprintf(slot, MAX_PATH, "shots\\%s", fd.cFileName);
                 if (g_madeCount < 16) std::snprintf(g_madeShots[g_madeCount++], MAX_PATH, "%s", slot);
@@ -328,8 +328,9 @@ void ScreenshotTests(HWND hwnd, bool expectPanel, int screenW, int screenH)
         Check(w == 1024 && h == 768 && std::strstr(game, "_game_1024x768_"), "game frame: 1024x768, named _game_1024x768_", w);
         PngSize(screen, &w, &h);
         char expect[48];
-        std::snprintf(expect, sizeof(expect), "_screen_%dx%d_", screenW, screenH);
-        Check(w == screenW && h == screenH && std::strstr(screen, expect), "screen: the window's size, named _screen_WxH_", w);
+        std::snprintf(expect, sizeof(expect), "_screen-d3d11_%dx%d_", screenW, screenH); // O3: the renderer (auto)
+        Check(w == screenW && h == screenH && std::strstr(screen, expect),
+              "screen: the window's size, named _screen-d3d11_WxH_", w);
         Check(std::strcmp(std::strrchr(game, '_'), std::strrchr(screen, '_')) == 0, "both files have the same time", 0);
     }
     // The problem report key (debug.report_key, default F12; R2b.1, core/diag/report.h).
