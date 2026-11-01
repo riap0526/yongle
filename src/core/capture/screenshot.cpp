@@ -4,6 +4,7 @@
 #include "core/diag/environment.h"
 #include "core/log.h"
 #include "core/output/sdl_output.h"
+#include "core/platform/affinity.h"
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -155,6 +156,7 @@ std::atomic<long> g_pending{0}; // jobs queued or being written
 
 DWORD WINAPI Writer(void *)
 {
+    core::platform::affinity::OurThread("screenshot writer");
     core::diag::env::RegisterThread(core::diag::env::Thread::Writer); // its affinity and processor time in the log
     for (;;) {
         WaitForSingleObject(g_queueEvent, INFINITE);

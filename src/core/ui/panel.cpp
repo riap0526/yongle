@@ -141,7 +141,7 @@ bool g_recentre = false;
 
 void ApplyScale(int oh)
 {
-    int percent = core_config_get()->panel_scale_percent;
+    int percent = core_config_live(core_config_get()->panel_scale_percent);
     float s = percent > 0 ? percent / 100.0f : oh > 1080 ? oh / 1080.0f : 1.0f;
     if (s == g_scale) {
         return;

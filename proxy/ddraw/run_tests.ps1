@@ -27,6 +27,8 @@
 #   test_env    core/diag/environment: modules, processor time per thread, priorities, affinity and its changes,
 #               where our files are (no DLL; ~4 s)
 #   test_stall  core/diag/stall: long passes sampled with their call stack (no DLL)
+#   test_affinity core/platform/affinity (B plan): scenarios on one processor in child processes, the last one
+#               test_emu.exe with the DLL started on one processor (writes test_affinity_*.log; ~15 s)
 #   test_screenshot core/capture/screenshot: the writer's queue limit, PNG level and processor time (no DLL; writes
 #               and deletes shots\t8_*.png)
 #   test_log    core/log: a log over 4 MB is renamed at start-up (no DLL; writes and deletes test_log*.log)
@@ -71,6 +73,7 @@ Run 'test_report' 'emulated' @()
 Run 'test_guard' 'emulated' @()
 Run 'test_env' 'emulated' @()
 Run 'test_stall' 'emulated' @()
+Run 'test_affinity' 'emulated' @()
 Run 'test_screenshot' 'emulated' @()
 Run 'test_log' 'emulated' @()
 # The sidebar edge scenario of test_restore reads the player's own China_Interface pack when the testbed has it.

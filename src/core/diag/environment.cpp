@@ -1,6 +1,7 @@
 #include "core/diag/environment.h"
 
 #include "core/log.h"
+#include "core/platform/affinity.h"
 
 #define WIN32_LEAN_AND_MEAN
 #ifndef PSAPI_VERSION
@@ -147,6 +148,10 @@ VOID CALLBACK OnDll(ULONG reason, const DllNotificationData *data, PVOID)
 {
     if (reason != kDllLoaded || !data || !data->FullDllName || !data->FullDllName->Buffer) {
         return;
+    }
+    if (data->BaseDllName && data->BaseDllName->Buffer) {
+        core::platform::affinity::NoteModuleLoaded(data->BaseDllName->Buffer,
+                                                   data->BaseDllName->Length / sizeof(wchar_t));
     }
     const int slot = g_noteWritten.load();
     if (slot - g_noteLogged >= kNotes) {
@@ -633,6 +638,9 @@ void TakeWindow(char *out, std::size_t size)
             if (GetProcessAffinityMask(GetCurrentProcess(), &mask, &system)) {
                 put(" (affinity 0x%lx)", static_cast<unsigned long>(mask));
             }
+            char more[400];
+            core::platform::affinity::TakeWindow(more, sizeof(more));
+            put("%s", more);
         }
         g_lastProcess = process;
     }

@@ -28,6 +28,7 @@
 #include "core/display/virtual_display.h"
 #include "core/log.h"
 #include "core/output/sdl_output.h"
+#include "core/platform/affinity.h"
 #include "core/settings/settings.h"
 #include "games/emperor/resolution.h"
 #include "games/emperor/scroll.h"
@@ -35,6 +36,7 @@
 #include "games/emperor/text.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -385,7 +387,7 @@ struct Backdrop { // the background for one screen size, made on a worker thread
     std::vector<WORD> px; // w x h, RGB565 (under lock)
     int w = 0, h = 0;     // of px (under lock)
     int version = 0;      // counts finished backgrounds (under lock)
-    volatile bool busy = false; // a worker is running (set by the game thread, cleared by the worker)
+    std::atomic<bool> busy{false}; // a worker is running (set by the game thread, cleared by the worker)
     int wantW = 0, wantH = 0, wantGeneration = -2; // what the last job was for (game thread)
 };
 Backdrop g_backdrop;
@@ -460,6 +462,7 @@ DWORD WINAPI MakeBackdrop(void *param)
 
 DWORD WINAPI BackdropThread(void *param)
 {
+    core::platform::affinity::OurThread("city background");
     DWORD r = MakeBackdrop(param);
     g_backdrop.busy = false;
     return r;

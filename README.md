@@ -111,7 +111,7 @@ All settings are in `emperor_engine.ini` next to `ddraw.dll`; the file explains 
 The full list is in **[docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md)**. The main points:
 
 - On laptops and slower computers, **lowering the resolution** (a higher display scale, or *Auto*) helps performance most.
-- **Steam's FPS counter** makes Direct3D 11 stutter, so when the Steam overlay is in the game Yongle plays it safe and uses Direct3D 9 (about 25 % fewer frames per second). If you do not use the FPS counter, `renderer = direct3d11` in `emperor_engine.ini` gets that performance back; if Direct3D 11 stutters on your system, `renderer = direct3d` switches to Direct3D 9 by hand.
+- If Direct3D 11 stutters on your system, `renderer = direct3d` in `emperor_engine.ini` switches to Direct3D 9 by hand.
 - Occasional **flashing black blocks** (seen on one AMD system, Direct3D 11 only); the cause is not known yet.
 - Tested on AMD graphics and Intel integrated graphics so far; NVIDIA, real 4K monitors and several monitors not yet.
 
