@@ -35,7 +35,7 @@ bool ScaleRgb565(const Pixels16 &src, double scale, bool sharp, const Target16 &
 bool ScaledToSource(int dx, int dy, int x, int y, double scale, int srcW, int srcH, int *sx, int *sy);
 
 // out := src scaled to cover w x h (centred, cropped, bilinear), blurred by about `sigma` output pixels (three box
-// passes each way), multiplied by brightness / 256 and reduced to RGB565 with 4 x 4 ordered dithering (dark, smooth
+// passes each way; not blurred when sigma <= 0), multiplied by brightness / 256 and reduced to RGB565 with 4 x 4 ordered dithering (dark, smooth
 // gradients would otherwise show bands). Full resolution: meant to be computed once per picture and size.
 void BlurredBackdrop(const Pixels16 &src, int w, int h, double sigma, int brightness, std::vector<WORD> *out);
 

@@ -350,23 +350,33 @@ bool DrawGameText(Image &im, const char *text, int x0, int y0, int w, int h)
 // ---------------------------------------------------------------------------------------------
 // R2d.1 (docs/resolution_ui/r2d1.md): how the two kinds of front-end screens are shown
 
-enum Look { kNative, kFramed, kBlack, kNativeCity };
-const char *const kLoadingLooks[] = {"native", "framed", "black"};
-const char *const kLoadingLabels[] = {"native: own size, black around", "framed: as large as fits",
-                                      "black: whole frame scaled, black bars"};
-const Look kLoadingLook[] = {kNative, kFramed, kBlack};
-const char *const kMenuLooks[] = {"native_city", "native", "framed", "black"};
-const char *const kMenuLabels[] = {"native, your city around", "native, parchment around", "framed: as large as fits",
-                                   "black: whole frame scaled, black bars"};
-const Look kMenuLook[] = {kNativeCity, kNative, kFramed, kBlack};
+// O2a (docs/optimization.md): original -- the game's whole 1024x768 frame at its own size (as native: one game pixel
+// per output pixel), centred, black around and no border, as the game looks on a wide screen without us; the loading
+// screens' status line where the game draws it.
+// The ini spellings name the size first and the background second, as the China map's scaled and native (O2a test,
+// docs/optimization.md): kFramed is "scaled" and kBlack "scaled_black" (before 0.1.3 "framed" and "black", renamed
+// in the file at start-up).
+enum Look { kNative, kFramed, kBlack, kNativeCity, kOriginal };
+const char *const kLoadingLooks[] = {"native", "scaled", "scaled_black", "original"};
+const char *const kLoadingLabels[] = {"native (own size, black around)", "scaled (as large as fits, parchment around)",
+                                      "scaled_black (whole frame scaled, black bars)",
+                                      "original (whole frame at its own size, black around)"};
+const Look kLoadingLook[] = {kNative, kFramed, kBlack, kOriginal};
+const char *const kMenuLooks[] = {"native_city", "native", "scaled", "scaled_black", "original"};
+const char *const kMenuLabels[] = {"native_city (own size, your city around)", "native (own size, parchment around)",
+                                   "scaled (as large as fits, parchment around)",
+                                   "scaled_black (whole frame scaled, black bars)",
+                                   "original (whole frame at its own size, black around)"};
+const Look kMenuLook[] = {kNativeCity, kNative, kFramed, kBlack, kOriginal};
 Look g_loadingLook = kNative;
 Look g_menuLook = kNativeCity;
 
 // The city background: a picture of the player's city, blurred and darkened (playtest 2026-10-25: sigma 2, first 75%,
-// then 65% after the first test: too bright).
-constexpr double kCitySigma = 2.0;
-constexpr int kCityPercent = 65;
-constexpr int kCityBrightness = kCityPercent * 256 / 100; // / 256
+// then 65% after the first test: too bright). O2b: display.background_blur / background_brightness (the menus only:
+// the China map's city background is the city as it is, O2c).
+int g_citySigma = 2;
+int g_cityPercent = 65;
+int g_citySettings = 0; // counts changes of the pair (game thread)
 constexpr char kUserPicture[] = "menu_background";       // .png or .bmp in the game folder: the player's own choice
 constexpr char kAutoPicture[] = "menu_background_auto.png"; // the last city seen, saved when it is left
 constexpr DWORD kCityShotMs = 3000;                       // how often the city on screen is kept while playing
@@ -388,15 +398,17 @@ struct Backdrop { // the background for one screen size, made on a worker thread
     int w = 0, h = 0;     // of px (under lock)
     int version = 0;      // counts finished backgrounds (under lock)
     std::atomic<bool> busy{false}; // a worker is running (set by the game thread, cleared by the worker)
-    int wantW = 0, wantH = 0, wantGeneration = -2; // what the last job was for (game thread)
+    int wantW = 0, wantH = 0, wantGeneration = -2, wantSettings = -1; // what the last job was for (game thread)
 };
 Backdrop g_backdrop;
 volatile LONG g_backdropReady = 0; // a background was finished since the last OnPresent
+int g_cityFrames = 0;              // counts the city frames drawn (game thread; CityFramesDrawn)
 
 struct BackdropJob {
     int w, h;
     std::vector<WORD> shot; // a copy of the city on screen, or empty
     int shotW, shotH;
+    int sigma, percent;
 };
 
 std::wstring GameFolder()
@@ -440,10 +452,10 @@ DWORD WINAPI MakeBackdrop(void *param)
     std::vector<WORD> out;
     if (from) {
         const DWORD start = GetTickCount();
-        core::display::BlurredBackdrop(core::display::Pixels16{src.data(), sw, sw, sh}, job->w, job->h, kCitySigma,
-                                       kCityBrightness, &out);
-        core_log("fullscreen: city background %dx%d from %s (%dx%d), blur %.0f, brightness %d%%, %lu ms", job->w,
-                 job->h, from, sw, sh, kCitySigma, kCityPercent, GetTickCount() - start);
+        core::display::BlurredBackdrop(core::display::Pixels16{src.data(), sw, sw, sh}, job->w, job->h, job->sigma,
+                                       job->percent * 256 / 100, &out);
+        core_log("fullscreen: city background %dx%d from %s (%dx%d), blur %d, brightness %d%%, %lu ms", job->w,
+                 job->h, from, sw, sh, job->sigma, job->percent, GetTickCount() - start);
     }
     else {
         core_log("fullscreen: no city picture yet (no %s.png/.bmp, no city seen, no %s): parchment around the menus",
@@ -468,19 +480,22 @@ DWORD WINAPI BackdropThread(void *param)
     return r;
 }
 
-// Game thread: makes sure a background for w x h from the newest source is made or being made.
+// Game thread: makes sure a background for w x h from the newest source with the current blur and brightness is made
+// or being made.
 void RequestBackdrop(int w, int h)
 {
     if (w <= 0 || h <= 0 || !core::diag::Enabled(g_cityFeature) || g_backdrop.busy) {
         return;
     }
-    if (g_backdrop.wantW == w && g_backdrop.wantH == h && g_backdrop.wantGeneration == g_shot.generation) {
+    if (g_backdrop.wantW == w && g_backdrop.wantH == h && g_backdrop.wantGeneration == g_shot.generation &&
+        g_backdrop.wantSettings == g_citySettings) {
         return;
     }
-    auto *job = new BackdropJob{w, h, g_shot.px, g_shot.w, g_shot.h};
+    auto *job = new BackdropJob{w, h, g_shot.px, g_shot.w, g_shot.h, g_citySigma, g_cityPercent};
     g_backdrop.wantW = w;
     g_backdrop.wantH = h;
     g_backdrop.wantGeneration = g_shot.generation;
+    g_backdrop.wantSettings = g_citySettings;
     g_backdrop.busy = true;
     HANDLE th = CreateThread(nullptr, 0, &BackdropThread, job, 0, nullptr);
     if (!th) {
@@ -494,6 +509,7 @@ void RequestBackdrop(int w, int h)
 // From scroll's city_render hook (game thread): keeps the city on screen every few seconds.
 void KeepCity(const BYTE *back, int pitch, int left, int top, int right, int bottom)
 {
+    ++g_cityFrames;
     const DWORD now = GetTickCount();
     if (!core::diag::Enabled(g_cityFeature) || (g_shot.taken && now - g_shot.taken < kCityShotMs)) {
         return;
@@ -539,10 +555,10 @@ bool g_textDrawn = false; // the last background has the status line in it
 // Background for a framed block of pw x (ph + below) units: the picture, and when `below` > 0 the loading screen's
 // status panel under it with `text` (the game's bytes) in the game's font. Outside the frame (R2d.1): parchment;
 // black for a loading screen at its own size; for kNativeCity the city background with the border along the screen
-// edges, parchment until that background is ready.
+// edges, parchment until that background is ready; for kOriginal black everywhere, no border.
 void Compose(SIZE screen, int pw, int ph, int below, const char *text, bool labels, Look look, bool loading)
 {
-    const bool native = look == kNative || look == kNativeCity;
+    const bool native = look == kNative || look == kNativeCity || look == kOriginal;
     int cityVersion = -1;
     if (look == kNativeCity && !labels && core::diag::Enabled(g_cityFeature)) {
         RequestBackdrop(screen.cx, screen.cy);
@@ -562,7 +578,13 @@ void Compose(SIZE screen, int pw, int ph, int below, const char *text, bool labe
     }
     Image outer(l.outerU, l.outerV, kLabelOut), frame(l.frameU, l.frameV, kLabelPad);
     const char *around = "parchment";
-    if (!labels) {
+    const bool plain = look == kOriginal && !labels;
+    if (plain) {
+        std::fill(outer.px.begin(), outer.px.end(), WORD{0});
+        std::fill(frame.px.begin(), frame.px.end(), WORD{0});
+        around = "black, no border (original)";
+    }
+    else if (!labels) {
         bool city = false;
         if (l.native && cityVersion >= 0) { // units are screen pixels at scale 1
             AcquireSRWLockShared(&g_backdrop.lock);
@@ -588,7 +610,9 @@ void Compose(SIZE screen, int pw, int ph, int below, const char *text, bool labe
             Parchment(outer);
         }
     }
-    Frame(frame, labels);
+    if (!plain) {
+        Frame(frame, labels);
+    }
     g_textDrawn = false;
     if (below > 0 && !labels) { // the block starts inside the border and the padding
         const int bx = kTile + l.padU, by = kTile + l.padV + ph + kGapAbove;
@@ -727,9 +751,11 @@ void Update()
     core::output::Framing f{};
     f.on = on;
     f.labels = cfg->frame_labels != 0;
-    f.native = look == kNative || look == kNativeCity;
-    f.picture = loading ? g_picture : RECT{0, 0, mode.cx, mode.cy};
-    f.below = loading ? kBelow : 0; // the status panel under a loading picture (docs/archive/resolution_ui_r2a.md §10)
+    const bool whole = look == kOriginal; // the whole frame, also for a loading picture (the game's own bands)
+    f.native = look == kNative || look == kNativeCity || whole;
+    f.picture = loading && !whole ? g_picture : RECT{0, 0, mode.cx, mode.cy};
+    f.below = loading && !whole ? kBelow : 0; // the status panel under a loading picture (docs/archive/resolution_ui_r2a.md §10)
+    f.gameCaption = whole;
     if (on && g_menuLook == kNativeCity && !f.labels && core::diag::Enabled(g_cityFeature)) {
         // Made ahead, from the first front-end picture on (the start-up loading screens): the menus then show the
         // city at once instead of parchment for the time the picture takes to read and blur (R2d.1 follow-up).
@@ -821,6 +847,16 @@ template <typename T, size_t N> int IndexOf(const char *const (&names)[N], const
     return fallback;
 }
 
+template <size_t N> const char *LookName(const char *const (&names)[N], const Look (&looks)[N], Look look)
+{
+    for (size_t i = 0; i < N; ++i) {
+        if (looks[i] == look) {
+            return names[i];
+        }
+    }
+    return "?";
+}
+
 // [display] fullscreen_pictures (R2a: framed | black) became loading_screen and menu_screens (R2d.1). Only black, a
 // choice the player made, is carried over; framed was the default of the time, so the new defaults apply.
 int MigrateFullscreenPictures(const char *old, core::settings::Migration *out, int max)
@@ -828,8 +864,8 @@ int MigrateFullscreenPictures(const char *old, core::settings::Migration *out, i
     if (_stricmp(old, "black") != 0 || max < 2) {
         return 0;
     }
-    out[0] = core::settings::Migration{"display", "loading_screen", "black"};
-    out[1] = core::settings::Migration{"display", "menu_screens", "black"};
+    out[0] = core::settings::Migration{"display", "loading_screen", "scaled_black"};
+    out[1] = core::settings::Migration{"display", "menu_screens", "scaled_black"};
     return 2;
 }
 
@@ -839,11 +875,16 @@ void RegisterSettings()
     using core::settings::Item;
     using core::settings::Type;
     core::settings::Retire("display", "fullscreen_pictures", &MigrateFullscreenPictures);
+    for (const char *key : {"loading_screen", "menu_screens"}) {
+        core::settings::RenameValue("display", key, "framed", "scaled");
+        core::settings::RenameValue("display", key, "black", "scaled_black");
+    }
     int i = core::settings::Register(Item{
         "display", "loading_screen", "Loading screens",
-        "The pictures shown while a game loads. native: their own size, centered, black around; framed: as large as "
-        "fits, in a fret border on parchment; black: the whole 1024x768 frame scaled to fit, black bars.",
-        Type::Choice, "native", Effect::Live, true, true, 0, 0, 0, nullptr, kLoadingLooks, kLoadingLabels, 3});
+        "The pictures shown while a game loads. native: their own size, centered, black around; scaled: as large as "
+        "fits, in a fret border on parchment; scaled_black: the whole 1024x768 frame scaled to fit, black bars; original: "
+        "the whole 1024x768 frame at its own size, centered, black around (as the game itself on a wide screen).",
+        Type::Choice, "native", Effect::Live, true, true, 0, 0, 0, nullptr, kLoadingLooks, kLoadingLabels, 4});
     core::settings::OnChange(i, [](int, const char *v, bool) {
         g_loadingLook = kLoadingLook[IndexOf<Look>(kLoadingLooks, v, 0)];
         if (g_installed) {
@@ -856,11 +897,41 @@ void RegisterSettings()
         "Main menu, emperor and campaign choice, briefings, high scores, victory and defeat (the game's 1024x768 "
         "pictures). native_city: their own size in a fret border, your city blurred around them (menu_background.png "
         "or .bmp in the game folder if you put one there, otherwise the city you saw last); native: their own size on "
-        "parchment; framed: as large as fits; black: the whole frame scaled, black bars.",
-        Type::Choice, "native_city", Effect::Live, true, true, 0, 0, 0, nullptr, kMenuLooks, kMenuLabels, 4});
+        "parchment; scaled: as large as fits, on parchment; scaled_black: the whole frame scaled, black bars; original: the "
+        "whole frame at its "
+        "own size, centered, black around (as the game itself on a wide screen).",
+        Type::Choice, "native_city", Effect::Live, true, true, 0, 0, 0, nullptr, kMenuLooks, kMenuLabels, 5});
     core::settings::OnChange(i, [](int, const char *v, bool) {
         g_menuLook = kMenuLook[IndexOf<Look>(kMenuLooks, v, 0)];
         if (g_installed) {
+            OnLoop();
+        }
+        return true;
+    });
+    // O2b (docs/optimization.md): the menus' city background's blur and brightness (native_city). Made again on a
+    // worker thread.
+    i = core::settings::Register(Item{
+        "display", "background_blur", "City background: blur",
+        "How much the picture of your city behind the menus (Menu screens = native_city) is blurred, in screen "
+        "pixels. 0: not blurred.",
+        Type::Int, "2", Effect::Live, true, true, 0, 8, 1, nullptr, nullptr, nullptr, 0});
+    core::settings::OnChange(i, [](int, const char *v, bool initial) {
+        g_citySigma = std::atoi(v);
+        ++g_citySettings;
+        if (!initial && g_installed) {
+            OnLoop();
+        }
+        return true;
+    });
+    i = core::settings::Register(Item{
+        "display", "background_brightness", "City background: brightness",
+        "How bright the picture of your city behind the menus is, in percent of the city itself. 100 with blur 0: the "
+        "city as it is.",
+        Type::Int, "65", Effect::Live, true, true, 30, 100, 5, nullptr, nullptr, nullptr, 0, "%"});
+    core::settings::OnChange(i, [](int, const char *v, bool initial) {
+        g_cityPercent = std::atoi(v);
+        ++g_citySettings;
+        if (!initial && g_installed) {
             OnLoop();
         }
         return true;
@@ -881,9 +952,13 @@ bool Attach()
     emperor::scroll::SetCityDrawn(&KeepCity);
     core_log("fullscreen: installed (display.loading_screen %s, display.menu_screens %s; the loading screens' status "
              "line is drawn by the output; panel tiles from DATA's China_Interface pack)",
-             kLoadingLooks[g_loadingLook == kNative ? 0 : g_loadingLook == kFramed ? 1 : 2],
-             kMenuLooks[g_menuLook == kNativeCity ? 0 : g_menuLook == kNative ? 1 : g_menuLook == kFramed ? 2 : 3]);
+             LookName(kLoadingLooks, kLoadingLook, g_loadingLook), LookName(kMenuLooks, kMenuLook, g_menuLook));
     return true;
+}
+
+int CityFramesDrawn()
+{
+    return g_cityFrames;
 }
 
 bool BorderPicture(int w, int h, std::vector<WORD> *out)

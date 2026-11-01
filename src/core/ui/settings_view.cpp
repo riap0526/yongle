@@ -11,6 +11,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
+#include <algorithm>
 #include <atomic>
 #include <cstdio>
 #include <cstdlib>
@@ -167,7 +168,12 @@ void IntWidget(int i, const cs::Item &it, const char *id, float width, const cha
     ImGui::SetNextItemWidth(width);
     char sid[48];
     std::snprintf(sid, sizeof(sid), "##%s", id);
-    if (ImGui::SliderInt(sid, &v, it.min, it.max, format, ImGuiSliderFlags_AlwaysClamp)) {
+    int top = it.max;
+    if (it.maxNow) { // only as far as it has an effect now (whole steps)
+        top = std::clamp(it.maxNow(), it.min, it.max);
+        top = it.min + (top - it.min) / std::max(it.step, 1) * std::max(it.step, 1);
+    }
+    if (ImGui::SliderInt(sid, &v, it.min, top, format, ImGuiSliderFlags_AlwaysClamp)) {
         if (it.step > 1) {
             v = it.min + (v - it.min + it.step / 2) / it.step * it.step;
         }
@@ -187,8 +193,8 @@ bool g_allAspects = false; // the common sizes of every aspect, not only the scr
 
 void ResolutionWidget(int i, float width)
 {
-    static const char *const kKinds[] = {"1024x768 (the game's own size)", "Scaled (native / display scale)",
-                                         "Common size", "Custom size"};
+    static const char *const kKinds[] = {"1024x768 (the game's own size)", "scaled (native / display scale)",
+                                         "common size (from a list)", "custom size (typed in)"};
     const bool scaled = std::strcmp(g_draft[i], "scaled") == 0;
     int w = 1024, h = 768;
     if (!scaled) {
@@ -387,8 +393,9 @@ void DrawItem(int i, float scale, int resolution, int displayScale)
         break;
     }
     case Type::Int: {
-        bool percent = _stricmp(it.key, "panel_scale") == 0 || _stricmp(it.key, "scale") == 0;
-        IntWidget(i, it, it.key, width, percent ? "%d%%" : "%d");
+        char format[16];
+        std::snprintf(format, sizeof(format), "%%d%s", it.unit && std::strcmp(it.unit, "%") == 0 ? "%%" : it.unit ? it.unit : "");
+        IntWidget(i, it, it.key, width, format);
         break;
     }
     case Type::Resolution:
@@ -516,6 +523,13 @@ void DrawSettings(float scale)
             if (cs::Get(j).inPanel && _stricmp(cs::Get(j).section, section) == 0) {
                 if (j == displayScale && !ScaleShown(resolution)) {
                     continue;
+                }
+                const cs::Item &it = cs::Get(j);
+                if (it.shownIfKey) { // only with the other item's value (its draft: follows the panel at once)
+                    const int other = cs::Find(it.section, it.shownIfKey);
+                    if (other >= 0 && other < n && std::strcmp(g_draft[other], it.shownIfValue) != 0) {
+                        continue;
+                    }
                 }
                 DrawItem(j, scale, resolution, displayScale);
             }

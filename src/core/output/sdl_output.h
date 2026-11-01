@@ -44,6 +44,8 @@ struct Framing {
                          // in the background): the layout is for the picture's width x (its height + below)
     bool labels = false; // debug: the block is drawn plain white (for the layout check, tools/verify)
     bool native = false; // R2d.1: the block at its own size when it fits (ComputeFrameLayout's native)
+    bool gameCaption = false; // O2a: the status line (SetCaption) where the game's GDI line went inside the picture,
+                              // white on black, instead of on a dark strip over the picture's bottom
 };
 
 // Starts the output on hwnd. For display/cap60 this starts the output thread and waits until it is ready, still
