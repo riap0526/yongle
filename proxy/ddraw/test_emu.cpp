@@ -11,6 +11,11 @@
 // mode's size in shots\ next to the DLL (also while the panel is open), keep the key from the game, and save
 // nothing once the primary surface is gone. The test deletes the files it made.
 // The test window covers the monitor for about a second (black), as the game's window would.
+// Input goes to the test window as messages only, so using the computer meanwhile does not disturb the test (nor
+// the test the user). The parts that need real input -- the screenshot and report keys with present=display (the
+// output thread reads the key state itself, only while the window is in front: real key presses and Alt to take the
+// foreground) and the frozen cursor (SetCursorPos moves the real cursor) -- run only with the environment variable
+// YONGLE_TEST_INTERACTIVE=1 (run_tests.ps1 -Interactive, with nobody at the computer); otherwise they are SKIPPED.
 // Usage: test_emu.exe <path-to-ddraw.dll> [panel|panel-ctrlf12|nopanel]
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -24,6 +29,14 @@
 namespace {
 
 int g_failures = 0;
+int g_skipped = 0;
+bool g_interactive = false; // YONGLE_TEST_INTERACTIVE=1: real key presses and cursor moves allowed
+
+void Skip(const char *what)
+{
+    std::printf("%-60s SKIPPED (real input: run_tests.ps1 -Interactive)\n", what);
+    ++g_skipped;
+}
 
 void Check(bool ok, const char *what, long value = 0)
 {
@@ -317,6 +330,10 @@ bool TakeShot(HWND hwnd, char *game, char *screen, WORD vk = VK_F11)
 
 void ScreenshotTests(HWND hwnd, bool expectPanel, int screenW, int screenH)
 {
+    if (expectPanel && !g_interactive) { // present=display: only real key presses reach the output thread
+        Skip("screenshots and the report key with present=display");
+        return;
+    }
     g_realKey = expectPanel; // present=display: the output thread sees the key
     std::printf("-- screenshot (F11)\n");
     char game[MAX_PATH], screen[MAX_PATH];
@@ -388,13 +405,18 @@ void PanelTests(HWND hwnd, bool expectPanel)
     SendMessageA(hwnd, WM_KEYDOWN, 'A', 0x001e0001);
     SendMessageA(hwnd, WM_CHAR, 'a', 0x001e0001);
     Check(g_buttons == 0 && g_keys == 0, "panel open: button and key messages kept from the game", g_buttons + g_keys);
-    SetCursorPos(before.x + 37, before.y + 23);
     POINT frozen{};
-    GetCursorPos(&frozen);
     POINT again{};
-    SetCursorPos(before.x + 3, before.y + 7);
-    GetCursorPos(&again);
-    Check(frozen.x == again.x && frozen.y == again.y, "panel open: exe's GetCursorPos does not move", again.x);
+    if (g_interactive) { // moves the real cursor
+        SetCursorPos(before.x + 37, before.y + 23);
+        GetCursorPos(&frozen);
+        SetCursorPos(before.x + 3, before.y + 7);
+        GetCursorPos(&again);
+        Check(frozen.x == again.x && frozen.y == again.y, "panel open: exe's GetCursorPos does not move", again.x);
+    }
+    else {
+        Skip("panel open: exe's GetCursorPos does not move");
+    }
     SetCtrl(true);
     Check(GetKeyState(VK_CONTROL) == 0 && GetAsyncKeyState(VK_SHIFT) == 0, "panel open: exe sees no key down");
     SetCtrl(false);
@@ -410,10 +432,15 @@ void PanelTests(HWND hwnd, bool expectPanel)
     SendMessageA(hwnd, WM_KEYDOWN, 'A', 0x001e0001);
     Check(g_lastMouse == MAKELPARAM(0, 0) && g_buttons == 2 && g_keys == 1, "panel closed: input reaches the game again",
           g_buttons);
-    SetCursorPos(before.x + 37, before.y + 23);
-    GetCursorPos(&again);
-    Check(again.x != frozen.x || again.y != frozen.y || (before.x == 0 && before.y == 0),
-          "panel closed: exe's GetCursorPos follows the cursor again", again.x);
+    if (g_interactive) {
+        SetCursorPos(before.x + 37, before.y + 23);
+        GetCursorPos(&again);
+        Check(again.x != frozen.x || again.y != frozen.y || (before.x == 0 && before.y == 0),
+              "panel closed: exe's GetCursorPos follows the cursor again", again.x);
+    }
+    else {
+        Skip("panel closed: exe's GetCursorPos follows the cursor again");
+    }
     // The hotkey twice: open, then close.
     PressHotkey(hwnd);
     PressHotkey(hwnd);
@@ -425,7 +452,9 @@ void PanelTests(HWND hwnd, bool expectPanel)
     SendMessageA(hwnd, WM_KEYDOWN, 'B', 0x00300001);
     SendMessageA(hwnd, WM_CHAR, 'b', 0x00300001);
     Check(g_keys == keys + 1 && g_chars == 1, "other keys and their characters still reach the game", g_chars);
-    SetCursorPos(before.x, before.y);
+    if (g_interactive) {
+        SetCursorPos(before.x, before.y);
+    }
 }
 
 } // namespace
@@ -458,6 +487,8 @@ int main(int argc, char **argv)
     // loaded), and before that the screen size is DPI-virtualised.
     const int realW = GetSystemMetrics(SM_CXSCREEN), realH = GetSystemMetrics(SM_CYSCREEN);
     const bool expectPanel = argc > 2 && std::strncmp(argv[2], "panel", 5) == 0;
+    const char *interactive = std::getenv("YONGLE_TEST_INTERACTIVE");
+    g_interactive = interactive && std::strcmp(interactive, "1") == 0;
     g_ctrlF12 = argc > 2 && std::strcmp(argv[2], "panel-ctrlf12") == 0;
 
     IDirectDraw *dd = nullptr;
@@ -661,6 +692,6 @@ int main(int argc, char **argv)
 
     DestroyWindow(hwnd);
     // The DLL stays loaded (as in the game): SDL and its renderer live until the process ends.
-    std::printf("RESULT: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
+    std::printf("RESULT: %s (%d failure(s), %d skipped)\n", g_failures ? "FAIL" : "PASS", g_failures, g_skipped);
     return g_failures ? 1 : 0;
 }

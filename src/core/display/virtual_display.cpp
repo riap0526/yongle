@@ -546,6 +546,7 @@ bool IsClientMouseMessage(UINT m)
 }
 
 KeyFilter g_keyFilter = nullptr;
+FocusHandler g_focusHandler = nullptr;
 bool g_filteredSysChar = false; // a WM_SYSKEYDOWN was taken by the filter: its WM_SYSCHAR is taken too
 
 bool IsKeyMessage(UINT m)
@@ -899,6 +900,9 @@ LRESULT CALLBACK SubclassProc(HWND hwnd, UINT m, WPARAM w, LPARAM l)
     else if (hwnd == g_hwnd && g_clipped) {
         UpdateClip(); // fullscreen again: released
     }
+    if (hwnd == g_hwnd && g_focusHandler && ((m == WM_ACTIVATEAPP && w != 0) || m == WM_SETFOCUS)) {
+        g_focusHandler(); // before the panel (which may keep the message) and the game
+    }
     if (hwnd == g_hwnd && PanelMessage(m, w, l)) {
         return 0;
     }
@@ -1199,6 +1203,11 @@ SIZE ClientSize()
 void SetKeyFilter(KeyFilter filter)
 {
     g_keyFilter = filter;
+}
+
+void SetFocusHandler(FocusHandler handler)
+{
+    g_focusHandler = handler;
 }
 
 void Present(const void *pixels, int pitch, int w, int h, const char *how)

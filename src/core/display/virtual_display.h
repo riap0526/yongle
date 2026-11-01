@@ -60,6 +60,12 @@ void SetWindowClient(int w, int h);
 using KeyFilter = bool (*)(UINT message, WPARAM wparam, LPARAM lparam);
 void SetKeyFilter(KeyFilter filter);
 
+// Called on the game thread when the game window gets the focus back (WM_ACTIVATEAPP becoming active, WM_SETFOCUS),
+// before the game and our panel see the message: e.g. what a game layer paused when the focus went goes on, whether
+// or not the panel is open. One handler; nullptr removes it.
+using FocusHandler = void (*)();
+void SetFocusHandler(FocusHandler handler);
+
 // Shows a frame of the current mode (16-bit RGB565, w x h, pitch in bytes) scaled into the window: right away
 // (present=original) or through the output thread (display/cap60; see core/output/sdl_output.h).
 // how: what handed it over (a string literal: "Blt", "BltFast", "Unlock", ...), for the frame check
