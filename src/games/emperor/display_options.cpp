@@ -71,13 +71,15 @@ constexpr DWORD kArrowPressedMs = 120; // the pressed image after a click
 // Layout, relative to dialog_offset (the original: panel at (0x60, 0x50), 18 x 12 blocks; buttons 14 blocks wide at
 // x 0x80, y 0x88 + 0x18 n; their text 4 px lower; title at y 0x5e). The scale line is laid out as a Sound options
 // volume line: the text 6 px below the arrows' top.
-constexpr int kPanelX = 0x60, kPanelY = 0x50, kPanelCols = 18, kPanelRows = 16;
+constexpr int kPanelX = 0x60, kPanelY = 0x50, kPanelCols = 18, kPanelRows = 18;
 constexpr int kLeft = 0x80, kWidth = 0xe0, kTitleY = 0x5e;
 constexpr int kButtonH = 20, kTextDown = 4, kArrowTextDown = 6;
-constexpr int kRowWindow = 0x88, kRow1024 = 0xa0, kStatus1 = 0xbe, kRowScale = 0xd4, kRowAuto = 0xf6, kRowEnd = 0x11a;
+constexpr int kRowWindow = 0x88, kRow1024 = 0xa0, kStatus1 = 0xbe, kRowScale = 0xd4, kRowAuto = 0xf6;
+constexpr int kRowScaling = 0x112, kRowEnd = 0x13e; // O3: the scaling line between Auto and OK
 constexpr int kScaleTextWidth = kWidth - 2 * kArrowSize - 8; // the scale text, left of the arrows
 
-enum Id { kWindowButton = 1, k1024Button, kMinus, kPlus, k100, kAuto, kOk, kCancelButton, kCount = kCancelButton };
+enum Id { kWindowButton = 1, k1024Button, kMinus, kPlus, k100, kAuto, kScalingButton, kOk, kCancelButton,
+          kCount = kCancelButton };
 
 struct Layout {
     int id, x, y, units; // units of 16 px (text buttons)
@@ -90,6 +92,7 @@ const Layout kLayout[kCount] = {
     {kPlus, kLeft + kWidth - kArrowSize, kRowScale, 0, kGroupArrowUp},
     {k100, kLeft, kRowAuto, 6, 0},
     {kAuto, kLeft + 128, kRowAuto, 6, 0},
+    {kScalingButton, kLeft, kRowScaling, 14, 0},
     {kOk, kLeft, kRowEnd, 6, 0},
     {kCancelButton, kLeft + 128, kRowEnd, 6, 0},
 };
@@ -244,6 +247,16 @@ void Press(int id)
         core_log("display options: scale auto");
         SetDisplay("scaled", "auto");
         break;
+    case kScalingButton: { // O3: nearest -> linear -> sharp_bilinear -> nearest; saved at once (as the window line)
+        char now[core::settings::kValueSize];
+        Value("scaling", now);
+        const char *next = std::strcmp(now, "nearest") == 0  ? "linear"
+                           : std::strcmp(now, "linear") == 0 ? "sharp_bilinear"
+                                                             : "nearest";
+        core_log("display options: scaling %s", next);
+        core::settings::Request(Item("scaling"), next, true);
+        break;
+    }
     case kOk:
         core_log("display options: OK%s", g_session.changed ? " (resolution and scale saved)" : "");
         if (g_session.changed) {
@@ -271,8 +284,8 @@ void __cdecl NoClick()
 {
 }
 
-void (__cdecl *const kHandlers[kCount])() = {&OnButton<1>, &OnButton<2>, &OnButton<3>, &OnButton<4>,
-                                              &OnButton<5>, &OnButton<6>, &OnButton<7>, &OnButton<8>};
+void (__cdecl *const kHandlers[kCount])() = {&OnButton<1>, &OnButton<2>, &OnButton<3>, &OnButton<4>, &OnButton<5>,
+                                              &OnButton<6>, &OnButton<7>, &OnButton<8>, &OnButton<9>};
 
 void BuildTable()
 {
@@ -375,10 +388,17 @@ void Draw()
     };
     langText(core::display::Windowed() ? kTextFullScreen : kTextWindowed, kLayout[0]);
     langText(kText1024, kLayout[1]);
-    static const char *const kOwnText[] = {"100%", "Auto", "OK"}; // k100, kAuto, kOk
-    for (int i = 0; i < 3; ++i) {
-        const Layout &l = kLayout[k100 - 1 + i];
-        text(kOwnText[i], l.x, l.y + kTextDown, l.units * 16, color(l.id));
+    char scaling[core::settings::kValueSize], scalingText[48];
+    Value("scaling", scaling);
+    std::snprintf(scalingText, sizeof(scalingText), "Scaling: %s",
+                  std::strcmp(scaling, "sharp_bilinear") == 0 ? "sharp bilinear" : scaling);
+    const struct {
+        Id id;
+        const char *s;
+    } kOwnText[] = {{k100, "100%"}, {kAuto, "Auto"}, {kScalingButton, scalingText}, {kOk, "OK"}};
+    for (const auto &o : kOwnText) {
+        const Layout &l = kLayout[o.id - 1];
+        text(o.s, l.x, l.y + kTextDown, l.units * 16, color(l.id));
     }
     langText(kTextCancel, kLayout[kCancelButton - 1]);
     char line1[48], line2[48];
@@ -493,7 +513,8 @@ bool Attach()
         Fallback("the button table could not be replaced");
         return false;
     }
-    core_log("display options: installed (window, 1024x768, display scale arrows, 100%% and Auto, OK, Cancel)");
+    core_log("display options: installed (window, 1024x768, display scale arrows, 100%% and Auto, scaling, OK, "
+             "Cancel)");
     return true;
 }
 

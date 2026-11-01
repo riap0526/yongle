@@ -52,10 +52,22 @@ bool ApplyPresent(int, const char *v, bool initial)
     return core::output::SetPresentMode(m);
 }
 
+bool ApplyScaling(int, const char *v, bool initial)
+{
+    if (initial) {
+        return true;
+    }
+    core::output::SetScaling(std::strcmp(v, "nearest") == 0  ? CORE_SCALING_NEAREST
+                             : std::strcmp(v, "linear") == 0 ? CORE_SCALING_LINEAR
+                                                             : CORE_SCALING_SHARP_BILINEAR);
+    return true;
+}
+
 void AttachCoreSettings()
 {
     core::settings::OnChange(core::settings::Find("timing", "high_resolution_timer"), &ApplyTimer);
     core::settings::OnChange(core::settings::Find("display", "present"), &ApplyPresent);
+    core::settings::OnChange(core::settings::Find("display", "scaling"), &ApplyScaling);
 }
 
 } // namespace

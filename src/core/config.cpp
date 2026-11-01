@@ -28,8 +28,9 @@ const char *const kBackend[] = {"emulated", "system"};
 const char *const kBackendLabels[] = {"emulated (our own DirectDraw)", "system (Windows' DirectDraw, logged)"};
 const char *const kRendererLabels[] = {"auto (Direct3D 11; Direct3D 9 if it cannot start)", "direct3d (Direct3D 9)",
                                        "direct3d11 (Direct3D 11, flip model)"};
-const char *const kScaling[] = {"nearest", "sharp_bilinear"};
-const char *const kScalingLabels[] = {"nearest (plain pixels)", "sharp_bilinear (pixels with blended edges)"};
+const char *const kScaling[] = {"nearest", "linear", "sharp_bilinear"}; // in the order of core_scaling
+const char *const kScalingLabels[] = {"nearest (plain pixels, some wider than others)", "linear (smooth, softer)",
+                                      "sharp_bilinear (sharp, edges blended)"};
 const char *const kCpuAffinity[] = {"auto", "original"};
 const char *const kCpuAffinityLabels[] = {"auto (the game on its one processor, the rest on the others)",
                                           "original (as without this setting)"};
@@ -70,7 +71,7 @@ int g_backend, g_scaling, g_present, g_resolution, g_scale, g_timer, g_smooth, g
 bool Sync(int i, const char *v, bool)
 {
     if (i == g_backend) g_config.backend = static_cast<core_display_backend>(Index(kBackend, 2, v));
-    else if (i == g_scaling) g_config.scaling = static_cast<core_scaling>(Index(kScaling, 2, v));
+    else if (i == g_scaling) g_config.scaling = static_cast<core_scaling>(Index(kScaling, 3, v));
     else if (i == g_present) g_config.present = static_cast<core_present_mode>(Index(kPresent, 3, v));
     else if (i == g_resolution) {
         if (std::strcmp(v, "scaled") == 0) {
@@ -134,10 +135,15 @@ void RegisterCoreItems()
                          "scaled with SDL3); system: the real Windows DirectDraw behind the logging wrapper.",
                          Type::Choice, "emulated", Effect::Restart, false, false, 0, 0, 0, nullptr, kBackend,
                          kBackendLabels, 2});
-    g_scaling = Add(Item{"display", "scaling", "Scaling", "nearest, or sharp_bilinear (nearest pixels with a one-pixel "
-                         "blend at their edges).",
-                         Type::Choice, "sharp_bilinear", Effect::Restart, false, false, 0, 0, 0, nullptr, kScaling,
-                         kScalingLabels, 2});
+    // O3 (docs/optimization.md): switched at once, in the panel and in Display options.
+    g_scaling = Add(Item{"display", "scaling", "Scaling",
+                         "How the picture is enlarged when the game's pixels are not the screen's: a display scale "
+                         "other than 100%, 1024x768, scaled menus, a window. sharp_bilinear (default): sharp, each "
+                         "pixel's edge blended over one screen pixel; nearest: plain pixels, some a screen pixel wider "
+                         "than others; linear: smooth but softer. At 100% in full screen every pixel of the game is one "
+                         "pixel of the screen: the three look the same.",
+                         Type::Choice, "sharp_bilinear", Effect::Live, true, true, 0, 0, 0, nullptr, kScaling,
+                         kScalingLabels, 3});
     g_present = Add(Item{"display", "present", "Frame output",
                          "How often frames reach the screen. display: every screen refresh; cap60: at most 60 per "
                          "second; original: the game's own ~20 per second. The game's timing is the same in all "

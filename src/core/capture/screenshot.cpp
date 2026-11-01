@@ -437,10 +437,12 @@ int Flush(unsigned long timeoutMs)
     return static_cast<int>(left);
 }
 
-void SaveScreen(SDL_Surface *surface, const char *stem, const char *time, unsigned long readBackMs)
+void SaveScreen(SDL_Surface *surface, const char *stem, const char *time, unsigned long readBackMs,
+                const char *renderer)
 {
-    char folder[1024];
-    Job *job = surface && ShotsFolder(folder, sizeof(folder)) ? NewJob(stem, "screen", surface->w, surface->h, time,
+    char folder[1024], kind[32];
+    std::snprintf(kind, sizeof(kind), renderer ? "screen-%s" : "screen", renderer);
+    Job *job = surface && ShotsFolder(folder, sizeof(folder)) ? NewJob(stem, kind, surface->w, surface->h, time,
                                                                         folder)
                                                                : nullptr;
     if (!job) {

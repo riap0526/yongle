@@ -44,7 +44,7 @@ extern "C" {
 #endif
 
 enum core_display_backend { CORE_BACKEND_EMULATED = 0, CORE_BACKEND_SYSTEM = 1 };
-enum core_scaling { CORE_SCALING_NEAREST = 0, CORE_SCALING_SHARP_BILINEAR = 1 };
+enum core_scaling { CORE_SCALING_NEAREST = 0, CORE_SCALING_LINEAR = 1, CORE_SCALING_SHARP_BILINEAR = 2 }; /* O3 */
 enum core_present_mode { CORE_PRESENT_ORIGINAL = 0, CORE_PRESENT_DISPLAY = 1, CORE_PRESENT_CAP60 = 2 };
 enum core_resolution_kind { CORE_RESOLUTION_FIXED = 0, CORE_RESOLUTION_SCALED = 1 };
 

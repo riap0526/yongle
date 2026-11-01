@@ -8,6 +8,7 @@
 #include "core/diag/guard.h"
 #include "core/diag/stall.h"
 #include "core/display/framing.h"
+#include "core/display/scaled_rect.h"
 #include "core/log.h"
 #include "core/platform/affinity.h"
 #include "core/ui/panel.h"
@@ -35,7 +36,8 @@ SDL_Window *g_window = nullptr;
 SDL_Renderer *g_renderer = nullptr;
 SDL_Texture *g_texture = nullptr;
 int g_texW = 0, g_texH = 0;
-core_scaling g_scaling = CORE_SCALING_SHARP_BILINEAR;
+core_scaling g_scaling = CORE_SCALING_SHARP_BILINEAR; // in effect (drawing thread)
+std::atomic<int> g_wantedScaling{-1};                 // SetScaling: the next one (-1: none)
 core_present_mode g_mode = CORE_PRESENT_ORIGINAL;
 int g_vsync = 0;
 std::atomic<int> g_wantedMode{-1}; // SetPresentMode: the mode the output thread switches to (-1: none)
@@ -52,12 +54,204 @@ void Fail(const char *what)
     g_failed = true;
 }
 
+SDL_Texture *g_bgOuter = nullptr, *g_bgFrame = nullptr; // the framed pictures' background layers (below)
+
+bool Direct3d9()
+{
+    const char *name = g_renderer ? SDL_GetRendererName(g_renderer) : nullptr;
+    return name && std::strcmp(name, "direct3d") == 0;
+}
+
+// The scale mode our textures are drawn with. Sharp bilinear: SDL's "pixel art" mode samples nearest texels and blends
+// only across texel edges (about one output pixel wide); Direct3D 9 samples it as nearest (SDL 3.4.18,
+// UpdateTextureScaleMode), so there the textures are nearest and DrawScaled adds the second pass (O3).
+SDL_ScaleMode ScaleMode()
+{
+    switch (g_scaling) {
+    case CORE_SCALING_NEAREST:
+        return SDL_SCALEMODE_NEAREST;
+    case CORE_SCALING_LINEAR:
+        return SDL_SCALEMODE_LINEAR;
+    default:
+        return Direct3d9() ? SDL_SCALEMODE_NEAREST : SDL_SCALEMODE_PIXELART;
+    }
+}
+
+const char *ScalingName()
+{
+    switch (g_scaling) {
+    case CORE_SCALING_NEAREST:
+        return "nearest";
+    case CORE_SCALING_LINEAR:
+        return "linear";
+    default:
+        return Direct3d9() ? "sharp bilinear (direct3d: two passes where enlarged by a fraction: nearest to a whole "
+                             "multiple, then linear)"
+                           : "sharp bilinear (SDL_SCALEMODE_PIXELART)";
+    }
+}
+
 void SetScaling(SDL_Texture *t)
 {
-    SDL_ScaleMode mode = g_scaling == CORE_SCALING_NEAREST ? SDL_SCALEMODE_NEAREST : SDL_SCALEMODE_PIXELART;
-    if (!SDL_SetTextureScaleMode(t, mode)) {
+    if (!SDL_SetTextureScaleMode(t, ScaleMode())) {
         SDL_SetTextureScaleMode(t, SDL_SCALEMODE_LINEAR);
     }
+}
+
+// ---------------------------------------------------------------------------------------------
+// O3 (docs/optimization.md): sharp bilinear on Direct3D 9 in two passes -- the texture enlarged k times with nearest
+// into a render target of ours, then that drawn to its place with linear. SDL's Direct3D 9 renderer moves every
+// vertex by half a pixel (SDL_render_d3d.c, QueueGeometry), for render targets as for the screen.
+
+core::diag::Feature g_twoPassFeature{"two-pass sharp bilinear on Direct3D 9 (core/output)"};
+
+struct TwoPass {
+    const char *what;
+    SDL_Texture *target = nullptr;
+    int w = 0, h = 0;
+    int failedW = 0, failedH = 0; // a target of this size could not be made (not tried again)
+    int logged[5] = {};           // source w, h, k, destination w, h of the last log line
+};
+TwoPass g_passFrame{"the frame"}, g_passOuter{"the background"}, g_passBorder{"the border"};
+
+void DropTwoPass(TwoPass &p)
+{
+    if (p.target) {
+        SDL_DestroyTexture(p.target);
+        p.target = nullptr;
+    }
+    p.w = p.h = p.failedW = p.failedH = 0;
+}
+
+void DropTwoPasses()
+{
+    DropTwoPass(g_passFrame);
+    DropTwoPass(g_passOuter);
+    DropTwoPass(g_passBorder);
+}
+
+struct ScaledDraw {
+    TwoPass *p;
+    SDL_Texture *src;
+    int sw, sh;
+    SDL_FRect dst;
+    bool ok;
+};
+
+void LogTwoPass(TwoPass &p, int sw, int sh, int k, const SDL_FRect &dst, const char *how)
+{
+    const int key[5] = {sw, sh, k, static_cast<int>(dst.w), static_cast<int>(dst.h)};
+    if (std::memcmp(key, p.logged, sizeof(key)) == 0) {
+        return;
+    }
+    std::memcpy(p.logged, key, sizeof(key));
+    core_log("output: %s %dx%d -> %.0fx%.0f (x%.4f, x%.4f): %s", p.what, sw, sh, dst.w, dst.h, dst.w / sw, dst.h / sh,
+             how);
+}
+
+void DrawScaledTwoPass(ScaledDraw &d)
+{
+    TwoPass &p = *d.p;
+    const double sx = d.dst.w / d.sw, sy = d.dst.h / d.sh;
+    int maxTexture = static_cast<int>(
+        SDL_GetNumberProperty(SDL_GetRendererProperties(g_renderer), SDL_PROP_RENDERER_MAX_TEXTURE_SIZE_NUMBER, 0));
+    if (maxTexture <= 0) {
+        maxTexture = 4096;
+    }
+    const int k = core::display::TwoPassFactor(sx, sy, d.sw, d.sh, maxTexture);
+    if (k == 1 && std::max(sx, sy) < 1 - 1e-3) { // made smaller: linear (nearest would drop whole rows)
+        LogTwoPass(p, d.sw, d.sh, 1, d.dst, "made smaller: linear");
+        SDL_SetTextureScaleMode(d.src, SDL_SCALEMODE_LINEAR);
+        d.ok = SDL_RenderTexture(g_renderer, d.src, nullptr, &d.dst);
+        SDL_SetTextureScaleMode(d.src, SDL_SCALEMODE_NEAREST);
+        return;
+    }
+    if (k == 1) {
+        LogTwoPass(p, d.sw, d.sh, 1, d.dst, "a whole multiple (or its own size): nearest, one pass");
+        d.ok = SDL_RenderTexture(g_renderer, d.src, nullptr, &d.dst);
+        return;
+    }
+    if (k < 0) {
+        char how[96];
+        std::snprintf(how, sizeof(how), "x2 would be larger than the largest texture (%d): nearest", maxTexture);
+        LogTwoPass(p, d.sw, d.sh, -1, d.dst, how);
+        d.ok = SDL_RenderTexture(g_renderer, d.src, nullptr, &d.dst);
+        return;
+    }
+    const int tw = k * d.sw, th = k * d.sh;
+    if (!p.target || p.w != tw || p.h != th) {
+        if (p.failedW == tw && p.failedH == th) {
+            d.ok = SDL_RenderTexture(g_renderer, d.src, nullptr, &d.dst);
+            return;
+        }
+        DropTwoPass(p);
+        p.target = SDL_CreateTexture(g_renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_TARGET, tw, th);
+        if (!p.target) {
+            core_log("output: %s: the %dx%d render target for the two passes could not be made (%s): nearest",
+                     p.what, tw, th, SDL_GetError());
+            p.failedW = tw;
+            p.failedH = th;
+            d.ok = SDL_RenderTexture(g_renderer, d.src, nullptr, &d.dst);
+            return;
+        }
+        SDL_SetTextureScaleMode(p.target, SDL_SCALEMODE_LINEAR);
+        SDL_SetTextureBlendMode(p.target, SDL_BLENDMODE_NONE);
+        p.w = tw;
+        p.h = th;
+    }
+    char how[96];
+    std::snprintf(how, sizeof(how), "two passes, nearest x%d to %dx%d, then linear (largest texture %d)", k, tw, th,
+                  maxTexture);
+    LogTwoPass(p, d.sw, d.sh, k, d.dst, how);
+    bool ok = SDL_SetRenderTarget(g_renderer, p.target);
+    ok = ok && SDL_RenderTexture(g_renderer, d.src, nullptr, nullptr);
+    ok = SDL_SetRenderTarget(g_renderer, nullptr) && ok;
+    if (!ok) {
+        core_log("output: %s: drawing into the render target failed (%s): nearest from now on for this size", p.what,
+                 SDL_GetError());
+        DropTwoPass(p);
+        p.failedW = tw;
+        p.failedH = th;
+        d.ok = SDL_RenderTexture(g_renderer, d.src, nullptr, &d.dst);
+        return;
+    }
+    d.ok = SDL_RenderTexture(g_renderer, p.target, nullptr, &d.dst);
+}
+
+// Draws src (sw x sh) into dst with the current scaling: on Direct3D 9 with sharp bilinear through the two passes.
+bool DrawScaled(TwoPass &p, SDL_Texture *src, int sw, int sh, const SDL_FRect &dst)
+{
+    if (g_scaling != CORE_SCALING_SHARP_BILINEAR || !Direct3d9() || sw <= 0 || sh <= 0 ||
+        !core::diag::Enabled(g_twoPassFeature)) {
+        return SDL_RenderTexture(g_renderer, src, nullptr, &dst);
+    }
+    ScaledDraw d{&p, src, sw, sh, dst, false};
+    if (core::diag::Guarded(g_twoPassFeature, [](void *q) { DrawScaledTwoPass(*static_cast<ScaledDraw *>(q)); }, &d)) {
+        return d.ok;
+    }
+    SDL_SetRenderTarget(g_renderer, nullptr); // switched off after an error: nearest, as before O3
+    DropTwoPasses();
+    return SDL_RenderTexture(g_renderer, src, nullptr, &dst);
+}
+
+// Drawing thread, before a frame: a scaling chosen meanwhile (SetScaling) goes to our textures.
+void TakeScaling()
+{
+    const int want = g_wantedScaling.exchange(-1);
+    if (want < 0 || want == g_scaling) {
+        return;
+    }
+    g_scaling = static_cast<core_scaling>(want);
+    for (SDL_Texture *t : {g_texture, g_bgOuter, g_bgFrame}) {
+        if (t) {
+            SetScaling(t);
+        }
+    }
+    DropTwoPasses();
+    for (TwoPass *p : {&g_passFrame, &g_passOuter, &g_passBorder}) {
+        std::memset(p->logged, 0, sizeof(p->logged));
+    }
+    core_log("output: scaling %s", ScalingName());
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -72,9 +266,9 @@ struct Background {
 SRWLOCK g_bgLock = SRWLOCK_INIT;
 Background g_bg;               // under g_bgLock
 int g_bgUploaded = -1;         // the version in the textures (drawing thread)
-SDL_Texture *g_bgOuter = nullptr, *g_bgFrame = nullptr;
 int g_bgKey[5] = {0, 0, 0, 0, 0}; // screenW, screenH, pictureW, pictureH, native of the textures
 int g_bgOuterU = 0, g_bgOuterV = 0; // the outer fill's size in units (drawn scaled by s from (0,0))
+int g_bgFrameU = 0, g_bgFrameV = 0; // the frame layer's size in units
 
 SRWLOCK g_captionLock = SRWLOCK_INIT;
 char g_caption[512] = "";      // under g_captionLock
@@ -124,6 +318,8 @@ bool BackgroundFor(int ow, int oh, int pw, int ph, bool native)
         g_bgKey[4] = g_bg.native;
         g_bgOuterU = g_bg.outerU;
         g_bgOuterV = g_bg.outerV;
+        g_bgFrameU = g_bg.frameU;
+        g_bgFrameV = g_bg.frameV;
         if (!g_bgOuter || !g_bgFrame) {
             core_log("output: background textures failed: %s", SDL_GetError());
         }
@@ -176,7 +372,12 @@ void ReadBackForCapture(int ow, int oh)
         core_log("screenshot: reading back the %dx%d screen failed: %s", ow, oh, SDL_GetError());
         return;
     }
-    core::capture::SaveScreen(s, stem, time, GetTickCount() - t);
+    const char *renderer = SDL_GetRendererName(g_renderer); // O3: in the file name (their scaling differs)
+    core::capture::SaveScreen(s, stem, time, GetTickCount() - t,
+                              !renderer                                 ? nullptr
+                              : std::strcmp(renderer, "direct3d") == 0   ? "d3d9"
+                              : std::strcmp(renderer, "direct3d11") == 0 ? "d3d11"
+                                                                         : renderer);
 }
 
 bool MakeTexture(int w, int h)
@@ -192,14 +393,8 @@ bool MakeTexture(int w, int h)
     }
     g_texW = w;
     g_texH = h;
-    // Sharp bilinear: SDL's "pixel art" mode samples nearest texels and blends only across texel edges (about one
-    // output pixel wide), so non-integer scales stay sharp without uneven pixel sizes.
-    SDL_ScaleMode mode = g_scaling == CORE_SCALING_NEAREST ? SDL_SCALEMODE_NEAREST : SDL_SCALEMODE_PIXELART;
-    const char *name = mode == SDL_SCALEMODE_NEAREST ? "nearest" : "sharp bilinear (SDL_SCALEMODE_PIXELART)";
-    const bool d3d9 = std::strcmp(SDL_GetRendererName(g_renderer), "direct3d") == 0;
-    if (mode == SDL_SCALEMODE_PIXELART && d3d9) {
-        name = "nearest (direct3d samples SDL_SCALEMODE_PIXELART as nearest: no sharp bilinear)"; // SDL 3.4.18
-    }
+    const SDL_ScaleMode mode = ScaleMode();
+    const char *name = ScalingName();
     if (!SDL_SetTextureScaleMode(g_texture, mode)) {
         core_log("output: scale mode %s not supported (%s); using linear", name, SDL_GetError());
         SDL_SetTextureScaleMode(g_texture, SDL_SCALEMODE_LINEAR);
@@ -687,6 +882,7 @@ bool Rebuild()
     LONG_PTR proc = GetWindowLongPtrA(g_hwnd, GWLP_WNDPROC);
     core::ui::RendererLost();
     DropBackgroundTextures();
+    DropTwoPasses();
     if (g_texture) {
         SDL_DestroyTexture(g_texture);
         g_texture = nullptr;
@@ -740,8 +936,8 @@ void DrawFramed(FramedDraw &d)
         SDL_FRect outer{0, 0, static_cast<float>(g_bgOuterU * l.s), static_cast<float>(g_bgOuterV * l.s)};
         SDL_FRect frame{static_cast<float>(l.frameX), static_cast<float>(l.frameY), static_cast<float>(l.frameW),
                         static_cast<float>(l.frameH)};
-        d.ok = SDL_RenderTexture(g_renderer, g_bgOuter, nullptr, &outer) && d.ok;
-        d.ok = SDL_RenderTexture(g_renderer, g_bgFrame, nullptr, &frame) && d.ok;
+        d.ok = DrawScaled(g_passOuter, g_bgOuter, g_bgOuterU, g_bgOuterV, outer) && d.ok;
+        d.ok = DrawScaled(g_passBorder, g_bgFrame, g_bgFrameU, g_bgFrameV, frame) && d.ok;
     }
     SDL_FRect block{static_cast<float>(l.picX), static_cast<float>(l.picY), static_cast<float>(l.picW),
                     static_cast<float>(l.picH)};
@@ -751,7 +947,7 @@ void DrawFramed(FramedDraw &d)
         d.ok = SDL_SetRenderDrawColor(g_renderer, 255, 255, 255, 255) && SDL_RenderFillRect(g_renderer, &block) && d.ok;
     }
     else {
-        d.ok = SDL_RenderTexture(g_renderer, g_texture, nullptr, &pic) && d.ok;
+        d.ok = DrawScaled(g_passFrame, g_texture, g_texW, g_texH, pic) && d.ok;
     }
 }
 
@@ -798,6 +994,7 @@ void DrawFrame(const void *pixels, int pitch, int w, int h, const RECT &dst, SIZ
     } watched;
     const std::int64_t t0 = perf::Now();
     core::diag::env::NoteCore(core::diag::env::Thread::Output);
+    TakeScaling();
     int ow = 0, oh = 0;
     SDL_GetCurrentRenderOutputSize(g_renderer, &ow, &oh);
     // The back buffer (see LogBackBuffer) decides too; but if rebuilding three times for the same client size does
@@ -886,7 +1083,7 @@ void DrawFrame(const void *pixels, int pitch, int w, int h, const RECT &dst, SIZ
     else {
         SDL_FRect d{static_cast<float>(dst.left), static_cast<float>(dst.top), static_cast<float>(dst.right - dst.left),
                     static_cast<float>(dst.bottom - dst.top)};
-        ok = SDL_RenderTexture(g_renderer, g_texture, nullptr, &d) && ok;
+        ok = DrawScaled(g_passFrame, g_texture, g_texW, g_texH, d) && ok;
         const float k = d.h / h; // where the game's own GDI line went: centred, white on black
         DrawCaption(CaptionDraw{caption, d.x, d.y + captionY * k, d.w, 0, 13 * k, false, ow, oh});
     }
@@ -1079,7 +1276,8 @@ void HandleRenderEvents()
     while ((n = SDL_PeepEvents(ev, 16, SDL_GETEVENT, SDL_EVENT_FIRST, SDL_EVENT_LAST)) > 0) {
         for (int i = 0; i < n; ++i) {
             switch (ev[i].type) {
-            case SDL_EVENT_RENDER_TARGETS_RESET:
+            case SDL_EVENT_RENDER_TARGETS_RESET: // O3's render targets: made again by SDL, their content (drawn anew
+                                                 // on every frame) lost
                 core_log("output: the renderer's device was reset (render targets reset); SDL keeps our textures");
                 LogBackBuffer("after the reset");
                 break;
@@ -1087,6 +1285,7 @@ void HandleRenderEvents()
                 core_log("output: the renderer's device was made again (device reset): our textures are made again");
                 core::ui::RendererLost();
                 DropBackgroundTextures();
+                DropTwoPasses();
                 if (g_texture) {
                     SDL_DestroyTexture(g_texture);
                     g_texture = nullptr;
@@ -1316,6 +1515,14 @@ void Submit(const void *pixels, int pitch, int w, int h, const RECT &dst, SIZE c
     f.seq.fetch_add(1, std::memory_order_release); // even: complete
     g_write = g_ready.exchange(g_write | kNew) & 3;
     SetEvent(g_frameEvent);
+}
+
+void SetScaling(core_scaling scaling)
+{
+    g_wantedScaling = scaling;
+    if (g_threaded) {
+        SetEvent(g_frameEvent); // a new frame with it
+    }
 }
 
 bool SetPresentMode(core_present_mode mode)

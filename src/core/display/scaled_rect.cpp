@@ -224,4 +224,19 @@ void BlurredBackdrop(const Pixels16 &src, int w, int h, double sigma, int bright
     }
 }
 
+int TwoPassFactor(double scaleX, double scaleY, int srcW, int srcH, int maxTexture)
+{
+    constexpr double kEps = 1e-3;
+    const double s = std::max(scaleX, scaleY);
+    const double whole = std::round(scaleX);
+    if (s <= 1 + kEps || (whole >= 1 && std::fabs(scaleX - whole) < kEps && std::fabs(scaleY - whole) < kEps)) {
+        return 1;
+    }
+    int k = static_cast<int>(std::ceil(s - kEps));
+    while (k >= 2 && (static_cast<long long>(k) * srcW > maxTexture || static_cast<long long>(k) * srcH > maxTexture)) {
+        --k;
+    }
+    return k >= 2 ? k : -1;
+}
+
 } // namespace core::display
