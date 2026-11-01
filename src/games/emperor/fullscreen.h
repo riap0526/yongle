@@ -43,4 +43,8 @@ void OnGameEnd();
 // games/emperor/china_map.cpp). False when the tiles cannot be read.
 bool BorderPicture(int w, int h, std::vector<WORD> *out);
 
+// O2c: how many city frames were drawn so far (game thread). A change since the last China map frame means the game's
+// draw buffer holds the city (the map screen does not redraw outside the map: the city left there when it opened).
+int CityFramesDrawn();
+
 } // namespace emperor::fullscreen

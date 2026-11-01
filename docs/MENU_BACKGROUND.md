@@ -21,7 +21,10 @@ The menu frame is the setting `[display] menu_screens` in `emperor_engine.ini` (
 |---|---|
 | `native_city` (default) | own size; your picture or your last city, blurred and darkened |
 | `native` | own size, on the game's parchment |
-| `framed` | as large as the screen allows, on parchment |
-| `black` | the whole 1024×768 picture scaled to fit, black bars at the sides |
+| `scaled` | as large as the screen allows, on parchment (called `framed` before 0.1.3) |
+| `scaled_black` | the whole 1024×768 picture scaled to fit, black bars at the sides (called `black` before 0.1.3) |
+| `original` | the whole 1024×768 picture at its own size, centered, black around (as the game itself on a wide screen) |
+
+How much the picture is blurred and darkened: `background_blur` (0 to 8, default 2; 0 is not blurred) and `background_brightness` (30 to 100 percent, default 65), also in the `[display]` section and the settings panel.
 
 Please only use pictures you have the right to use.

@@ -25,10 +25,16 @@ core_config g_config = {CORE_BACKEND_EMULATED, CORE_SCALING_SHARP_BILINEAR, CORE
                         0 /* fail_direct3d9 */, 0 /* d3d9_pacing */, 0, 0, 0, CORE_WINDOW_CENTER, CORE_WINDOW_CENTER, 0, 0 /* cpu_affinity */};
 
 const char *const kBackend[] = {"emulated", "system"};
+const char *const kBackendLabels[] = {"emulated (our own DirectDraw)", "system (Windows' DirectDraw, logged)"};
 const char *const kRendererLabels[] = {"auto (Direct3D 11; Direct3D 9 if it cannot start)", "direct3d (Direct3D 9)",
                                        "direct3d11 (Direct3D 11, flip model)"};
 const char *const kScaling[] = {"nearest", "sharp_bilinear"};
+const char *const kScalingLabels[] = {"nearest (plain pixels)", "sharp_bilinear (pixels with blended edges)"};
 const char *const kCpuAffinity[] = {"auto", "original"};
+const char *const kCpuAffinityLabels[] = {"auto (the game on its one processor, the rest on the others)",
+                                          "original (as without this setting)"};
+const char *const kD3d9PacingLabels[] = {"vsync (each present waits for the refresh)", "timer (our own timer)",
+                                         "dwmflush (waits for the desktop's composition)"};
 
 // [debug] renderer (0.1.1) became [display] renderer (O1). Only direct3d, a choice the player made, is carried over:
 // direct3d11 was the default of the time (and in the shipped file), and the others are no longer offered.
@@ -126,12 +132,12 @@ void RegisterCoreItems()
     // section, key, label, help, type, default, effect, inPanel, editable, min, max, step, autoWord, choices...
     g_backend = Add(Item{"display", "backend", "DirectDraw", "emulated: our own DirectDraw (no display mode changes, "
                          "scaled with SDL3); system: the real Windows DirectDraw behind the logging wrapper.",
-                         Type::Choice, "emulated", Effect::Restart, false, false, 0, 0, 0, nullptr, kBackend, nullptr,
-                         2});
+                         Type::Choice, "emulated", Effect::Restart, false, false, 0, 0, 0, nullptr, kBackend,
+                         kBackendLabels, 2});
     g_scaling = Add(Item{"display", "scaling", "Scaling", "nearest, or sharp_bilinear (nearest pixels with a one-pixel "
                          "blend at their edges).",
                          Type::Choice, "sharp_bilinear", Effect::Restart, false, false, 0, 0, 0, nullptr, kScaling,
-                         nullptr, 2});
+                         kScalingLabels, 2});
     g_present = Add(Item{"display", "present", "Frame output",
                          "How often frames reach the screen. display: every screen refresh; cap60: at most 60 per "
                          "second; original: the game's own ~20 per second. The game's timing is the same in all "
@@ -152,7 +158,7 @@ void RegisterCoreItems()
                        "softer, because the picture is enlarged. Auto: 1080 pixels high on a taller screen (2560x1440: "
                        "1920x1080, 133 %; 4K: 1920x1080), the screen's own size otherwise. Always limited so that the "
                        "result stays at least 1024x768.",
-                       Type::Int, "100", Effect::Relayout, true, true, 100, 250, 5, "auto", nullptr, nullptr, 0});
+                       Type::Int, "100", Effect::Relayout, true, true, 100, 250, 5, "auto", nullptr, nullptr, 0, "%"});
     g_window = Add(Item{"display", "window", "Window",
                         "fullscreen: the game covers its monitor, without a border; windowed: a window you can move "
                         "and size (the game is laid out again for its size when you let go). F5 switches.",
@@ -187,7 +193,7 @@ void RegisterCoreItems()
                         Type::Bool, "on", Effect::Live, true, true, 0, 0, 0, nullptr, nullptr, nullptr, 0});
     g_panelScale = Add(Item{"ui", "panel_scale", "Panel size",
                             "Size of this panel in percent. Auto: the output height divided by 1080 (1440p: 133%).",
-                            Type::Int, "auto", Effect::Live, true, true, 100, 300, 10, "auto", nullptr, nullptr, 0});
+                            Type::Int, "auto", Effect::Live, true, true, 100, 300, 10, "auto", nullptr, nullptr, 0, "%"});
     g_panelKey = Add(Item{"ui", "panel_key", "Panel key",
                           "Opens and closes this panel. Change it in emperor_engine.ini for now (e.g. F12, "
                           "Ctrl+F12); changing it here comes later.",
@@ -230,7 +236,7 @@ void RegisterCoreItems()
                             "present we wait for the desktop's next composition. Direct3D 11 is not affected. Takes "
                             "effect after a restart.",
                             Type::Choice, "vsync", Effect::Restart, false, false, 0, 0, 0, nullptr,
-                            core_d3d9_pacing_names, core_d3d9_pacing_names, 3});
+                            core_d3d9_pacing_names, kD3d9PacingLabels, 3});
     g_labels = Add(Item{"debug", "frame_labels", "Frame labels",
                         "For checking the framed pictures' layout (tools/verify/frame_check.py): the border's dark "
                         "lines red, the rest of the border green, padding yellow, the picture white, outside blue.",
@@ -250,7 +256,7 @@ void RegisterCoreItems()
                              "original processors, as without this setting. If the game crashes or the sound goes "
                              "wrong, try original to see whether this is the cause. Takes effect after a restart.",
                              Type::Choice, "auto", Effect::Restart, false, false, 0, 0, 0, nullptr, kCpuAffinity,
-                             nullptr, 2});
+                             kCpuAffinityLabels, 2});
 }
 
 } // namespace

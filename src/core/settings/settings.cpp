@@ -194,6 +194,22 @@ void Retire(const char *section, const char *key, Migrate migrate)
     }
 }
 
+struct Renamed {
+    const char *section;
+    const char *key;
+    const char *oldValue;
+    const char *newValue;
+};
+Renamed g_renamed[16];
+int g_renamedCount = 0;
+
+void RenameValue(const char *section, const char *key, const char *oldValue, const char *newValue)
+{
+    if (g_renamedCount < static_cast<int>(sizeof(g_renamed) / sizeof(g_renamed[0]))) {
+        g_renamed[g_renamedCount++] = Renamed{section, key, oldValue, newValue};
+    }
+}
+
 int Register(const Item &item)
 {
     if (g_count >= kMaxItems) {
@@ -329,6 +345,7 @@ void Load(const wchar_t *path)
         core_log("config: line %d: [%s] %s = %s is no longer a setting: removed from the file%s", l.line,
                  l.section.c_str(), l.key.c_str(), l.value.c_str(), n > 0 ? " (its value carried over)" : "");
     }
+    std::vector<IniChange> renamed; // old spellings of values, written anew
     for (const IniLine &l : lines) {
         int i = Find(l.section.c_str(), l.key.c_str());
         char norm[kValueSize];
@@ -339,7 +356,19 @@ void Load(const wchar_t *path)
         if (isRetired) {
             continue;
         }
-        if (i < 0 || !Normalize(i, l.value.c_str(), norm, sizeof(norm))) {
+        const char *value = l.value.c_str();
+        for (int k = 0; k < g_renamedCount; ++k) {
+            const Renamed &r = g_renamed[k];
+            if (_stricmp(l.section.c_str(), r.section) == 0 && _stricmp(l.key.c_str(), r.key) == 0 &&
+                _stricmp(value, r.oldValue) == 0) {
+                value = r.newValue;
+                renamed.push_back(IniChange{l.section, l.key, r.newValue});
+                core_log("config: line %d: [%s] %s = %s is now called %s: changed in the file", l.line,
+                         l.section.c_str(), l.key.c_str(), l.value.c_str(), r.newValue);
+                break;
+            }
+        }
+        if (i < 0 || !Normalize(i, value, norm, sizeof(norm))) {
             core_log("config: line %d: unknown setting [%s] %s = %s (ignored)", l.line, l.section.c_str(),
                      l.key.c_str(), l.value.c_str());
             continue;
@@ -355,18 +384,22 @@ void Load(const wchar_t *path)
         core_log("config: [%s] %s = %s (carried over from a removed setting)", c.section.c_str(), c.key.c_str(),
                  c.value.c_str());
     }
-    if (!retired.empty()) {
+    if (!retired.empty() || !renamed.empty()) {
         wchar_t bak[MAX_PATH + 8];
         std::swprintf(bak, sizeof(bak) / sizeof(bak[0]), L"%ls.bak", path);
         DWORD error = 0;
-        const std::string cleaned = UpdateIni(RemoveIniKeys(text, retired), carried);
+        std::vector<IniChange> changes = carried;
+        changes.insert(changes.end(), renamed.begin(), renamed.end());
+        const std::string cleaned = UpdateIni(RemoveIniKeys(text, retired), changes);
         if (WriteFileAtomic(bak, text, &error) && WriteFileAtomic(path, cleaned, &error)) {
-            core_log("config: removed %d line(s) of settings that no longer exist (the file as it was: "
-                     "emperor_engine.ini.bak)",
-                     static_cast<int>(retired.size()));
+            core_log("config: removed %d line(s) of settings that no longer exist, renamed %d value(s) (the file as it "
+                     "was: emperor_engine.ini.bak)",
+                     static_cast<int>(retired.size()), static_cast<int>(renamed.size()));
         }
         else {
-            core_log("config: could not remove the old settings from the file (error %lu); they are ignored", error);
+            core_log("config: could not update the old settings in the file (error %lu); removed ones are ignored, "
+                     "renamed values are taken as their new names",
+                     error);
         }
     }
     for (int i = 0; i < g_count; ++i) {

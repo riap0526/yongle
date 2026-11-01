@@ -214,6 +214,14 @@ int main()
     }
     Check(eights == 1024 && nines == 1024, "dithering: between two levels, half each (no bands)");
 
+    // O2b: blur 0 and brightness 100 % at the picture's own size: the picture itself, pixel for pixel.
+    std::vector<WORD> pattern(64 * 32);
+    for (size_t k = 0; k < pattern.size(); ++k) {
+        pattern[k] = static_cast<WORD>(k * 2654435761u >> 16);
+    }
+    d::BlurredBackdrop(d::Pixels16{pattern.data(), 64, 64, 32}, 64, 32, 0, 256, &out);
+    Check(out == pattern, "backdrop: blur 0, brightness 256: the picture unchanged");
+
     // The row-wise vertical passes give exactly the same pixels as the column-wise ones; time at 2560x1440.
     std::vector<WORD> noise(2334 * 1400);
     unsigned seed = 12345;

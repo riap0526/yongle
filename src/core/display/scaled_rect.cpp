@@ -188,12 +188,12 @@ void BlurredBackdrop(const Pixels16 &src, int w, int h, double sigma, int bright
                 d[x] = static_cast<std::uint16_t>((top * (256 - fy[y]) + bot * fy[y]) >> 8); // 8 fractional bits
             }
         }
-        for (int y = 0; y < h; ++y) {
+        for (int y = 0; y < h && sigma > 0; ++y) {
             boxLine(&ch[static_cast<size_t>(y) * w], w, 1);
         }
         // The vertical passes row by row (the same sums as boxLine down each column, but reading whole rows: the
         // column-wise walk took most of the 350 ms at 2560x1440, R2d.1 follow-up).
-        for (int pass = 0; pass < 3; ++pass) {
+        for (int pass = 0; pass < 3 && sigma > 0; ++pass) {
             for (int x = 0; x < w; ++x) {
                 long s = 0;
                 for (int k = -r; k <= r; ++k) {

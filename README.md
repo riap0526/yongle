@@ -42,7 +42,7 @@ This follows the [OpenRCT2](https://github.com/OpenRCT2/OpenRCT2) approach: star
 
   ![The main menu over a blurred picture of the last city](screenshots/main-menu.webp)
 
-- **China map** at its own size or enlarged, centered over a blurred backdrop of itself.
+- **China map** at its own size or enlarged (to fit, or by a percentage), centered over a blurred backdrop of itself, or over your city as you left it.
 
   ![The China map at its own size](screenshots/china-map.webp)
 

@@ -219,6 +219,34 @@ int main()
     Check(Value("ui", "panel_scale") == "200" && Value("gameplay", "smooth_scroll") == "on" && cfg->smooth_scroll,
           "afterwards that item is refused, other items still apply");
 
+    // A renamed value (O2a: framed -> scaled): taken as its new name and written anew in its place, the comment after
+    // it kept; the file as it was in emperor_engine.ini.bak.
+    {
+        static const char *const looks[] = {"scaled", "scaled_black"};
+        cs::Register(cs::Item{"test", "look", "Look", "", cs::Type::Choice, "scaled", cs::Effect::Live, false, false, 0, 0,
+                              0, nullptr, looks, nullptr, 2});
+        cs::RenameValue("test", "look", "black", "scaled_black");
+        const std::string old = "[test]\r\nlook = Black   ; mine\r\n";
+        WriteAll(old);
+        cs::Load(g_path);
+        const std::wstring bakPath = std::wstring(g_path) + L".bak";
+        std::string bak;
+        if (FILE *f = _wfopen(bakPath.c_str(), L"rb")) {
+            char buf[256];
+            size_t got;
+            while ((got = std::fread(buf, 1, sizeof(buf), f)) > 0) bak.append(buf, got);
+            std::fclose(f);
+        }
+        Check(Value("test", "look") == "scaled_black" && ReadAll() == "[test]\r\nlook = scaled_black   ; mine\r\n" &&
+                  bak == old,
+              "renamed value: new name in effect and in the file, old file in .bak");
+        DeleteFileW(bakPath.c_str());
+        cs::Load(g_path);
+        Check(Value("test", "look") == "scaled_black" &&
+                  GetFileAttributesW(bakPath.c_str()) == INVALID_FILE_ATTRIBUTES,
+              "renamed value: nothing to do the next time");
+    }
+
     std::printf("RESULT: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
     return g_failures ? 1 : 0;
 }

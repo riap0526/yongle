@@ -502,9 +502,9 @@ bool ApplyResolution(int, const char *, bool initial)
 // [ui] info_window (R2b, docs/archive/resolution_ui_r2b.md §3): registered by this layer before the file is loaded.
 const char *const kInfoWindow[] = {"original", "centered", "cursor"};
 const char *const kFullSpeed[] = {"capped", "original"};
-const char *const kFullSpeedLabels[] = {"capped: steady, a step above 90%", "original: as fast as the computer can"};
+const char *const kFullSpeedLabels[] = {"capped (steady, a step above 90%)", "original (as fast as the computer can)"};
 const char *const kInfoWindowLabels[] = {"original (above or below, as the game does it)",
-                                         "centered in the city area", "beside the cursor"};
+                                         "centered (in the city area)", "cursor (beside the cursor)"};
 
 bool ApplyInfoWindow(int, const char *v, bool)
 {

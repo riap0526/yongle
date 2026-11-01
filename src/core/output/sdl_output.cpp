@@ -872,8 +872,15 @@ void DrawFrame(const void *pixels, int pitch, int w, int h, const RECT &dst, SIZ
             ok = d.ok;
             const float k = static_cast<float>(l.picW / pw); // a dark strip over the picture's bottom: 22 units
                                                               // (only when the game layer did not draw the line)
-            DrawCaption(CaptionDraw{caption, static_cast<float>(l.picX), static_cast<float>(l.picY + (ph - 30) * k),
-                                    static_cast<float>(l.picW), 22 * k, 13 * k, true, ow, oh}); // high, 30 above
+            if (fr.gameCaption) { // where the game's own GDI line went, as unframed
+                DrawCaption(CaptionDraw{caption, static_cast<float>(l.picX),
+                                        static_cast<float>(l.picY + (captionY - b.top) * k), static_cast<float>(l.picW),
+                                        0, 13 * k, false, ow, oh});
+            }
+            else {
+                DrawCaption(CaptionDraw{caption, static_cast<float>(l.picX), static_cast<float>(l.picY + (ph - 30) * k),
+                                        static_cast<float>(l.picW), 22 * k, 13 * k, true, ow, oh}); // high, 30 above
+            }
         }
     }
     else {

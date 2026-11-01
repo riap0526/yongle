@@ -99,6 +99,7 @@ bool BorderPicture(int w, int h, std::vector<WORD> *out) // a plain frame: 0x111
     }
     return true;
 }
+int CityFramesDrawn() { return 0; } // no city drawn: the map's own background
 void RegisterSettings() {}
 bool Attach() { return false; }
 void OnArtLoaded(int, int, int) {}
@@ -1476,7 +1477,7 @@ void R2cChinaMap()
 
     // 2560x1440, sidebar at 2334: the map area is 2334 x 1400 below the top bar.
     MapScreen(2560, 1440, 2334);
-    emperor::china_map::SetModeForTest(0, false);
+    emperor::china_map::SetModeForTest(0, 0);
     draw();
     Check(g_map.draws == 1 && g_map.drawBuffer != At<BYTE *>(aDrawBuffer), "scaled: the game draws into our layer");
     Check(At<BYTE *>(aDrawBuffer) == reinterpret_cast<BYTE *>(g_mapScreen.data()), "the screen's buffer afterwards");
@@ -1514,7 +1515,7 @@ void R2cChinaMap()
 
     // Native: the map at its own size in the middle of the area, pixel for pixel.
     MapScreen(2560, 1440, 2334);
-    emperor::china_map::SetModeForTest(1, false);
+    emperor::china_map::SetModeForTest(1, 0);
     draw();
     const int nx = (2334 - 880) / 2 + 16, ny = 40 + (1400 - 778) / 2 + 16;
     Check(Screen(nx, ny) == MapPattern(0, 0) && Screen(nx + 847, ny + 745) == MapPattern(847, 745) &&
@@ -1525,21 +1526,28 @@ void R2cChinaMap()
     input();
     Check(g_map.mouseX == 300 && g_map.mouseY == 240, "native: the mouse in the game's map coordinates");
 
-    // Integer scaling at 2560x1440: 1.8 rounds down to 1, the same as native.
+    // A scale of one's own (O2c): 100% at 2560x1440 is the same as native.
     MapScreen(2560, 1440, 2334);
-    emperor::china_map::SetModeForTest(0, true);
+    emperor::china_map::SetModeForTest(0, 100);
     draw();
-    Check(Screen(nx + 300, ny + 200) == MapPattern(300, 200), "integer scaling at 2560x1440: scale 1");
-    // 3840x2160: integer scale 2.
+    Check(Screen(nx + 300, ny + 200) == MapPattern(300, 200), "scale 100% at 2560x1440: the map's own size");
+    // 3840x2160 at 200%: each map pixel a 2 x 2 block.
     MapScreen(3840, 2160, 3614);
+    emperor::china_map::SetModeForTest(0, 200);
     draw();
     const int ix = (3614 - 1760) / 2 + 32, iy = 40 + (2120 - 1556) / 2 + 32;
     Check(Screen(ix + 600, iy + 400) == MapPattern(300, 200) && Screen(ix + 601, iy + 401) == MapPattern(300, 200),
-          "integer scaling at 3840x2160: each map pixel a 2 x 2 block");
+          "scale 200% at 3840x2160: each map pixel a 2 x 2 block");
+    // 400% at 2560x1440 is more than fits (1.8): shown as large as fits, as Auto.
+    MapScreen(2560, 1440, 2334);
+    emperor::china_map::SetModeForTest(0, 400);
+    draw();
+    Check(Screen(cx, cy) == MapPattern(424, 373) && Screen(mapX - 10, mapY + 100) == 0x1111,
+          "scale 400% at 2560x1440: as large as fits (as Auto)");
 
     // Original, the editor's map, a screen too small for the whole map: the game's own drawing and mouse.
     MapScreen(2560, 1440, 2334);
-    emperor::china_map::SetModeForTest(2, false);
+    emperor::china_map::SetModeForTest(2, 0);
     draw();
     Check(g_map.drawBuffer == At<BYTE *>(aDrawBuffer) && Screen(5, 45) == MapPattern(5, 5),
           "original: drawn straight to the screen at (0, 40)");
@@ -1548,7 +1556,7 @@ void R2cChinaMap()
     input();
     Check(g_map.mouseX == 100 && g_map.mouseY == 700, "original: the real mouse");
     MapScreen(2560, 1440, 2334);
-    emperor::china_map::SetModeForTest(0, false);
+    emperor::china_map::SetModeForTest(0, 0);
     At<char>(aGameScreen) = 0x15;
     draw();
     Check(g_map.drawBuffer == At<BYTE *>(aDrawBuffer), "the editor's map (0x15): the game's way");

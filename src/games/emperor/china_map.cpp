@@ -9,6 +9,8 @@
 #include "games/emperor/resolution.h"
 
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <vector>
 
@@ -94,10 +96,28 @@ const int kPhase = core::diag::perf::Register("China map layer (ours)", core::di
 
 enum Mode { kScaled, kNative, kOriginal };
 const char *const kModes[] = {"scaled", "native", "original"};
-const char *const kModeLabels[] = {"scaled (fills the map area)", "native (the picture's own size, centered)",
+const char *const kModeLabels[] = {"scaled (larger than its own size)", "native (its own size, centered)",
                                    "original (as the game draws it)"};
 int g_mode = kNative; // R2d.1: the picture's own size by default (playtest 2026-10-25)
-bool g_integer = false;
+int g_scalePercent = 0; // O2c: display.china_map_scale for scaled, 0 = fit (as large as the map area allows)
+int g_fitPercent = 0;   // the fit of the map last shown, in percent (0: none shown yet)
+
+// The panel's China map: scale slider ends at what fits now (the last map shown at the current size; 400 before any).
+int FitPercent()
+{
+    return g_fitPercent > 0 ? g_fitPercent : 400;
+}
+
+// O2c: what is around the map: the same map blurred and darkened (R2c), or the city as it was when the map opened, as
+// it is (the map like a window over it). That city is what the game leaves in its draw buffer: the map screen does
+// not redraw outside the map (docs/archive/resolution_ui_r2c.md §1; the original shows it, with what popups leave
+// behind). It is kept when the first map frame after a city frame is drawn and put back on every frame, so nothing
+// is left behind. The city is still: the game does not draw it while the map is shown. (Blurring it would take about
+// 0.1 s at 2560x1440, a visible stop when the map opens: not done, docs/optimization.md O2c.)
+enum Background { kMapBackground, kCityBackground };
+const char *const kBackgrounds[] = {"map", "city"};
+const char *const kBackgroundLabels[] = {"map (the same map, blurred and darkened)", "city (your city as you left it)"};
+int g_background = kMapBackground;
 
 // Our buffers.
 BYTE *g_layer = nullptr; // the game draws the map here: same layout as the back buffer
@@ -106,6 +126,9 @@ std::vector<WORD> g_canvas; // border + map, (map + 2 border) pixels square
 int g_canvasW = 0, g_canvasH = 0, g_border = 0;
 std::vector<WORD> g_backdrop; // the map area's background
 int g_backdropKey[5] = {};
+std::vector<WORD> g_cityBackdrop; // O2c: the map area of the draw buffer when the map opened
+int g_cityW = 0, g_cityH = 0;
+int g_cityFrames = -1;            // emperor::fullscreen::CityFramesDrawn() when it was kept
 
 // Where the map is shown now (for the mouse); valid only for the layout it was computed for.
 struct Shown {
@@ -204,11 +227,14 @@ void Backdrop(const Layout &l, int areaW, int areaH)
 double Scale(int areaW, int areaH)
 {
     if (g_mode == kNative) {
+        g_fitPercent = static_cast<int>(
+            std::floor(std::fmin(static_cast<double>(areaW) / g_canvasW, static_cast<double>(areaH) / g_canvasH) * 100 + 1e-9));
         return 1.0;
     }
     double s = std::fmin(static_cast<double>(areaW) / g_canvasW, static_cast<double>(areaH) / g_canvasH);
-    if (g_integer) {
-        s = std::floor(s);
+    g_fitPercent = static_cast<int>(std::floor(s * 100 + 1e-9));
+    if (g_scalePercent > 0) { // a chosen scale, never larger than fits
+        s = std::fmin(g_scalePercent / 100.0, s);
     }
     return s < 1.0 ? 1.0 : s;
 }
@@ -224,9 +250,17 @@ void Compose(const Layout &l, BYTE *target, bool backdrop)
     const core::display::Target16 dst{reinterpret_cast<WORD *>(target), l.pitch / 2, l.ddW, l.ddH};
     const RECT area{0, kTopBarH, areaW, l.ddH};
     if (backdrop) {
-        Backdrop(l, areaW, areaH);
+        const std::vector<WORD> *bg = &g_backdrop;
+        const size_t areaSize = static_cast<size_t>(areaW) * areaH;
+        if (g_background == kCityBackground && g_cityW == areaW && g_cityH == areaH &&
+            g_cityBackdrop.size() == areaSize) {
+            bg = &g_cityBackdrop;
+        }
+        if (bg == &g_backdrop) { // also when no city was kept for this size (e.g. the resolution changed on the map)
+            Backdrop(l, areaW, areaH);
+        }
         for (int y = 0; y < areaH; ++y) {
-            std::memcpy(dst.px + static_cast<size_t>(y + kTopBarH) * dst.stride, &g_backdrop[static_cast<size_t>(y) * areaW],
+            std::memcpy(dst.px + static_cast<size_t>(y + kTopBarH) * dst.stride, &(*bg)[static_cast<size_t>(y) * areaW],
                         static_cast<size_t>(areaW) * 2);
         }
     }
@@ -273,6 +307,19 @@ void DrawLayer(void *p)
     if (!LayerBuffer(size)) {
         Original(o_MapDraw, kMapDraw)();
         return;
+    }
+    const int cityFrames = emperor::fullscreen::CityFramesDrawn();
+    if (cityFrames != g_cityFrames) { // the first map frame after the city: its map area still shows the city
+        g_cityFrames = cityFrames;
+        const int areaW = c.l.sidebarX, areaH = c.l.ddH - kTopBarH;
+        g_cityBackdrop.resize(static_cast<size_t>(areaW) * areaH);
+        for (int y = 0; y < areaH; ++y) {
+            std::memcpy(&g_cityBackdrop[static_cast<size_t>(y) * areaW],
+                        c.target + static_cast<size_t>(y + kTopBarH) * c.l.pitch, static_cast<size_t>(areaW) * 2);
+        }
+        g_cityW = areaW;
+        g_cityH = areaH;
+        Log("china_map: the city kept from the draw buffer for the %dx%d map area", areaW, areaH);
     }
     c.r.Set(kDrawBuffer.ptr(), g_layer);
     c.r.Set(&g_deferTop, true);
@@ -488,9 +535,18 @@ bool ApplyMode(int, const char *v, bool initial)
     return true;
 }
 
-bool ApplyInteger(int, const char *v, bool initial)
+bool ApplyScale(int, const char *v, bool initial)
 {
-    g_integer = std::strcmp(v, "on") == 0;
+    g_scalePercent = std::strcmp(v, "fit") == 0 ? 0 : std::atoi(v);
+    if (!initial) {
+        *kRedraw = 1;
+    }
+    return true;
+}
+
+bool ApplyBackground(int, const char *v, bool initial)
+{
+    g_background = std::strcmp(v, "city") == 0 ? kCityBackground : kMapBackground;
     if (!initial) {
         *kRedraw = 1;
     }
@@ -518,17 +574,28 @@ void RegisterSettings()
     using core::settings::Type;
     int i = core::settings::Register(Item{
         "display", "china_map", "China map",
-        "The map of China at resolutions larger than the map. scaled: as large as the map area allows, in a fret "
-        "border, over the same map blurred and darkened; native: the picture's own size, centered, the same "
-        "background; original: as the game draws it (top left, the rest of the screen not redrawn).",
+        "The map of China at resolutions larger than the map. scaled: larger than its own size (China map: scale), in "
+        "a fret border, over the background (China map: background); native: the picture's own size, centered, the "
+        "same background; original: as the game draws it (top left, the rest of the screen not redrawn).",
         Type::Choice, "native", Effect::Live, true, true, 0, 0, 0, nullptr, kModes, kModeLabels, 3});
     core::settings::OnChange(i, &ApplyMode);
+    // O2c: whole-number scales (R2c) gave only 100% below 4K; a scale of one's own covers it (2026-11-01).
+    core::settings::Retire("display", "china_map_integer", nullptr);
     i = core::settings::Register(Item{
-        "display", "china_map_integer", "China map: integer scaling",
-        "For China map = scaled: only whole-number scales (sharper, smaller; at 2560x1440 the map stays at its own "
-        "size).",
-        Type::Bool, "off", Effect::Live, true, true, 0, 0, 0, nullptr, nullptr, nullptr, 0});
-    core::settings::OnChange(i, &ApplyInteger);
+        "display", "china_map_scale", "China map: scale",
+        "For China map = scaled: how large, in percent of the map's own size. Auto: as large as the map area allows "
+        "(fit). The slider ends at what fits for the map last shown at this resolution; a larger value in "
+        "emperor_engine.ini is shown as large as fits.",
+        Type::Int, "fit", Effect::Live, true, true, 100, 400, 5, "fit", nullptr, nullptr, 0, "%", &FitPercent,
+        "china_map", "scaled"});
+    core::settings::OnChange(i, &ApplyScale);
+    i = core::settings::Register(Item{
+        "display", "china_map_background", "China map: background",
+        "What is around the map (China map = scaled or native). map: the same map, blurred and darkened; city: your "
+        "city as it was when you opened the map, as it is (the map like a window over it); it stands still while "
+        "the map is shown.",
+        Type::Choice, "map", Effect::Live, true, true, 0, 0, 0, nullptr, kBackgrounds, kBackgroundLabels, 2});
+    core::settings::OnChange(i, &ApplyBackground);
 }
 
 bool Attach()
@@ -549,7 +616,10 @@ bool Attach()
     Install(kAnim, &Anim_detour, o_Anim);
     Install(kSpyPanel, &SpyPanel_detour, o_SpyPanel);
     Install(kCityPanel, &CityPanel_detour, o_CityPanel);
-    core_log("china_map: installed (display.china_map %s%s)", kModes[g_mode], g_integer ? ", integer scaling" : "");
+    char scale[16];
+    std::snprintf(scale, sizeof(scale), g_scalePercent ? "%d%%" : "fit", g_scalePercent);
+    core_log("china_map: installed (display.china_map %s, scale %s, background %s)", kModes[g_mode], scale,
+             kBackgrounds[g_background]);
     return true;
 }
 
@@ -559,10 +629,10 @@ const Detour *Detours(int *count)
     return kDetours;
 }
 
-void SetModeForTest(int mode, bool integer)
+void SetModeForTest(int mode, int scalePercent)
 {
     g_mode = mode;
-    g_integer = integer;
+    g_scalePercent = scalePercent;
 }
 
 } // namespace emperor::china_map

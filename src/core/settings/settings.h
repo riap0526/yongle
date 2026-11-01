@@ -47,6 +47,11 @@ struct Item {
     const char *const *choices;   // Choice: the ini spellings
     const char *const *choiceLabels; // Choice: shown in the panel (nullptr: the ini spellings)
     int choiceCount;
+    const char *unit = nullptr; // Int: shown after the number in the panel (e.g. "%")
+    int (*maxNow)() = nullptr;  // Int: the largest value that has an effect now (the panel's slider ends there; the
+                                // file still takes up to max), or nullptr: max
+    const char *shownIfKey = nullptr;   // the panel shows the item only while this item of the same section ...
+    const char *shownIfValue = nullptr; // ... has this value (e.g. a scale only for "scaled")
 };
 
 constexpr size_t kValueSize = 40;
@@ -69,6 +74,11 @@ struct Migration {
 };
 using Migrate = int (*)(const char *oldValue, Migration *out, int max);
 void Retire(const char *section, const char *key, Migrate migrate);
+
+// A value of a Choice item that was renamed (start-up, before Load): Load takes the old spelling as the new one and
+// writes the new one into the file in its place (after keeping the file as it was in emperor_engine.ini.bak), so the
+// file, the panel and the log all use the current name.
+void RenameValue(const char *section, const char *key, const char *oldValue, const char *newValue);
 
 // Called when the item's value changed (game thread; also once per item after Load, with initial = true). Returns
 // false when the change could not take effect now (the panel then says a restart is needed). Up to 4 callbacks per
