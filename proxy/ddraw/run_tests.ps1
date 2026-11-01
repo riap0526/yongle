@@ -17,6 +17,7 @@
 #               (no DLL)
 #   test_common_sizes core/display/common_sizes: the panel's common sizes for a screen (no DLL)
 #   test_framing core/display/framing: the framed full-screen picture geometry (no DLL)
+#   test_ambient games/emperor/ambient_rate: the ambient sounds' N for a rate per second, R -> original -> R (no DLL)
 #   test_surface_memory core/ddraw/surface_memory: spare rows with a canary below each emulated surface, guard
 #               pages around it (no DLL)
 #   test_perf   core/diag/perf: phases, samples per thread, averages, history, the rate log window (no DLL; ~1 s)
@@ -33,7 +34,13 @@
 #               and deletes shots\t8_*.png)
 #   test_log    core/log: a log over 4 MB is renamed at start-up (no DLL; writes and deletes test_log*.log)
 #   test_sg3    core/assets/sg3 on testbed\DATA\China_Interface.sg3, if present (no DLL; nothing written)
+# -Interactive: also the checks that need real input (test_emu: the screenshot keys with present=display, the frozen
+# cursor). They press real keys, take the foreground and move the cursor: run it with nobody at the computer. Without
+# it those checks are SKIPPED and listed at the end.
+param([switch]$Interactive)
 $ErrorActionPreference = 'Stop'
+if ($Interactive) { $env:YONGLE_TEST_INTERACTIVE = '1' } else { Remove-Item Env:YONGLE_TEST_INTERACTIVE -ErrorAction SilentlyContinue }
+$skipped = @()
 $dir = Resolve-Path (Join-Path $PSScriptRoot '..\..\build\engine')
 $ini = Join-Path $dir 'emperor_engine.ini'
 $default = Join-Path $PSScriptRoot 'emperor_engine.ini'
@@ -48,6 +55,7 @@ function Run($name, $backend, [string[]]$testArgs, $present = 'display', $extra 
         $code = $LASTEXITCODE
     } finally { Pop-Location }
     $out | Where-Object { $_ -match 'FAILED|RESULT' } | ForEach-Object { "  $_" }
+    $out | Where-Object { $_ -cmatch ' SKIPPED ' } | ForEach-Object { $script:skipped += "$name ($backend/$present): $($_ -replace '\s+SKIPPED.*$', '')" }
     $out | Where-Object { $_ -match 'BltFast cost' } | ForEach-Object { "  $_" }
     $script:results += [pscustomobject]@{ Test = $name; Backend = "$backend/$present"; Exit = $code }
 }
@@ -65,6 +73,7 @@ Run 'test_scroll' 'emulated' @()
 Run 'test_logical' 'emulated' @()
 Run 'test_common_sizes' 'emulated' @()
 Run 'test_framing' 'emulated' @()
+Run 'test_ambient' 'emulated' @()
 Run 'test_moved_rect' 'emulated' @()
 Run 'test_scaled_rect' 'emulated' @()
 Run 'test_surface_memory' 'emulated' @()
@@ -86,5 +95,10 @@ Remove-Item Env:TEST_RESTORE_PACK -ErrorAction SilentlyContinue
 $pack = Join-Path $PSScriptRoot '..\..\testbed\DATA\China_Interface.sg3'
 if (Test-Path $pack) { Run 'test_sg3' 'emulated' @((Resolve-Path $pack).Path, '348', '144', 'f2d0332b') }
 Copy-Item $default $ini -Force
+Remove-Item Env:YONGLE_TEST_INTERACTIVE -ErrorAction SilentlyContinue
 $results | Format-Table -AutoSize
+if ($skipped.Count -gt 0) {
+    "Skipped (need real input; run_tests.ps1 -Interactive with nobody at the computer):"
+    $skipped | ForEach-Object { "  $_" }
+}
 if ($results | Where-Object { $_.Exit -ne 0 }) { exit 1 }

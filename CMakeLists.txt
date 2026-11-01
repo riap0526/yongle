@@ -88,6 +88,8 @@ add_library(ddraw SHARED
     src/games/emperor/ui_fixes.cpp
     src/games/emperor/china_map.cpp
     src/games/emperor/display_options.cpp
+    src/games/emperor/sound.cpp
+    src/games/emperor/ambient_rate.cpp
 )
 # Augustus code (AGPL-3.0): third_party/augustus/README.md. Compiled as part of the DLL.
 add_library(augustus_core STATIC third_party/augustus/src/core/speed.c)
@@ -167,6 +169,10 @@ target_link_options(test_common_sizes PRIVATE -static)
 
 # Offline test of core/display/framing (the framed full-screen picture geometry, fullscreen_art.md 7.5).
 add_executable(test_framing proxy/ddraw/test_framing.cpp src/core/display/framing.cpp)
+# O4b: games/emperor/ambient_rate (no game, no DLL).
+add_executable(test_ambient proxy/ddraw/test_ambient.cpp src/games/emperor/ambient_rate.cpp)
+target_include_directories(test_ambient PRIVATE src)
+target_link_options(test_ambient PRIVATE -static)
 target_include_directories(test_framing PRIVATE src)
 target_link_options(test_framing PRIVATE -static)
 
@@ -243,6 +249,7 @@ add_custom_command(TARGET test_guard POST_BUILD
 add_executable(test_restore proxy/ddraw/test_restore.cpp
     src/games/emperor/scroll.cpp src/games/emperor/resolution.cpp src/games/emperor/emperor.cpp
     src/games/emperor/ui_fixes.cpp src/games/emperor/china_map.cpp src/games/emperor/display_options.cpp
+    src/games/emperor/sound.cpp src/games/emperor/ambient_rate.cpp
     src/core/scroll/smooth_scroll.cpp src/core/diag/guard.cpp src/core/diag/report.cpp src/core/diag/perf.cpp
     src/core/diag/environment.cpp src/core/diag/stall.cpp src/core/platform/affinity.cpp src/core/log.cpp
     src/core/display/logical_size.cpp

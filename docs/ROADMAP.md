@@ -20,6 +20,7 @@ Back to the [README](../README.md). Plans change with what players report; ideas
 - **City zoom** (mouse wheel, centered on the cursor), then **export of the whole city as one large image**.
 - **Original-style settings screens**: the settings drawn with the game's own art, grouped into the game's option dialogs.
 - **Key rebinding** in a game-style dialog.
+- **The unused ambient sounds**: the game ships 24 ambient sounds (birds, wind, insects, chimes) in `Audio\Ambient\Layer1` that it never plays; letting them play.
 
 ## Longer term
 

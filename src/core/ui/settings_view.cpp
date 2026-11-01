@@ -326,6 +326,7 @@ const char *SectionTitle(const char *section)
 {
     if (_stricmp(section, "display") == 0) return "Display";
     if (_stricmp(section, "gameplay") == 0) return "Gameplay";
+    if (_stricmp(section, "sound") == 0) return "Sound";
     if (_stricmp(section, "timing") == 0) return "Timing";
     if (_stricmp(section, "ui") == 0) return "Panel";
     if (_stricmp(section, "debug") == 0) return "Testing";

@@ -53,6 +53,8 @@ SIZE ModeSize()
 }
 using KeyFilter = bool (*)(UINT, WPARAM, LPARAM);
 void SetKeyFilter(KeyFilter) {}
+using FocusHandler = void (*)();
+void SetFocusHandler(FocusHandler) {}
 bool Windowed() { return false; }
 void SetWindowClient(int, int) {}
 } // namespace core::display
