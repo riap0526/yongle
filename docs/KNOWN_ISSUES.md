@@ -5,12 +5,14 @@ Back to the [README](../README.md). If you run into something not listed here, p
 ## Performance
 
 - **Laptops and slower computers: lower the resolution first.** Raise the display scale (Options → Display options, or the settings panel with Insert), or choose *Auto* (1080 pixels high on taller screens). The game then draws fewer pixels; this helps more than any other setting.
-- **Stutters with Direct3D 11 on some systems.** If the game stutters badly although the log shows nothing unusual, try Direct3D 9: set `renderer = direct3d` in the `[display]` section of `emperor_engine.ini` and restart the game. Please also report it, with the log.
-- **Troubleshooting crashes or sound problems after updating to 0.1.3**: Yongle now runs its own work (putting the picture on the screen, saving screenshots) and the graphics driver's on the other processor cores, while the game itself stays on the one core the GOG release gives it. To rule this out, set `cpu_affinity = original` in the `[compat]` section of `emperor_engine.ini` and restart the game. Please also report it, with the log.
+
+## Troubleshooting
+
+- **Stutters or a picture that looks wrong:** try Direct3D 9: set `renderer = direct3d` in the `[display]` section of `emperor_engine.ini` and restart the game. Please also report it, with the log.
+- **Crashes or sound problems after updating to 0.1.3:** Yongle now runs its own work (putting the picture on the screen, saving screenshots) and the graphics driver's on the other processor cores, while the game itself stays on the one core the GOG release gives it. To rule this out, set `cpu_affinity = original` in the `[compat]` section of `emperor_engine.ini` and restart the game. Please also report it, with the log.
 
 ## Display
 
-- **Flashing black blocks** were seen occasionally in earlier versions after playing for a while on one system (AMD graphics, Direct3D 11 only). Screenshots did not show them, and switching windows (Alt+Tab) cleared them. Since Yongle started running its own work on other processor cores (0.1.3), they have not appeared again in several hours of testing. If you do see them, press F12, then send the log and the `shots\` folder; trying `renderer = direct3d` (see above) and telling us whether they still appear helps too.
 - The map and campaign editors and the multiplayer screens run at 1024×768 (centered), not at your resolution.
 - The campaign map screen has not been tested in play yet.
 - Small cosmetic quirks of the original are kept for now (e.g. text sitting slightly high in some dialog buttons).

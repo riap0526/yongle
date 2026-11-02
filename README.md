@@ -113,8 +113,6 @@ All settings are in `emperor_engine.ini` next to `ddraw.dll`; the file explains 
 The full list is in **[docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md)**. The main points:
 
 - On laptops and slower computers, **lowering the resolution** (a higher display scale, or *Auto*) helps performance most.
-- If Direct3D 11 stutters on your system, `renderer = direct3d` in `emperor_engine.ini` switches to Direct3D 9 by hand.
-- **Flashing black blocks** (seen on one AMD system with Direct3D 11 in earlier versions) have not appeared again in several hours of testing since 0.1.3; if you see them, press F12 and report it.
 - Game under `C:\Program Files (x86)` and **not run as administrator** (default GOG Galaxy installs do run it as administrator): Yongle's settings, log and screenshots are in `%LOCALAPPDATA%\VirtualStore`, and editing the ini in the game folder has no effect. Don't switch between running as administrator and not.
 - Tested on AMD graphics and Intel integrated graphics so far; NVIDIA, real 4K monitors and several monitors not yet.
 
