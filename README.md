@@ -88,7 +88,9 @@ This follows the [OpenRCT2](https://github.com/OpenRCT2/OpenRCT2) approach: star
 
 **Uninstall:** delete `ddraw.dll` (and, if you like, `ddraw.syms`, `emperor_engine.ini`, `ddraw_proxy.log`, `menu_background_auto.png` and the `shots\` folder). Nothing else was changed.
 
-Files Yongle creates in the game folder: `ddraw_proxy.log` (log; over 4 MB it is renamed to `ddraw_proxy.old.log` at the next start, and it can be deleted at any time), `emperor_engine.ini` (settings; a backup `emperor_engine.ini.bak` when old settings are cleaned up), `menu_background_auto.png` (the last city, for the menu backdrop) and `shots\` (F11 / F12).
+Files Yongle creates in the game folder: `ddraw_proxy.log` (log; over 4 MB it is renamed to `ddraw_proxy.old.log` at the next start, and it can be deleted at any time), `emperor_engine.ini` (settings; a backup `emperor_engine.ini.bak` when old settings are cleaned up), `menu_background_auto.png` (the last city, for the menu backdrop) and `shots\` (F11 / F12). If the game is under `C:\Program Files (x86)` and does not run as administrator, Windows puts these files in `%LOCALAPPDATA%\VirtualStore` instead; see [Known issues](docs/KNOWN_ISSUES.md#installation).
+
+**Skipping the intro movie:** the game itself can do this. In `Emperor.ini` in the game folder, set `PlayIntroMovie=no` in the `[Config]` section. Yongle does not change this file.
 
 ## Keys
 
@@ -112,12 +114,13 @@ The full list is in **[docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md)**. The main p
 
 - On laptops and slower computers, **lowering the resolution** (a higher display scale, or *Auto*) helps performance most.
 - If Direct3D 11 stutters on your system, `renderer = direct3d` in `emperor_engine.ini` switches to Direct3D 9 by hand.
-- Occasional **flashing black blocks** (seen on one AMD system, Direct3D 11 only); the cause is not known yet.
+- **Flashing black blocks** (seen on one AMD system with Direct3D 11 in earlier versions) have not appeared again in several hours of testing since 0.1.3; if you see them, press F12 and report it.
+- Game under `C:\Program Files (x86)` and **not run as administrator** (default GOG Galaxy installs do run it as administrator): Yongle's settings, log and screenshots are in `%LOCALAPPDATA%\VirtualStore`, and editing the ini in the game folder has no effect. Don't switch between running as administrator and not.
 - Tested on AMD graphics and Intel integrated graphics so far; NVIDIA, real 4K monitors and several monitors not yet.
 
 ## Roadmap
 
-See **[docs/ROADMAP.md](docs/ROADMAP.md)** for what is planned next and what comes later.
+See **[docs/ROADMAP.md](docs/ROADMAP.md)** for what is planned next and what comes later, and **[CHANGELOG.md](CHANGELOG.md)** for what changed in each release.
 
 ## Building from source
 

@@ -96,6 +96,8 @@ const Var<int> kClipTop{0xadf894};
 const Var<int> kClipRight{0xadf898};     // exclusive
 const Var<int> kClipBottom{0xadf890};    // exclusive
 const Var<BYTE *> kDrawBuffer{0x1156df8}; // draw_buffer
+const Var<int> kMouseX{0x10de0a0};       // the game's mouse (mouse_to_grid reads these)
+const Var<int> kMouseY{0x10de09c};
 const Var<int> kScreenPitch{0x10de000};  // bytes per row
 const Var<int> kDdWidth{0x10de008};
 const Var<int> kDdHeight{0x10de004};
@@ -160,6 +162,43 @@ void BeginShift(core::diag::Restore &r, bool grow)
         r.Set(kWidthTiles.ptr(), *kWidthTiles + 1);
         r.Set(kHeightRows.ptr(), *kHeightRows + 2);
     }
+}
+
+// Where the city is to be seen to (SetCityExtent): 0 = the game's clip.
+int g_extRight = 0, g_extBottom = 0;
+
+// The city as shown on the screen (right and bottom exclusive): the clip's top left to the extent, or to the grid
+// clip without one -- the same part Render shows.
+struct Shown {
+    int left, top, right, bottom;
+};
+Shown g_renderShown{}; // while city_render draws into our buffer (the viewport is larger then)
+
+Shown ShownCity()
+{
+    if (g_inRender) {
+        return g_renderShown;
+    }
+    const int left = *kClipLeft, top = *kClipTop;
+    const int right = left + *kWidthTiles * (*kTileWidth + 2) - 2, bottom = top + (*kHeightRows - 1) * *kTileHalfHeight;
+    const int width = *kScreenPitch / 2, height = *kDdHeight;
+    return {left, top, g_extRight > right ? (g_extRight < width ? g_extRight : width) : right,
+            g_extBottom > bottom ? (g_extBottom < height ? g_extBottom : height) : bottom};
+}
+
+// Screen-to-grid only takes a point inside origin + viewport (mouse_to_grid 0x469c60, screen_to_grid 0x469e50).
+// With the origin moved by the remainder and the viewport a column and a row pair larger (BeginShift), that reached
+// up to a column into the sidebar and up to the remainder into the top bar, so the cursor tile and clicks went
+// through them to the city (playtest 2026-11-01, since M4). A point outside the city as shown is no tile (0, what the
+// game returns outside its bounds, without calling it). With the game's own layout and no remainder the game decides
+// as always.
+bool OffShownCity(int x, int y)
+{
+    if (g_depth != 0 || (!Shifts() && g_extRight == 0)) {
+        return false;
+    }
+    const Shown s = ShownCity();
+    return x < s.left || x >= s.right || y < s.top || y >= s.bottom;
 }
 
 // Runs call() with the origin moved, under the guard; plainly when nothing is moved; the game's own way again when
@@ -386,8 +425,6 @@ void DrawCity(int vx, int vy, int orientation)
     Original(o_CityRender, kCityRender)(vx, vy, orientation);
 }
 
-// Where the city is to be seen to (SetCityExtent): 0 = the game's clip.
-int g_extRight = 0, g_extBottom = 0;
 bool g_loggedExtent = false;
 
 // The game draws as always, straight into the back buffer; with the grid clip when the clip holds the extent.
@@ -489,6 +526,7 @@ void Render(RenderCall &c)
     c.r.Set(kClipBottom.ptr(), bottom2);
     c.r.Set(kWidthTiles.ptr(), *kWidthTiles + (right2 - right) / colPx);
     c.r.Set(kHeightRows.ptr(), *kHeightRows + 2 * ((bottom2 - bottom) / rowPx));
+    g_renderShown = {left, top, showRight, showBottom};
     c.r.Set(&g_inRender, true);
     DrawCity(c.vx, c.vy, c.orientation);
     c.r.Undo();
@@ -537,6 +575,9 @@ void __cdecl CityRender_detour(int vx, int vy, int orientation)
 
 int __cdecl ScreenToGrid_detour(int x, int y)
 {
+    if (OffShownCity(x, y)) {
+        return 0;
+    }
     int r = 0;
     auto call = [&] { r = Original(o_ScreenToGrid, kScreenToGrid)(x, y); };
     Converted(true, call);
@@ -545,6 +586,9 @@ int __cdecl ScreenToGrid_detour(int x, int y)
 
 int __cdecl MouseToGrid_detour(int unused)
 {
+    if (OffShownCity(*kMouseX, *kMouseY)) {
+        return 0;
+    }
     int r = 0;
     auto call = [&] { r = Original(o_MouseToGrid, kMouseToGrid)(unused); };
     Converted(true, call);

@@ -61,3 +61,6 @@ shots/
 
 # README screenshots: the published files are the .webp next to it; the full PNG originals stay local
 screenshots/source/
+
+# Test logs and screenshots handed over for analysis (temporary, never committed)
+/result/
