@@ -26,7 +26,7 @@ At the first start Yongle copies your settings to `Documents\My Games\Yongle`: t
 
 ## How do I skip the intro movie?
 
-The game itself can do this. In `Emperor.ini` in the game folder, set `PlayIntroMovie=no` in the `[Config]` section. Yongle does not change this file.
+Set **Intro movie** to `skip` in the settings panel (Insert; in the Display section), or `intro_movie = skip` in the `[display]` section of `emperor_engine.ini`. It takes effect the next time the game starts. Yongle does not change the game's own `Emperor.ini`: without Yongle the game does what that file says, and if it already has `PlayIntroMovie=no` in its `[Config]` section, the movie is skipped either way.
 
 ## How do I switch the renderer?
 

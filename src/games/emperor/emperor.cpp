@@ -48,6 +48,7 @@
 #include "games/emperor/resolution.h"
 #include "games/emperor/scroll.h"
 #include "games/emperor/sound.h"
+#include "games/emperor/intro.h"
 #include "games/emperor/site.h"
 #include "games/emperor/ui_fixes.h"
 
@@ -612,6 +613,7 @@ extern "C" void emperor_register_settings(void)
     emperor::china_map::RegisterSettings();
     emperor::fullscreen::RegisterSettings();
     emperor::sound::RegisterSettings();
+    emperor::intro::RegisterSettings();
 }
 
 extern "C" int emperor_editor_exe(void)
@@ -666,6 +668,7 @@ extern "C" void emperor_attach(void)
     }
     emperor::ui_fixes::Attach();
     emperor::sound::Attach(); // O4: [sound] background_sound, ambient_sounds; pan within 0..127
+    emperor::intro::Attach(); // 0.2.0: [display] intro_movie (Emperor.ini is not changed)
     // Settings this layer applies when they change in our panel (core/settings/settings.h).
     if (scroll) {
         core::settings::OnChange(core::settings::Find("gameplay", "smooth_scroll"), &ApplySmooth);

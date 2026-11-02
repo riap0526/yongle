@@ -8,6 +8,10 @@ All notable changes to Yongle. Downloads, with the SHA256 of each zip, are on th
 
 - **Yongle's files where it can always write them.** When a standard user cannot write to the game folder (for example under `C:\Program Files (x86)`), the settings, the log and the screenshots now go to `Documents\My Games\Yongle` (or `%LOCALAPPDATA%\Yongle` when Documents cannot be written to), the same folder whether or not the game runs as administrator. Before, Windows put them in VirtualStore when the game did not run as administrator, so there could be two sets of files. Games installed elsewhere keep them in the game folder, as before. At the first start, the newest existing settings file (game folder or VirtualStore) is copied over. The settings panel shows the folder and has an **Open folder** button.
 
+### Added
+
+- **Skip the intro movie**: `intro_movie = skip` in `[display]` (also in the settings panel); takes effect the next time the game starts. The game's own `Emperor.ini` is not changed.
+
 ## 0.1.3 (2026-11-02)
 
 ### Changed

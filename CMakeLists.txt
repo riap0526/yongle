@@ -90,6 +90,7 @@ add_library(ddraw SHARED
     src/games/emperor/china_map.cpp
     src/games/emperor/display_options.cpp
     src/games/emperor/sound.cpp
+    src/games/emperor/intro.cpp
     src/games/emperor/ambient_rate.cpp
 )
 # Augustus code (AGPL-3.0): third_party/augustus/README.md. Compiled as part of the DLL.
@@ -250,7 +251,7 @@ add_custom_command(TARGET test_guard POST_BUILD
 add_executable(test_restore proxy/ddraw/test_restore.cpp
     src/games/emperor/scroll.cpp src/games/emperor/resolution.cpp src/games/emperor/emperor.cpp
     src/games/emperor/ui_fixes.cpp src/games/emperor/china_map.cpp src/games/emperor/display_options.cpp
-    src/games/emperor/sound.cpp src/games/emperor/ambient_rate.cpp
+    src/games/emperor/sound.cpp src/games/emperor/ambient_rate.cpp src/games/emperor/intro.cpp
     src/core/scroll/smooth_scroll.cpp src/core/diag/guard.cpp src/core/diag/report.cpp src/core/diag/perf.cpp
     src/core/diag/environment.cpp src/core/diag/stall.cpp src/core/platform/affinity.cpp src/core/log.cpp
     src/core/display/logical_size.cpp

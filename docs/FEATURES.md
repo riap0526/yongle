@@ -26,6 +26,8 @@ Back to the [README](../README.md). All settings are in `emperor_engine.ini` and
 
 - Where a building's information window opens: original, centered, or next to the cursor (default).
 
+- **Intro movie**: play it (default) or skip it at start-up, without changing the game's own files.
+
 ## Gameplay feel
 
 - **Pixel-smooth scrolling** of the city at the game's own average speed, with easing.
