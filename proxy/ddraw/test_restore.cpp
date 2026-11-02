@@ -20,6 +20,7 @@
 #include "games/emperor/china_map.h"
 #include "games/emperor/display_options.h"
 #include "games/emperor/emperor.h"
+#include "games/emperor/fullscreen.h"
 #include "games/emperor/resolution.h"
 #include "games/emperor/scroll.h"
 #include "games/emperor/site.h"
@@ -332,6 +333,12 @@ struct Mark {
 Mark g_marks[8];
 int g_markCount = 0;
 
+// When set, the fake city_render asks for the cursor tile as city_render_markers 0x46a810 does (the cursor and the
+// construction preview are drawn on it).
+using MouseToGrid_fn = int(__cdecl *)(int);
+MouseToGrid_fn g_renderMouse = nullptr;
+int g_renderMouseTile = -1;
+
 void __cdecl FakeCityRender(int, int, int)
 {
     ++g_render.calls;
@@ -346,6 +353,9 @@ void __cdecl FakeCityRender(int, int, int)
     for (int i = 0; i < g_markCount; ++i) {
         reinterpret_cast<WORD *>(g_render.buffer + g_marks[i].y * At<int>(aPitch))[g_marks[i].x] = g_marks[i].v;
     }
+    if (g_renderMouse) {
+        g_renderMouseTile = g_renderMouse(0);
+    }
 }
 
 int __cdecl FakeScreenToGrid(int, int)
@@ -357,6 +367,19 @@ int __cdecl FakeScreenToGrid(int, int)
     g_convert.d = At<int>(aRows);
     if (Fires("screen_to_grid")) {
         Fault();
+    }
+    return 1234;
+}
+
+// As mouse_to_grid 0x469c60: no tile (0) outside origin + viewport, else a tile.
+Seen g_mouse;
+int __cdecl FakeMouseToGrid(int)
+{
+    ++g_mouse.calls;
+    const int x = At<int>(aMouseX), y = At<int>(aMouseY), ox = At<int>(aOriginX), oy = At<int>(aOriginY);
+    if (x < ox || x >= ox + (At<int>(aTileW) + 2) * At<int>(aCols) || y < oy ||
+        y >= oy + At<int>(aTileHalfH) * At<int>(aRows)) {
+        return 0;
     }
     return 1234;
 }
@@ -631,6 +654,7 @@ void Setup()
     Thunk(0x50bf10, reinterpret_cast<void *>(&FakeMessagePanel)); // city_message_panel_layout
     Thunk(0x5296f0, reinterpret_cast<void *>(&FakeFillRect));
     Thunk(0x469e50, reinterpret_cast<void *>(&FakeScreenToGrid));
+    Thunk(0x469c60, reinterpret_cast<void *>(&FakeMouseToGrid));
     Thunk(0x5a0f60, reinterpret_cast<void *>(&FakeGridToScreen));
     Thunk(0x52b310, reinterpret_cast<void *>(&FakeGetDirection));
     Thunk(0x53c950, reinterpret_cast<void *>(&FakeScrollStep));
@@ -742,7 +766,7 @@ void M4RenderOk()
     Check(At<BYTE *>(aDrawBuffer) == back && At<int>(aClipR) == 1678 && At<int>(aClipB) == 1080 &&
               At<int>(aCols) == 21 && At<int>(aRows) == 53,
           "afterwards: draw_buffer, clip and viewport are the game's again");
-    int r = Scroll<Convert_fn>("screen_to_grid")(10, 10);
+    int r = Scroll<Convert_fn>("screen_to_grid")(10, 50);
     Check(r == 1234 && g_convert.a == -5 && g_convert.b == 34 && g_convert.c == 22 && g_convert.d == 55,
           "screen_to_grid sees the origin moved by the remainder and a larger viewport");
     Check(At<int>(aOriginX) == 0 && At<int>(aOriginY) == 40 && At<int>(aCols) == 21 && At<int>(aRows) == 53,
@@ -765,7 +789,7 @@ void M4RenderFault()
     int px, py;
     emperor::scroll::Remainder(&px, &py);
     Check(px == 0 && py == 0, "the view snaps to its whole tile (remainder 0)");
-    Scroll<Convert_fn>("screen_to_grid")(10, 10);
+    Scroll<Convert_fn>("screen_to_grid")(10, 50);
     Check(g_convert.a == 0 && g_convert.b == 40 && g_convert.c == 21, "conversions pass through unchanged");
     Check(!emperor::scroll::SetSmooth(true), "cannot be switched on again from the panel");
     Check(LogContains("feature \"smooth scrolling (games/emperor/scroll)\" switched off") &&
@@ -777,7 +801,7 @@ void M4ConvertFault()
 {
     emperor::scroll::SetRemainderForTest(5, 6);
     g_fault = "screen_to_grid";
-    int r = Scroll<Convert_fn>("screen_to_grid")(10, 10);
+    int r = Scroll<Convert_fn>("screen_to_grid")(10, 50);
     Check(!emperor::scroll::Working(), "fault in screen_to_grid with the origin moved: smooth scrolling off");
     Check(At<int>(aOriginX) == 0 && At<int>(aOriginY) == 40 && At<int>(aCols) == 21 && At<int>(aRows) == 53,
           "origin and viewport put back");
@@ -946,6 +970,77 @@ void R2b1Extent()
     Check(At<int>(aClipB) == 1080 && core::ddraw::CanaryAllowance() == 0, "1080 high: the clip reaches the bottom");
     g_markCount = 0;
     Check(LogContains("scroll: the city is shown past its clip to (1694,1066)"), "log: the extent, once");
+}
+
+// 0.1.3-rc2: the cursor tile and clicks only from the city as shown. With a pixel remainder the game's own bounds
+// (origin moved by the remainder, viewport one column and a row pair larger) reached into the sidebar and the top
+// bar: holding a road, a click on the sidebar built under it (playtest 2026-11-01).
+void Rc2CityInput()
+{
+    using Fn = void(__cdecl *)();
+    core_config c = Config1920();
+    emperor::resolution::InstalledForTest(&c);
+    Res<Fn>("ui_set_sidebar_position")();
+    Res<Fn>("city_viewport_large")();
+    Check(At<int>(aSidebarX) == 1694 && At<int>(aClipR) == 1678, "1920x1080: sidebar at 1694, the grid clip at 1678");
+    auto mouse = [](int x, int y) {
+        At<int>(aMouseX) = x;
+        At<int>(aMouseY) = y;
+        g_mouse.calls = 0;
+        return Scroll<MouseToGrid_fn>("mouse_to_grid")(0);
+    };
+    auto screen = [](int x, int y) {
+        g_convert.calls = 0;
+        return Scroll<Convert_fn>("screen_to_grid")(x, y);
+    };
+    // Our layout, remainder (5, 6): the game would take x up to 22 x 80 - 5 = 1755 and y from 40 - 6 = 34.
+    emperor::scroll::SetRemainderForTest(5, 6);
+    Check(mouse(1700, 500) == 0 && g_mouse.calls == 0, "remainder: the mouse on the sidebar is no tile (game not asked)");
+    Check(mouse(1693, 500) == 1234 && g_mouse.calls == 1, "remainder: the gap left of the sidebar is the city");
+    Check(mouse(500, 37) == 0 && g_mouse.calls == 0, "remainder: the mouse on the top bar is no tile");
+    Check(mouse(500, 40) == 1234 && mouse(0, 1079) == 1234, "remainder: the city's top row and bottom left corner");
+    Check(screen(1700, 500) == 0 && g_convert.calls == 0 && screen(500, 37) == 0 && g_convert.calls == 0,
+          "remainder: screen_to_grid the same (sidebar, top bar)");
+    Check(screen(1693, 500) == 1234 && g_convert.calls == 1, "remainder: screen_to_grid in the gap");
+    // While the game draws the city into our buffer (viewport larger still): the cursor tile drawn on the sidebar.
+    At<int>(aMouseX) = 1700;
+    At<int>(aMouseY) = 500;
+    g_renderMouse = Scroll<MouseToGrid_fn>("mouse_to_grid");
+    Scroll<Render_fn>("city_render")(0, 0, 0);
+    Check(g_render.buffer != At<BYTE *>(aDrawBuffer) && g_renderMouseTile == 0,
+          "while the city is drawn: no cursor tile (construction preview) under the sidebar");
+    At<int>(aMouseX) = 1000;
+    Scroll<Render_fn>("city_render")(0, 0, 0);
+    Check(g_renderMouseTile == 1234, "while the city is drawn: the cursor tile in the city");
+    g_renderMouse = nullptr;
+    // Our layout, no remainder: the game's bounds (1680) inside the city as shown already.
+    emperor::scroll::SetRemainderForTest(0, 0);
+    Check(mouse(1700, 500) == 0 && mouse(1000, 500) == 1234 && g_mouse.calls == 1, "no remainder: sidebar no, city yes");
+    // The game's own layout (no extent): no remainder -> the game decides (its own 2 px past the clip at 1679); a
+    // remainder -> the grid clip (1678, where the game's sidebar starts) and its top.
+    emperor::scroll::SetCityExtent(0, 0);
+    Check(mouse(1679, 500) == 1234 && g_mouse.calls == 1, "game's layout, no remainder: the game's own bounds");
+    emperor::scroll::SetRemainderForTest(5, 6);
+    Check(mouse(1690, 500) == 0 && g_mouse.calls == 0 && mouse(500, 37) == 0, "game's layout, remainder: clip and top");
+    Check(mouse(1677, 500) == 1234, "game's layout, remainder: inside the clip");
+    Check(At<int>(aOriginX) == 0 && At<int>(aOriginY) == 40 && At<int>(aCols) == 21 && At<int>(aRows) == 53,
+          "afterwards origin and viewport are the game's");
+}
+
+// 0.1.3-rc2: menu_screens = native_city keeps the city around the menus, but not before a mission or in the editors
+// (parchment there); the player's own menu_background picture everywhere.
+void Rc2CityAround()
+{
+    using emperor::fullscreen::CityAround;
+    Check(CityAround(0x00, false) && CityAround(0x2f, false) && CityAround(0x30, false) && CityAround(0x1f, false) &&
+              CityAround(0x02, false) && CityAround(0x53, false) && CityAround(0x43, false) && CityAround(0x33, false),
+          "the city around: main menu and its screens, high scores, victory, defeat");
+    Check(!CityAround(0x3d, false) && !CityAround(0x35, false) && !CityAround(0x04, false) && !CityAround(0x17, false),
+          "parchment: mission choice and briefing, mission introduction, timed picture, mission summary");
+    Check(!CityAround(0x10, false) && !CityAround(0x58, false) && !CityAround(0x22, false) && !CityAround(0x57, false),
+          "parchment: the map and campaign editors");
+    Check(CityAround(0x35, true) && CityAround(0x3d, true) && CityAround(0x10, true),
+          "the player's own picture on every screen");
 }
 
 // The city message panel laid out in the extent, the city inside it still drawn on the grid; city_draw_background's
@@ -1705,6 +1800,7 @@ const Scenario kScenarios[] = {
     {"m4_drag_fault", &M4DragFault},     {"r1_switch_fault", &R1SwitchFault},
     {"r1_mode_fault", &R1ModeFault},     {"r1_layout_fault", &R1LayoutFault},
     {"r2b1_extent", &R2b1Extent},       {"r2b1_message_panel", &R2b1MessagePanel},
+    {"rc2_city_input", &Rc2CityInput},  {"rc2_city_around", &Rc2CityAround},
     {"r1_info", &R1Info},                {"r1_info_positions", &R1InfoPositions},
     {"r1_bars_filler", &R1BarsAndFiller}, {"r1_clamp_fault", &R1ClampFault},
     {"p2_draw_only", &P2DrawOnly},       {"r2b_fixed_window", &R2bFixedWindow},

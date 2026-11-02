@@ -10,7 +10,7 @@ Back to the [README](../README.md). If you run into something not listed here, p
 
 ## Display
 
-- **Flashing black blocks** have been seen occasionally after playing for a while on one system (AMD graphics), so far only with Direct3D 11. Screenshots do not show them, and switching windows (Alt+Tab) clears them. The cause is not known yet. If you see them, press F12, then send the log and the `shots\` folder; trying `renderer = direct3d` (see above) and telling us whether they still appear helps too.
+- **Flashing black blocks** were seen occasionally in earlier versions after playing for a while on one system (AMD graphics, Direct3D 11 only). Screenshots did not show them, and switching windows (Alt+Tab) cleared them. Since Yongle started running its own work on other processor cores (0.1.3), they have not appeared again in several hours of testing. If you do see them, press F12, then send the log and the `shots\` folder; trying `renderer = direct3d` (see above) and telling us whether they still appear helps too.
 - The map and campaign editors and the multiplayer screens run at 1024×768 (centered), not at your resolution.
 - The campaign map screen has not been tested in play yet.
 - Small cosmetic quirks of the original are kept for now (e.g. text sitting slightly high in some dialog buttons).
@@ -18,6 +18,11 @@ Back to the [README](../README.md). If you run into something not listed here, p
 ## Installation
 
 - **Antivirus or SmartScreen warnings:** `ddraw.dll` is not code-signed. You can check the zip against the SHA256 given on the release page.
+- **Game in `C:\Program Files (x86)` and not run as administrator: Yongle's files end up in VirtualStore.** Windows then redirects what is written to the game folder (`emperor_engine.ini`, `ddraw_proxy.log`, `shots\`, `menu_background_auto.png`) to a copy for your user under `%LOCALAPPDATA%\VirtualStore\Program Files (x86)\` followed by the game folder's own path. If you cannot find the log or the screenshots in the game folder, look there; the `env: files:` line near the start of the log says where they really are.
+  - Once that copy of `emperor_engine.ini` exists, editing the one in the game folder has no effect: edit the copy in VirtualStore, or use the settings panel (Insert).
+  - GOG Galaxy sets the game to run as administrator, so a default GOG Galaxy install is not affected. The retail release, a copy installed elsewhere under Program Files, or a GOG install whose *Run this program as an administrator* setting was turned off are.
+  - Do not switch between running as administrator and not: each way has its own settings, log and screenshots.
+  - A later version will keep Yongle's files in your user folder instead.
 
 ## Tested so far
 

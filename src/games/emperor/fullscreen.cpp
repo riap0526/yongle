@@ -397,6 +397,7 @@ struct Backdrop { // the background for one screen size, made on a worker thread
     std::vector<WORD> px; // w x h, RGB565 (under lock)
     int w = 0, h = 0;     // of px (under lock)
     int version = 0;      // counts finished backgrounds (under lock)
+    bool player = false;  // px is from the player's own menu_background picture (under lock)
     std::atomic<bool> busy{false}; // a worker is running (set by the game thread, cleared by the worker)
     int wantW = 0, wantH = 0, wantGeneration = -2, wantSettings = -1; // what the last job was for (game thread)
 };
@@ -427,12 +428,14 @@ DWORD WINAPI MakeBackdrop(void *param)
     std::vector<WORD> src;
     int sw = 0, sh = 0;
     const char *from = nullptr;
+    bool player = false;
     const std::wstring folder = GameFolder();
     for (const wchar_t *ext : {L".png", L".bmp"}) { // the player's own picture first
         std::wstring path = folder + std::wstring(kUserPicture, kUserPicture + sizeof(kUserPicture) - 1) + ext;
         if (GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES &&
             core::assets::LoadPicture565(path.c_str(), job->w, job->h, &src, &sw, &sh)) {
             from = "menu_background (the player's picture)";
+            player = true;
             break;
         }
     }
@@ -466,6 +469,7 @@ DWORD WINAPI MakeBackdrop(void *param)
     g_backdrop.px.swap(out);
     g_backdrop.w = g_backdrop.px.empty() ? 0 : job->w;
     g_backdrop.h = g_backdrop.px.empty() ? 0 : job->h;
+    g_backdrop.player = player && !g_backdrop.px.empty();
     ++g_backdrop.version;
     ReleaseSRWLockExclusive(&g_backdrop.lock);
     delete job;
@@ -739,12 +743,33 @@ void __cdecl TextGdi_detour(const char *text)
     }
 }
 
+// The menus' look on this screen: native_city becomes native (parchment) where CityAround says so, unless the
+// background is the player's own picture.
+Look MenuLook()
+{
+    if (g_menuLook != kNativeCity) {
+        return g_menuLook;
+    }
+    AcquireSRWLockShared(&g_backdrop.lock);
+    const bool player = g_backdrop.player;
+    ReleaseSRWLockShared(&g_backdrop.lock);
+    const char screen = *kGameScreen;
+    const bool city = CityAround(screen, player);
+    static char logged = -1;
+    if (!city && screen != logged) {
+        logged = screen;
+        core_log("fullscreen: screen 0x%02x: parchment around instead of the city (before a mission or an editor)",
+                 static_cast<unsigned char>(screen));
+    }
+    return city ? kNativeCity : kNative;
+}
+
 void Update()
 {
     const core_config *cfg = core_config_get();
     SIZE mode = core::display::ModeSize();
     const bool loading = g_picture.right > g_picture.left;
-    const Look look = loading ? g_loadingLook : g_menuLook;
+    const Look look = loading ? g_loadingLook : MenuLook();
     const bool on = g_installed && core::diag::Enabled(g_feature) && look != kBlack &&
                     emperor::resolution::FrontEnd() && *kScreenMode == 3 && mode.cx == 1024 && mode.cy == 768 &&
                     *kGameScreen != kScreenVideo;
@@ -822,7 +847,14 @@ void OnGameEnd()
 
 void OnPresent()
 {
-    if (g_installed && InterlockedExchange(&g_backdropReady, 0)) {
+    static char lastScreen = -1;
+    if (!g_installed) {
+        return;
+    }
+    const char screen = *kGameScreen;
+    const bool ready = InterlockedExchange(&g_backdropReady, 0) != 0;
+    if (ready || screen != lastScreen) { // a new screen may want parchment instead of the city (MenuLook)
+        lastScreen = screen;
         OnLoop(); // the menus have their own loop, without game_loop_step: compose here
     }
 }

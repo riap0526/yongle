@@ -7,13 +7,12 @@ Back to the [README](../README.md). Plans change with what players report; ideas
 - **v0.1.0**: the game in a borderless full-screen window or a resizable window at any resolution, laid out for the screen; display scale and *Auto*; frames at the monitor's refresh rate; full-screen pictures and the China map at their own size; pixel-smooth scrolling; steady game speed; the in-game Display options; the settings panel; screenshots and problem reports.
 - **v0.1.1**: full screen covers the whole screen on GOG installs.
 - **v0.1.2**: Direct3D 9 when the Steam overlay is in the game, screenshots without freezes, no more jumping city when the computer cannot keep up, more diagnostics in the log.
+- **v0.1.3**: smoother frame pacing and a higher frame rate on both renderers (Yongle's own work and the graphics driver run on other processor cores, while the game keeps the single core its compatibility settings give it); `renderer = auto` back to Direct3D 11 for everyone, since Steam's FPS counter no longer makes it stop for seconds at a time; screenshots no longer slow the game down; display options for the loading screens, the menus and the China map's backdrop; output scaling (sharp, nearest, smooth) switched at once from Display options; music and sounds pause while you are switched away; ambient sounds at a steady rate whatever the resolution; clicks on the sidebar or the top bar no longer reach the city.
 
-## In progress: performance and feedback
+## In progress: v0.1.4
 
-- Smoother frame pacing and a higher frame rate with both Direct3D 11 and Direct3D 9: our drawing moves to the other processor cores, while the game itself keeps the single core its compatibility settings give it.
-- Display options for the loading screens, the menus and the China map's backdrop.
-- Switching the output scaling (sharp, nearest, smooth) at once from Display options.
-- Sound: pausing the music when you switch away from the game; the ambient sounds.
+- **Yongle's files in your user folder**: settings, log and screenshots kept in one place whether or not the game runs as administrator, instead of Windows' VirtualStore when the game is under Program Files.
+- **Intro movie setting**: play or skip the intro movie from Yongle's settings, without changing the game's own files.
 
 ## Planned
 

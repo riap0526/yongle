@@ -43,6 +43,26 @@ void OnGameEnd();
 // games/emperor/china_map.cpp). False when the tiles cannot be read.
 bool BorderPicture(int w, int h, std::vector<WORD> *out);
 
+// 0.1.3-rc2 (docs/testing/v0_1_3_release.md, "rc2"): whether menu_screens = native_city shows the city background on
+// this front-end screen. The screens before a mission (0x3d mission choice and briefing, 0x35 mission introduction),
+// the timed full-screen picture 0x04, the mission summary 0x17 and the editors' screens get parchment: the next
+// mission is usually another map, and the editors have nothing to do with the city played last. The player's own
+// menu_background picture is shown on every screen.
+inline bool CityAround(char screen, bool playerPicture)
+{
+    if (playerPicture) {
+        return true;
+    }
+    switch (static_cast<unsigned char>(screen)) {
+    case 0x3d: case 0x35: case 0x04: case 0x17:                                 // before / between missions
+    case 0x10: case 0x15: case 0x18: case 0x1b: case 0x27: case 0x58:           // map editor
+    case 0x22: case 0x29: case 0x2b: case 0x2c: case 0x46: case 0x57:           // campaign editor
+        return false;
+    default:
+        return true;
+    }
+}
+
 // O2c: how many city frames were drawn so far (game thread). A change since the last China map frame means the game's
 // draw buffer holds the city (the map screen does not redraw outside the map: the city left there when it opened).
 int CityFramesDrawn();
