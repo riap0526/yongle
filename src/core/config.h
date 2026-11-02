@@ -74,7 +74,7 @@ struct core_config {
     int window_w, window_h;    /* the window's client size in pixels; 0: automatic */
     int window_x, window_y;    /* its top left corner (outer); CORE_WINDOW_CENTER: centred on its monitor */
     int window_lock_cursor;    /* nonzero: windowed, the cursor is kept inside the window while it is active */
-    int cpu_affinity;          /* [compat] cpu_affinity (B plan, docs/affinity.md): 0 auto, 1 original */
+    int cpu_affinity;          /* [compat] cpu_affinity (B plan, docs/archive/affinity.md): 0 auto, 1 original */
 };
 
 #define CORE_WINDOW_CENTER (-2147483647 - 1)
@@ -83,7 +83,7 @@ struct core_config {
    (SDL's Direct3D 9 renderer), 2 direct3d11. */
 extern const char *const core_renderer_names[3];
 
-/* [debug] d3d9_pacing (O1g, docs/optimization.md): how the Direct3D 9 output is paced. 0 vsync (present waits for the
+/* [debug] d3d9_pacing (O1g, docs/archive/optimization.md): how the Direct3D 9 output is paced. 0 vsync (present waits for the
    refresh; the default), 1 timer (vsync off, our own high-resolution timer), 2 dwmflush (vsync off, DwmFlush after
    each present). Direct3D 11 always uses vsync. */
 extern const char *const core_d3d9_pacing_names[3];
@@ -103,7 +103,7 @@ void core_config_force_system_backend(void);
 }
 
 /* Live settings that the output thread reads while the game thread applies a change (panel_scale_percent,
-   perf_overlay; docs/affinity.md §6): read and written whole, so the two threads never see a value in between. */
+   perf_overlay; docs/archive/affinity.md §6): read and written whole, so the two threads never see a value in between. */
 inline int core_config_live(const int &field)
 {
     return __atomic_load_n(&field, __ATOMIC_RELAXED);

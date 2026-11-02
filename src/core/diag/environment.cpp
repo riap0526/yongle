@@ -2,6 +2,7 @@
 
 #include "core/log.h"
 #include "core/platform/affinity.h"
+#include "core/platform/files.h"
 
 #define WIN32_LEAN_AND_MEAN
 #ifndef PSAPI_VERSION
@@ -352,7 +353,7 @@ const char *const kName[] = {"game thread", "output thread", "screenshot writer"
 
 // ---------------------------------------------------------------------------------------------
 // Processor affinity (O1, 2026-10-30): GOG's compatibility settings include SingleProcAffinity, which keeps the
-// whole process on one logical processor (docs/optimization.md section 1.7). A thread's mask is always within the
+// whole process on one logical processor (docs/archive/optimization.md section 1.7). A thread's mask is always within the
 // process's.
 
 int Bits(DWORD_PTR mask)
@@ -452,54 +453,19 @@ void LogResources()
              (ms.ullTotalVirtual - ms.ullAvailVirtual) / mb, ms.ullTotalVirtual / mb, handles, gdi, user);
 }
 
-// O5c (docs/optimization.md, note 4): where our files really are. A 32-bit program without a manifest that
-// writes to a protected folder (C:\Program Files (x86), where GOG Galaxy installs by default) is redirected by Windows
-// to %LOCALAPPDATA%\VirtualStore\<the same path>: the log, emperor_engine.ini and shots\ are then there. Windows makes
-// that folder only when something was redirected, so its existence tells.
+// Where our files are (core/platform/files decides it; docs/testing/v0_2_0_files.md). Windows' file virtualization is
+// reported too: on, a protected game folder would have sent our files to VirtualStore (now it is not used for them).
 void LogFileLocation()
 {
-    HMODULE self = nullptr;
-    wchar_t folder[MAX_PATH];
-    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                            reinterpret_cast<LPCWSTR>(&LogFileLocation), &self)) {
-        return;
-    }
-    DWORD len = GetModuleFileNameW(self, folder, MAX_PATH);
-    if (len == 0 || len >= MAX_PATH) {
-        return;
-    }
-    while (len > 0 && folder[len - 1] != L'\\' && folder[len - 1] != L'/') {
-        --len;
-    }
-    folder[len] = L'\0';
-    char utf8[MAX_PATH * 3];
-    WideCharToMultiByte(CP_UTF8, 0, folder, -1, utf8, sizeof(utf8), nullptr, nullptr);
     DWORD virt = 0, size = 0;
     HANDLE token = nullptr;
     if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
         GetTokenInformation(token, TokenVirtualizationEnabled, &virt, sizeof(virt), &size);
         CloseHandle(token);
     }
-    wchar_t store[MAX_PATH * 2] = L"";
-    wchar_t local[MAX_PATH];
-    const DWORD n = GetEnvironmentVariableW(L"LOCALAPPDATA", local, MAX_PATH);
-    const bool hasDrive = len > 3 && folder[1] == L':';
-    if (n > 0 && n < MAX_PATH && hasDrive) {
-        std::swprintf(store, MAX_PATH * 2, L"%ls\\VirtualStore\\%ls", local, folder + 3);
-    }
-    const DWORD attr = store[0] ? GetFileAttributesW(store) : INVALID_FILE_ATTRIBUTES;
-    if (virt && attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY)) {
-        char where[MAX_PATH * 6];
-        WideCharToMultiByte(CP_UTF8, 0, store, -1, where, sizeof(where), nullptr, nullptr);
-        core_log("env: files: Windows redirects this folder's writes (file virtualization): the log, "
-                 "emperor_engine.ini and shots\\ are in %s, not in %s (installing the game outside Program Files "
-                 "avoids this)",
-                 where, utf8);
-    }
-    else {
-        core_log("env: files: the log, emperor_engine.ini and shots\\ are in %s (file virtualization %s)", utf8,
-                 virt ? "on, but nothing of this folder is redirected" : "off");
-    }
+    static const char *const kWhere[] = {"the game folder", "Documents\\My Games", "LocalAppData"};
+    core_log("env: files: the log, emperor_engine.ini and shots\\ are in %s (%s; file virtualization %s)",
+             core_files_folder_utf8(), kWhere[core_files_where_now()], virt ? "on" : "off");
 }
 
 } // namespace

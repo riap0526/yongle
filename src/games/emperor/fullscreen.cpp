@@ -27,6 +27,7 @@
 #include "core/display/scaled_rect.h"
 #include "core/display/virtual_display.h"
 #include "core/log.h"
+#include "core/platform/files.h"
 #include "core/output/sdl_output.h"
 #include "core/platform/affinity.h"
 #include "core/settings/settings.h"
@@ -350,11 +351,11 @@ bool DrawGameText(Image &im, const char *text, int x0, int y0, int w, int h)
 // ---------------------------------------------------------------------------------------------
 // R2d.1 (docs/resolution_ui/r2d1.md): how the two kinds of front-end screens are shown
 
-// O2a (docs/optimization.md): original -- the game's whole 1024x768 frame at its own size (as native: one game pixel
+// O2a (docs/archive/optimization.md): original -- the game's whole 1024x768 frame at its own size (as native: one game pixel
 // per output pixel), centred, black around and no border, as the game looks on a wide screen without us; the loading
 // screens' status line where the game draws it.
 // The ini spellings name the size first and the background second, as the China map's scaled and native (O2a test,
-// docs/optimization.md): kFramed is "scaled" and kBlack "scaled_black" (before 0.1.3 "framed" and "black", renamed
+// docs/archive/optimization.md): kFramed is "scaled" and kBlack "scaled_black" (before 0.1.3 "framed" and "black", renamed
 // in the file at start-up).
 enum Look { kNative, kFramed, kBlack, kNativeCity, kOriginal };
 const char *const kLoadingLooks[] = {"native", "scaled", "scaled_black", "original"};
@@ -377,7 +378,7 @@ Look g_menuLook = kNativeCity;
 int g_citySigma = 2;
 int g_cityPercent = 65;
 int g_citySettings = 0; // counts changes of the pair (game thread)
-constexpr char kUserPicture[] = "menu_background";       // .png or .bmp in the game folder: the player's own choice
+constexpr char kUserPicture[] = "menu_background";       // .png or .bmp, our folder or the game folder: the player's
 constexpr char kAutoPicture[] = "menu_background_auto.png"; // the last city seen, saved when it is left
 constexpr DWORD kCityShotMs = 3000;                       // how often the city on screen is kept while playing
 
@@ -429,13 +430,20 @@ DWORD WINAPI MakeBackdrop(void *param)
     int sw = 0, sh = 0;
     const char *from = nullptr;
     bool player = false;
-    const std::wstring folder = GameFolder();
-    for (const wchar_t *ext : {L".png", L".bmp"}) { // the player's own picture first
-        std::wstring path = folder + std::wstring(kUserPicture, kUserPicture + sizeof(kUserPicture) - 1) + ext;
-        if (GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES &&
-            core::assets::LoadPicture565(path.c_str(), job->w, job->h, &src, &sw, &sh)) {
-            from = "menu_background (the player's picture)";
-            player = true;
+    // Our files' folder (core/platform/files: the game folder, or Documents\My Games\Yongle when the game folder is
+    // protected); the player's own picture may also be in the game folder.
+    const std::wstring folder = core_files_folder();
+    const std::wstring game = GameFolder();
+    for (const std::wstring &where : {folder, game}) {
+        for (const wchar_t *ext : {L".png", L".bmp"}) { // the player's own picture first
+            std::wstring path = where + std::wstring(kUserPicture, kUserPicture + sizeof(kUserPicture) - 1) + ext;
+            if (!player && GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES &&
+                core::assets::LoadPicture565(path.c_str(), job->w, job->h, &src, &sw, &sh)) {
+                from = "menu_background (the player's picture)";
+                player = true;
+            }
+        }
+        if (player || where == game) {
             break;
         }
     }
@@ -928,7 +936,7 @@ void RegisterSettings()
         "display", "menu_screens", "Menu screens",
         "Main menu, emperor and campaign choice, briefings, high scores, victory and defeat (the game's 1024x768 "
         "pictures). native_city: their own size in a fret border, your city blurred around them (menu_background.png "
-        "or .bmp in the game folder if you put one there, otherwise the city you saw last); native: their own size on "
+        "or .bmp in Yongle's folder or the game folder if you put one there, otherwise the city you saw last); native: their own size on "
         "parchment; scaled: as large as fits, on parchment; scaled_black: the whole frame scaled, black bars; original: the "
         "whole frame at its "
         "own size, centered, black around (as the game itself on a wide screen).",
@@ -940,7 +948,7 @@ void RegisterSettings()
         }
         return true;
     });
-    // O2b (docs/optimization.md): the menus' city background's blur and brightness (native_city). Made again on a
+    // O2b (docs/archive/optimization.md): the menus' city background's blur and brightness (native_city). Made again on a
     // worker thread.
     i = core::settings::Register(Item{
         "display", "background_blur", "City background: blur",

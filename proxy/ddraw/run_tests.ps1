@@ -33,6 +33,8 @@
 #   test_screenshot core/capture/screenshot: the writer's queue limit, PNG level and processor time (no DLL; writes
 #               and deletes shots\t8_*.png)
 #   test_log    core/log: a log over 4 MB is renamed at start-up (no DLL; writes and deletes test_log*.log)
+#   test_files  core/platform/files: where our files go, fake and real probes (no DLL; makes and removes
+#               test_files_tmp\)
 #   test_sg3    core/assets/sg3 on testbed\DATA\China_Interface.sg3, if present (no DLL; nothing written)
 # -Interactive: also the checks that need real input (test_emu: the screenshot keys with present=display, the frozen
 # cursor). They press real keys, take the foreground and move the cursor: run it with nobody at the computer. Without
@@ -66,6 +68,7 @@ Run 'test_wrap' 'system' @('.\ddraw.dll')
 Run 'test_emu' 'emulated' @('.\ddraw.dll', 'nopanel') 'original'
 Run 'test_emu' 'emulated' @('.\ddraw.dll', 'panel') 'display'
 Run 'test_emu' 'emulated' @('.\ddraw.dll', 'panel-ctrlf12') 'display' "[ui]`r`npanel_key = Ctrl+F12"
+Run 'test_files' 'emulated' @()
 Run 'test_hotkey' 'emulated' @()
 Run 'test_ini' 'emulated' @()
 Run 'test_settings' 'emulated' @()

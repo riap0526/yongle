@@ -52,7 +52,7 @@ Yongle is a single `ddraw.dll` in the game folder. It provides its own DirectDra
 2. Copy `ddraw.dll`, `ddraw.syms` and `emperor_engine.ini` into the game folder (the folder with `Emperor.exe`). If the folder already has a `ddraw.dll` from another tool (cnc-ddraw, dgVoodoo and so on), back it up first: only one can be used.
 3. Start the game as usual.
 
-**Uninstall:** delete `ddraw.dll`. Which other files Yongle creates, where they are when the game is under Program Files, skipping the intro movie and switching the renderer: see the **[FAQ](docs/FAQ.md)**.
+**Uninstall:** delete `ddraw.dll`. Which other files Yongle creates, where they are (the game folder, or `Documents\My Games\Yongle` when the game is under Program Files), skipping the intro movie and switching the renderer: see the **[FAQ](docs/FAQ.md)**.
 
 ## Keys
 
@@ -70,12 +70,12 @@ All settings are in `emperor_engine.ini` next to `ddraw.dll`; the file explains 
 
 ## Known issues
 
-Questions about Yongle's files, VirtualStore, the intro movie or the renderer? See the **[FAQ](docs/FAQ.md)** first.
+Questions about where Yongle's files are, the intro movie or the renderer? See the **[FAQ](docs/FAQ.md)** first.
 
 The full list is in **[docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md)**. The main points:
 
 - On laptops and slower computers, **lowering the resolution** (a higher display scale, or *Auto*) helps performance most.
-- Game under `C:\Program Files (x86)` and **not run as administrator**: Yongle's files are in `%LOCALAPPDATA%\VirtualStore` (see the [FAQ](docs/FAQ.md)).
+- Game under `C:\Program Files (x86)`: Yongle's files are in **`Documents\My Games\Yongle`**, not in the game folder (see the [FAQ](docs/FAQ.md)).
 - Tested on AMD graphics and Intel integrated graphics so far; NVIDIA, real 4K monitors and several monitors not yet.
 
 ## Reporting problems

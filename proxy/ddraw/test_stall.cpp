@@ -1,4 +1,4 @@
-// Offline test of core/diag/stall (not the game; O1, docs/optimization.md §1.4): a frame of 200 ms is not sampled; a
+// Offline test of core/diag/stall (not the game; O1, docs/archive/optimization.md §1.4): a frame of 200 ms is not sampled; a
 // frame of 1.5 s is, with both threads' registers, the frame-pointer chain and the stack scan logged after they run
 // on, and its end is logged. Writes test_stall.log next to the exe and checks its lines.
 #include "core/diag/stall.h"

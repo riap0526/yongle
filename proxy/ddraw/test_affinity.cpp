@@ -1,4 +1,4 @@
-// Offline test of core/platform/affinity (B plan, docs/affinity.md section 7.1; not the game). Each scenario runs in a
+// Offline test of core/platform/affinity (B plan, docs/archive/affinity.md section 7.1; not the game). Each scenario runs in a
 // child process of its own (the feature starts once per process), with the process first put on one logical
 // processor as GOG's SingleProcAffinity does:
 //   kernel    what Windows does to a thread's own mask when the process's mask is widened or narrowed (printed)

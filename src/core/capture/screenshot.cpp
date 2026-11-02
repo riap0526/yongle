@@ -5,6 +5,7 @@
 #include "core/log.h"
 #include "core/output/sdl_output.h"
 #include "core/platform/affinity.h"
+#include "core/platform/files.h"
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -32,30 +33,14 @@ struct Job {
     Job *next;            // the writer's queue
 };
 
-// The folder of this DLL, as UTF-8 with a trailing backslash ("" when unknown: the current directory).
+// Our files' folder (core/platform/files: the game folder, or Documents\My Games\<app> when the game folder is
+// protected), UTF-8, with a trailing backslash.
 void ModuleFolder(char *out, size_t size)
 {
-    out[0] = '\0';
-    HMODULE self = nullptr;
-    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                            reinterpret_cast<LPCWSTR>(&ModuleFolder), &self)) {
-        return;
-    }
-    wchar_t path[MAX_PATH];
-    DWORD len = GetModuleFileNameW(self, path, MAX_PATH);
-    if (len == 0 || len >= MAX_PATH) {
-        return;
-    }
-    while (len > 0 && path[len - 1] != L'\\' && path[len - 1] != L'/') {
-        --len;
-    }
-    path[len] = L'\0';
-    if (!WideCharToMultiByte(CP_UTF8, 0, path, -1, out, static_cast<int>(size), nullptr, nullptr)) {
-        out[0] = '\0';
-    }
+    std::snprintf(out, size, "%s", core_files_folder_utf8());
 }
 
-// shots\ next to the DLL: its full path with a trailing backslash; false (logged) when it cannot be created.
+// shots\ in our files' folder: its full path with a trailing backslash; false (logged) when it cannot be created.
 bool ShotsFolder(char *out, size_t size)
 {
     char folder[900];
@@ -87,7 +72,7 @@ ULONGLONG ThreadCpuMs()
 }
 
 // miniz level 1 (O1b, 2026-10-30): the whole process runs on one logical processor (GOG's SingleProcAffinity,
-// docs/optimization.md section 1.7), so the writer takes its time from the game; SDL_SavePNG_IO's level 6 took
+// docs/archive/optimization.md section 1.7), so the writer takes its time from the game; SDL_SavePNG_IO's level 6 took
 // 0.7-0.9 s of processor time per 2560x1440 picture.
 constexpr unsigned kPngLevel = 1;
 
@@ -143,7 +128,7 @@ void Write(Job *job)
 }
 
 // One writer thread for all pictures, one at a time, at normal priority: encoding a large PNG takes seconds, and three
-// at once on their own threads slowed the game on a laptop three times over (O1b, docs/optimization.md section 1.2).
+// at once on their own threads slowed the game on a laptop three times over (O1b, docs/archive/optimization.md section 1.2).
 // A lower priority made each picture slow while the game ran: Windows' background mode 26-200 s for 2560x1440 (second
 // test, 2026-10-28), THREAD_PRIORITY_LOWEST 13-18 s (third test, 2026-10-30), against 0.8 s at normal priority: the
 // whole process runs on one logical processor (section 1.7), so a lower priority only runs while the game waits.

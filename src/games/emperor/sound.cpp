@@ -12,7 +12,7 @@
 #include <cstring>
 
 // Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e; mss32.dll Miles 6.0i, SHA256 f09e6024...7015):
-// docs/optimization.md O4, names and calling conventions in docs/symbols.md.
+// docs/archive/optimization.md O4, names and calling conventions in docs/symbols.md.
 namespace emperor::sound {
 namespace {
 

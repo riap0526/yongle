@@ -20,11 +20,8 @@ Back to the [README](../README.md). If you run into something not listed here, p
 ## Installation
 
 - **Antivirus or SmartScreen warnings:** `ddraw.dll` is not code-signed. You can check the zip against the SHA256 given on the release page.
-- **Game in `C:\Program Files (x86)` and not run as administrator: Yongle's files end up in VirtualStore.** Windows then redirects what is written to the game folder (`emperor_engine.ini`, `ddraw_proxy.log`, `shots\`, `menu_background_auto.png`) to a copy for your user under `%LOCALAPPDATA%\VirtualStore\Program Files (x86)\` followed by the game folder's own path. If you cannot find the log or the screenshots in the game folder, look there; the `env: files:` line near the start of the log says where they really are.
-  - Once that copy of `emperor_engine.ini` exists, editing the one in the game folder has no effect: edit the copy in VirtualStore, or use the settings panel (Insert).
-  - GOG Galaxy sets the game to run as administrator, so a default GOG Galaxy install is not affected. The retail release, a copy installed elsewhere under Program Files, or a GOG install whose *Run this program as an administrator* setting was turned off are.
-  - Do not switch between running as administrator and not: each way has its own settings, log and screenshots.
-  - A later version will keep Yongle's files in your user folder instead.
+- **Windows Security's Controlled folder access:** when it protects Documents and has not allowed `Emperor.exe`, Yongle cannot write to `Documents\My Games\Yongle` (Windows may show a "blocked" notification). Yongle then keeps its files in `%LOCALAPPDATA%\Yongle` instead; the log's `files:` lines say so. To use Documents, allow `Emperor.exe` in Controlled folder access (*Allow an app through Controlled folder access*). See also [Where are Yongle's files?](FAQ.md#where-are-yongles-files)
+- **Documents synced with OneDrive:** `Documents\My Games\Yongle` is synced too, log and screenshots included. Nothing is done about this yet; tell us if it is a problem.
 
 ## Tested so far
 

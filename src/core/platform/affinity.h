@@ -1,6 +1,6 @@
-// Processor affinity (B plan, docs/affinity.md): GOG's compatibility settings (SingleProcAffinity) keep the whole
+// Processor affinity (B plan, docs/archive/affinity.md): GOG's compatibility settings (SingleProcAffinity) keep the whole
 // process on one logical processor, so our output thread took its time from the game thread on that one processor
-// (docs/optimization.md sections 1.7-1.8). The game's threads and Miles's stay on that original processor; only our
+// (docs/archive/optimization.md sections 1.7-1.8). The game's threads and Miles's stay on that original processor; only our
 // own threads (an allow-list: the output, the screenshot writer, the stall watchdog, the city background) run on the
 // others. Every other thread -- the game's, Miles's, Windows' helpers, the graphics driver's -- is put on the original
 // mask when it starts (DLL_THREAD_ATTACH) and again by a periodic scan. Any failure puts the process back on its
@@ -29,7 +29,7 @@ enum class Mode { Auto, Original }; // [compat] cpu_affinity
 
 // Once, on the game thread, before our output thread starts (not under the loader lock): with Auto and a process on
 // fewer processors than the system has, every other thread is suspended for a moment while the process is widened and
-// each thread put back on the original mask (docs/affinity.md section 3.3). Threads that start in a graphics module
+// each thread put back on the original mask (docs/archive/affinity.md section 3.3). Threads that start in a graphics module
 // run on ours too (first loaded while the renderer was made, the display driver's (D3DKMT) or from its folder, or a
 // Direct3D runtime module; section 5.1). Logged; on a failure the process stays on (or goes back to) its original
 // mask.
@@ -40,7 +40,7 @@ void Start(Mode mode);
 void OurThread(const char *name);
 
 // The stall watchdog's loop, about every 100 ms: once the feature runs, scans the process's threads every second for
-// the first minute and every 5 s after (docs/affinity.md section 3.6). Never while a thread is suspended for a sample
+// the first minute and every 5 s after (docs/archive/affinity.md section 3.6). Never while a thread is suspended for a sample
 // (the watchdog does both, one after the other).
 void Poll();
 
@@ -62,7 +62,7 @@ const wchar_t *DriverPath(int i);
 // amdxx32.dll 4% in 3, ...), ours on 0xffffc 15% in 3" since the last call; "" when the feature does not run.
 void TakeWindow(char *out, std::size_t size);
 
-// Our mask for an original one (docs/affinity.md section 3.2): the system's processors without the physical cores
+// Our mask for an original one (docs/archive/affinity.md section 3.2): the system's processors without the physical cores
 // that hold any of the original ones (cores: each core's mask of logical processors); without only the original
 // ones when that leaves none; 0 when nothing is left. Exposed for the offline test.
 std::uintptr_t ChooseOurs(std::uintptr_t original, std::uintptr_t system, const std::uintptr_t *cores, int count);

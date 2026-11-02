@@ -1,4 +1,4 @@
-// Stall samples (O1, docs/optimization.md §1.4, 2026-10-28): with the Steam overlay and Direct3D 11 both of our
+// Stall samples (O1, docs/archive/optimization.md §1.4, 2026-10-28): with the Steam overlay and Direct3D 11 both of our
 // threads stopped for about 2.5 s every 10-30 s, the game thread inside the game's own software drawing. To see where
 // each thread waits, a watchdog thread looks every 100 ms at what the game thread and the output thread are in:
 // when one pass or one output frame has gone on for about a second, both threads are suspended for a moment, their

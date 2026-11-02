@@ -3,9 +3,9 @@
 # or simply run proxy/ddraw/build.ps1.
 cmake_minimum_required(VERSION 3.25)
 # Yongle: the public name (v0.1.0 onwards). The version is shown in the log, the panel and the DLL's properties.
-project(emperor_engine VERSION 0.1.3 LANGUAGES C CXX RC)
+project(emperor_engine VERSION 0.2.0 LANGUAGES C CXX RC)
 # Test builds carry a suffix (e.g. "-dev") so their logs are not taken for a release; empty for a release.
-set(YONGLE_VERSION_SUFFIX "")
+set(YONGLE_VERSION_SUFFIX "-dev")
 set(YONGLE_VERSION_STRING "${PROJECT_VERSION}${YONGLE_VERSION_SUFFIX}")
 
 set(CMAKE_C_STANDARD 11)
@@ -53,6 +53,7 @@ add_library(ddraw SHARED
     src/core/hook/hook.cpp
     src/core/platform/dpi.cpp
     src/core/platform/timing.cpp
+    src/core/platform/files.cpp
     src/core/platform/affinity.cpp
     src/core/display/virtual_display.cpp
     src/core/display/logical_size.cpp
@@ -202,7 +203,7 @@ add_executable(test_perf proxy/ddraw/test_perf.cpp src/core/diag/perf.cpp)
 target_include_directories(test_perf PRIVATE src)
 target_link_options(test_perf PRIVATE -static)
 
-# Offline test of core/platform/affinity (B plan, docs/affinity.md section 7.1): scenarios in child processes put on
+# Offline test of core/platform/affinity (B plan, docs/archive/affinity.md section 7.1): scenarios in child processes put on
 # one processor; the last one starts test_emu.exe (the DLL) on one processor.
 add_executable(test_affinity proxy/ddraw/test_affinity.cpp src/core/platform/affinity.cpp src/core/diag/guard.cpp
     src/core/log.cpp)
@@ -210,8 +211,8 @@ target_include_directories(test_affinity PRIVATE src)
 target_link_options(test_affinity PRIVATE -static)
 add_dependencies(test_affinity ddraw test_emu)
 
-# Offline test of core/diag/environment (O1a, docs/optimization.md): start-up lines, processor time, resources.
-add_executable(test_env proxy/ddraw/test_env.cpp src/core/diag/environment.cpp src/core/log.cpp
+# Offline test of core/diag/environment (O1a, docs/archive/optimization.md): start-up lines, processor time, resources.
+add_executable(test_env proxy/ddraw/test_env.cpp src/core/diag/environment.cpp src/core/log.cpp src/core/platform/files.cpp
     src/core/platform/affinity.cpp src/core/diag/guard.cpp)
 target_include_directories(test_env PRIVATE src)
 target_link_options(test_env PRIVATE -static)
@@ -223,7 +224,7 @@ target_include_directories(test_stall PRIVATE src)
 target_link_options(test_stall PRIVATE -static)
 
 # Offline test of the screenshot writer: the queue limit and the processor time per picture (O1, 2026-10-30).
-add_executable(test_screenshot proxy/ddraw/test_screenshot.cpp src/core/capture/screenshot.cpp
+add_executable(test_screenshot proxy/ddraw/test_screenshot.cpp src/core/capture/screenshot.cpp src/core/platform/files.cpp
     src/core/diag/environment.cpp src/core/log.cpp src/core/platform/affinity.cpp src/core/diag/guard.cpp)
 target_include_directories(test_screenshot PRIVATE src)
 target_link_options(test_screenshot PRIVATE -static)
@@ -255,7 +256,7 @@ add_executable(test_restore proxy/ddraw/test_restore.cpp
     src/core/display/logical_size.cpp
     src/core/display/moved_rect.cpp src/core/display/scaled_rect.cpp src/core/ddraw/surface_memory.cpp
     src/core/assets/sg3.cpp src/core/config.cpp src/core/settings/settings.cpp src/core/settings/ini_text.cpp
-    src/core/ui/hotkey.cpp src/core/hook/hook.cpp)
+    src/core/ui/hotkey.cpp src/core/hook/hook.cpp src/core/platform/files.cpp)
 target_include_directories(test_restore PRIVATE src)
 target_compile_options(test_restore PRIVATE -fno-exceptions)
 target_link_options(test_restore PRIVATE -static)
@@ -266,6 +267,11 @@ add_executable(test_sg3 proxy/ddraw/test_sg3.cpp src/core/assets/sg3.cpp src/cor
 target_include_directories(test_sg3 PRIVATE src)
 target_link_options(test_sg3 PRIVATE -static)
 
+# Offline test of core/platform/files (docs/testing/v0_2_0_files.md): where our files go, with fake and real probes.
+add_executable(test_files proxy/ddraw/test_files.cpp src/core/platform/files.cpp src/core/log.cpp)
+target_include_directories(test_files PRIVATE src)
+target_link_options(test_files PRIVATE -static)
+
 # Offline test of core/settings/ini_text (changing values in emperor_engine.ini without touching anything else).
 add_executable(test_ini proxy/ddraw/test_ini.cpp src/core/settings/ini_text.cpp)
 target_include_directories(test_ini PRIVATE src)
@@ -273,6 +279,7 @@ target_link_options(test_ini PRIVATE -static)
 
 # Offline test of the settings model (core/settings + core/config): load, requests, callbacks, saving.
 add_executable(test_settings proxy/ddraw/test_settings.cpp src/core/config.cpp src/core/log.cpp src/core/diag/guard.cpp
+    src/core/platform/files.cpp
     src/core/settings/settings.cpp src/core/settings/ini_text.cpp src/core/ui/hotkey.cpp)
 target_include_directories(test_settings PRIVATE src)
 target_link_options(test_settings PRIVATE -static)

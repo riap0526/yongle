@@ -9,15 +9,18 @@ Back to the [README](../README.md). Plans change with what players report; ideas
 - **v0.1.2**: Direct3D 9 when the Steam overlay is in the game, screenshots without freezes, no more jumping city when the computer cannot keep up, more diagnostics in the log.
 - **v0.1.3**: smoother frame pacing and a higher frame rate on both renderers (Yongle's own work and the graphics driver run on other processor cores, while the game keeps the single core its compatibility settings give it); `renderer = auto` back to Direct3D 11 for everyone, since Steam's FPS counter no longer makes it stop for seconds at a time; screenshots no longer slow the game down; display options for the loading screens, the menus and the China map's backdrop; output scaling (sharp, nearest, smooth) switched at once from Display options; music and sounds pause while you are switched away; ambient sounds at a steady rate whatever the resolution; clicks on the sidebar or the top bar no longer reach the city.
 
-## In progress: v0.1.4
+## In progress: v0.2.0
 
-- **Yongle's files in your user folder**: settings, log and screenshots kept in one place whether or not the game runs as administrator, instead of Windows' VirtualStore when the game is under Program Files.
-- **Intro movie setting**: play or skip the intro movie from Yongle's settings, without changing the game's own files.
+In this order; v0.2.0 is released when all five are done.
+
+1. **Yongle's files where you can always write them**: if the game folder cannot be written to without administrator rights (for example under Program Files), settings, log and screenshots go to `Documents\My Games\Yongle` instead of Windows' VirtualStore, and stay in one place whether or not the game runs as administrator. Games installed elsewhere keep them in the game folder, as now.
+2. **Intro movie setting**: play or skip the intro movie from Yongle's settings, without changing the game's own files.
+3. **City zoom** (mouse wheel, centered on the cursor).
+4. **Export of the whole city** as one large image.
+5. **Original-style settings screens**: the settings drawn with the game's own art, grouped into the game's option dialogs.
 
 ## Planned
 
-- **City zoom** (mouse wheel, centered on the cursor), then **export of the whole city as one large image**.
-- **Original-style settings screens**: the settings drawn with the game's own art, grouped into the game's option dialogs.
 - **Key rebinding** in a game-style dialog.
 - **The unused ambient sounds**: the game ships 24 ambient sounds (birds, wind, insects, chimes) in `Audio\Ambient\Layer1` that it never plays; letting them play.
 

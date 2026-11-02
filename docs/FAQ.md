@@ -2,18 +2,27 @@
 
 Back to the [README](../README.md).
 
-## Which files does Yongle create in the game folder?
+## Where are Yongle's files?
+
+It depends on whether Windows lets a standard user (not an administrator) write to the game folder:
+
+- **Yes** (most installs outside Program Files, e.g. `D:\Games\Emperor`): in the **game folder**, next to `ddraw.dll`.
+- **No** (e.g. under `C:\Program Files (x86)`): in **`Documents\My Games\Yongle`** (your Documents folder, wherever Windows keeps it). If Yongle cannot write there either, for example because Windows Security's *Controlled folder access* blocks `Emperor.exe`, they are in `%LOCALAPPDATA%\Yongle` instead.
+
+The answer is the same whether or not the game runs as administrator, so there is always one set of files. The settings panel (Insert) shows the folder at the bottom, with an **Open folder** button; the log's `files:` lines say why it was chosen.
+
+The files:
 
 - `ddraw_proxy.log`: the log. Over 4 MB it is renamed to `ddraw_proxy.old.log` at the next start; it can be deleted at any time.
 - `emperor_engine.ini`: the settings. A backup `emperor_engine.ini.bak` is written when old settings are cleaned up.
 - `menu_background_auto.png`: the last city you played, for the menu backdrop.
 - `shots\`: screenshots (F11) and problem reports (F12).
 
-To uninstall, delete `ddraw.dll`, and if you like these files and `ddraw.syms` too. Nothing else was changed.
+To uninstall, delete `ddraw.dll`, and if you like `ddraw.syms` and these files (or the whole `Documents\My Games\Yongle` folder) too. Nothing else was changed.
 
-## I can't find the log or the screenshots, or editing the ini has no effect
+## I updated from 0.1.3 or earlier and my game is under Program Files
 
-If the game is under `C:\Program Files (x86)` and does not run as administrator, Windows redirects Yongle's files to `%LOCALAPPDATA%\VirtualStore\Program Files (x86)\` followed by the game folder's own path. Look there, or check the `env: files:` line near the start of the log, which says where they really are. Edit the ini in VirtualStore, or use the settings panel (Insert). A default GOG Galaxy install runs the game as administrator and is not affected. Don't switch between running as administrator and not: each way has its own files. Details: [Known issues](KNOWN_ISSUES.md#installation). A later version will keep Yongle's files in your user folder instead.
+At the first start Yongle copies your settings to `Documents\My Games\Yongle`: the newest `emperor_engine.ini` of the game folder and of Windows' VirtualStore (`%LOCALAPPDATA%\VirtualStore\Program Files (x86)\` followed by the game folder's path, where earlier versions' files went when the game did not run as administrator). From then on the copy in `Documents\My Games\Yongle` is the one used; editing the one in the game folder has no effect. Older logs and screenshots are left where they were.
 
 ## How do I skip the intro movie?
 

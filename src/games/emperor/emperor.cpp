@@ -340,7 +340,7 @@ int __cdecl LoopStep_detour()
 // while scrolling).
 
 constexpr int kMaxTicksPerFrame = 20;
-// Falling behind (O1, docs/optimization.md): a player's log showed passes every 70 ms (the output blocked) and 300+
+// Falling behind (O1, docs/archive/optimization.md): a player's log showed passes every 70 ms (the output blocked) and 300+
 // ticks made up per 10 s -- three or four ticks per picture, so the city jumped instead of moving. While the smoothed
 // time between passes is above kBehindMs, a pass runs at most kBehindTicks ticks and what is owed beyond them is
 // dropped (the game runs slower, as the original does when frames are slow); below kCaughtUpMs it catches up again.

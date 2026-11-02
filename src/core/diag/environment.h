@@ -1,4 +1,4 @@
-// What the process runs among (O1a, docs/optimization.md): which other programs' modules are loaded into it (overlays,
+// What the process runs among (O1a, docs/archive/optimization.md): which other programs' modules are loaded into it (overlays,
 // recorders, injected hooks), how much processor time our threads actually get, and the process's resources over a
 // long session. Only logs; nothing here changes how the game runs. Nothing here knows a game: the game layer calls
 // TakeWindow from its rate log.

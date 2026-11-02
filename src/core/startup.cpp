@@ -70,17 +70,40 @@ void AttachCoreSettings()
     core::settings::OnChange(core::settings::Find("display", "scaling"), &ApplyScaling);
 }
 
+// The deferred start-up work (core_startup_attach): run once, by the exe's entry point or the first DirectDrawCreate.
+int (*g_deferred)(int) = nullptr;
+std::atomic<int> g_deferredState{0}; // 0 not run, 1 running, 2 done
+bool g_fullStartup = false;          // what g_deferred returned: the full start-up (not the editor's wrapper only)
+
 } // namespace
+
+extern "C" int core_startup_ensure(void)
+{
+    int expected = 0;
+    if (g_deferredState.compare_exchange_strong(expected, 1)) {
+        g_fullStartup = g_deferred ? g_deferred(0) != 0 : false;
+        g_deferredState.store(2);
+    }
+    else {
+        while (g_deferredState.load() != 2) { // another thread is running it: wait for it
+            Sleep(1);
+        }
+    }
+    return g_fullStartup;
+}
 
 extern "C" {
 void *g_core_entry_original = nullptr;
 
 __attribute__((used)) void core_startup_on_entry(void)
 {
+    if (!core_startup_ensure()) {
+        return; // the editor: only the logging wrapper, nothing else at its start
+    }
     core_log("exe entry point reached (loader lock released); system timer resolution %u us",
              core_timer_resolution_us());
     core_dpi_apply("exe entry point");
-    // O1a (docs/optimization.md): the modules, power and priority the game starts with; the game runs on this thread.
+    // O1a (docs/archive/optimization.md): the modules, power and priority the game starts with; the game runs on this thread.
     core::diag::env::Start();
     core::diag::env::RegisterThread(core::diag::env::Thread::Game);
     core::diag::stall::RegisterThread(core::diag::stall::Thread::Game);
@@ -147,20 +170,34 @@ HWND WINAPI CreateWindowExA_detour(DWORD exStyle, LPCSTR cls, LPCSTR title, DWOR
 
 } // namespace
 
-extern "C" void core_startup_attach(void *module)
+extern "C" void core_startup_attach(void *module, int (*deferred)(int in_loader_lock), int static_load)
 {
     (void)module;
     core::diag::InstallExceptionLog(); // first: everything after it is covered
+    g_deferred = deferred;
+    void *entry = static_load ? ExeEntryPoint() : nullptr;
+    if (entry && core_hook_install("exe entry point", entry, reinterpret_cast<void *>(&core_startup_entry_detour),
+                                   &g_core_entry_original)) {
+        return; // the rest at the entry point, after the loader lock
+    }
+    // No entry point hook (static load), or loaded later with LoadLibrary (only the offline tests, which create
+    // windows before DirectDrawCreate): everything now, under the loader lock, as in 0.1.3 (our files stay in the
+    // game folder; nothing of shell32 here).
+    if (static_load) {
+        core_log("startup: exe entry point %s; the start-up work runs in DllMain", entry ? "hook failed" : "not found");
+    }
+    int expected = 0;
+    if (g_deferredState.compare_exchange_strong(expected, 1)) {
+        g_fullStartup = deferred ? deferred(1) != 0 : false;
+        g_deferredState.store(2);
+    }
+}
+
+extern "C" void core_startup_install_hooks(void)
+{
     AttachCoreSettings();
     if (core_config_get()->backend == CORE_BACKEND_EMULATED) {
         core::display::InstallHooks(); // inactive until the emulated DirectDraw sets a mode
-    }
-    if (void *entry = ExeEntryPoint()) {
-        core_hook_install("exe entry point", entry, reinterpret_cast<void *>(&core_startup_entry_detour),
-                          &g_core_entry_original);
-    }
-    else {
-        core_log("startup: exe entry point not found; DPI falls back to the CreateWindowExA hook");
     }
     core_hook_install_api("CreateWindowExA", L"user32.dll", "CreateWindowExA",
                           reinterpret_cast<void *>(&CreateWindowExA_detour),

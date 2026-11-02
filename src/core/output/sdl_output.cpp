@@ -99,7 +99,7 @@ void SetScaling(SDL_Texture *t)
 }
 
 // ---------------------------------------------------------------------------------------------
-// O3 (docs/optimization.md): sharp bilinear on Direct3D 9 in two passes -- the texture enlarged k times with nearest
+// O3 (docs/archive/optimization.md): sharp bilinear on Direct3D 9 in two passes -- the texture enlarged k times with nearest
 // into a render target of ours, then that drawn to its place with linear. SDL's Direct3D 9 renderer moves every
 // vertex by half a pixel (SDL_render_d3d.c, QueueGeometry), for render targets as for the screen.
 
@@ -429,7 +429,7 @@ int VsyncFor(int refresh)
 }
 
 // ---------------------------------------------------------------------------------------------
-// O1g (docs/optimization.md): how Direct3D 9 is paced, an experiment ([debug] d3d9_pacing). With vsync its present
+// O1g (docs/archive/optimization.md): how Direct3D 9 is paced, an experiment ([debug] d3d9_pacing). With vsync its present
 // took 7.5 ms on average at 200 Hz (5 ms per refresh) and the game handed over fewer frames while the output was
 // still presenting (FrameWanted). timer: vsync off, and before each present we wait until one refresh (cap60: N) after
 // the last one: a high-resolution waitable timer up to about 1 ms before, then a busy wait on the performance
@@ -651,7 +651,7 @@ void MeasureVsync()
     }
 }
 
-// O1 (docs/optimization.md §1.4, 2026-10-28): in a window Direct3D 9 showed the picture out of proportion after a
+// O1 (docs/archive/optimization.md §1.4, 2026-10-28): in a window Direct3D 9 showed the picture out of proportion after a
 // resize, Direct3D 11 did not. Direct3D 9's back buffer has the size SDL gives it (SDL's idea of the window, which
 // never hears of size changes: its window procedure is not in the chain); Direct3D 11's swap chain follows the
 // window. Logged after each creation and device reset: the real back buffer, the window's client area and SDL's sizes;
@@ -819,7 +819,7 @@ bool Create(bool first)
     bool restored = GetWindowLongPtrA(g_hwnd, GWLP_WNDPROC) != proc;
     SetWindowLongPtrA(g_hwnd, GWLP_WNDPROC, proc);
     // auto: Direct3D 11, also with the Steam overlay (until the B plan Direct3D 9 was chosen then: with Steam's FPS
-    // counter Direct3D 11 stopped for about 2.5 s every 10-30 s; docs/affinity.md section 7.5). If the first cannot
+    // counter Direct3D 11 stopped for about 2.5 s every 10-30 s; docs/archive/affinity.md section 7.5). If the first cannot
     // start, the other one, then SDL's default.
     const int setting = core_config_get()->renderer;
     const bool steam = GetModuleHandleW(L"gameoverlayrenderer.dll") != nullptr;
@@ -1304,7 +1304,7 @@ void HandleRenderEvents()
     }
 }
 
-// O1a (docs/optimization.md): whether Windows treats the game window as hidden -- minimized, not in front, cloaked by
+// O1a (docs/archive/optimization.md): whether Windows treats the game window as hidden -- minimized, not in front, cloaked by
 // the desktop window manager, or occluded for Direct3D 11 (a test present) -- logged when it changes, checked once a
 // second on this thread (the swap chain is this thread's).
 void CheckWindowState()
@@ -1416,7 +1416,7 @@ bool Init(HWND hwnd, core_scaling scaling, core_present_mode mode)
     if (g_failed) {
         return false;
     }
-    // B plan (docs/affinity.md): before our output thread starts, the process is widened; the game's threads stay on
+    // B plan (docs/archive/affinity.md): before our output thread starts, the process is widened; the game's threads stay on
     // its original processor, ours use the others.
     const core_config *cfg = core_config_get();
     core::platform::affinity::Start(cfg->cpu_affinity == 1 ? core::platform::affinity::Mode::Original

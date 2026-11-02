@@ -1,5 +1,7 @@
 #include "core/config.h"
 
+#include "core/platform/files.h"
+
 #include "core/settings/settings.h"
 #include "core/ui/hotkey.h"
 
@@ -8,6 +10,7 @@
 
 #include <cstdlib>
 #include <cstring>
+#include <cwchar>
 
 // The core's items in the settings model (core/settings/settings.h) and core_config, their typed view. The ini keys
 // and their meanings are those of M3..P1; only the reading moved into the model (P2).
@@ -135,7 +138,7 @@ void RegisterCoreItems()
                          "scaled with SDL3); system: the real Windows DirectDraw behind the logging wrapper.",
                          Type::Choice, "emulated", Effect::Restart, false, false, 0, 0, 0, nullptr, kBackend,
                          kBackendLabels, 2});
-    // O3 (docs/optimization.md): switched at once, in the panel and in Display options.
+    // O3 (docs/archive/optimization.md): switched at once, in the panel and in Display options.
     g_scaling = Add(Item{"display", "scaling", "Scaling",
                          "How the picture is enlarged when the game's pixels are not the screen's: a display scale "
                          "other than 100%, 1024x768, scaled menus, a window. sharp_bilinear (default): sharp, each "
@@ -207,8 +210,8 @@ void RegisterCoreItems()
                           0});
     g_shotKey = Add(Item{"debug", "screenshot_key", "Screenshot key",
                          "Saves the game's own picture (its logical resolution, without this panel) as a PNG in "
-                         "shots\\ in the game folder; the file name has the screen number, the resolution and the "
-                         "time. Change it in emperor_engine.ini.",
+                         "shots\\ in Yongle's folder (shown at the bottom of this panel); the file name has the screen "
+                         "number, the resolution and the time. Change it in emperor_engine.ini.",
                          Type::Hotkey, "F11", Effect::Restart, true, false, 0, 0, 0, nullptr, nullptr, nullptr, 0});
     g_reportKey = Add(Item{"debug", "report_key", "Report key",
                            "When something odd is on the screen (e.g. flashing blocks): marks the log, saves the "
@@ -219,8 +222,8 @@ void RegisterCoreItems()
                              "FPS, a graph of the time per main-loop pass and where the time goes (the game's "
                              "simulation and drawing, our copies, the output), in the top left corner while playing.",
                              Type::Bool, "off", Effect::Live, true, true, 0, 0, 0, nullptr, nullptr, nullptr, 0});
-    // O1 (docs/optimization.md §1.4): moved from [debug] (0.1.1). auto is Direct3D 11 also with the Steam overlay
-    // since the B plan (docs/affinity.md section 7.5): the stops with Steam's FPS counter came from the driver's threads
+    // O1 (docs/archive/optimization.md §1.4): moved from [debug] (0.1.1). auto is Direct3D 11 also with the Steam overlay
+    // since the B plan (docs/archive/affinity.md section 7.5): the stops with Steam's FPS counter came from the driver's threads
     // waiting on the game's processor.
     core::settings::Retire("debug", "renderer", &MigrateRenderer);
     g_renderer = Add(Item{"display", "renderer", "Renderer",
@@ -234,7 +237,7 @@ void RegisterCoreItems()
                           "on: the Direct3D 9 renderer is made to fail at start, so renderer = direct3d falls back "
                           "to direct3d11 (for testing that path). Takes effect after a restart.",
                           Type::Bool, "off", Effect::Restart, false, false, 0, 0, 0, nullptr, nullptr, nullptr, 0});
-    // O1g (docs/optimization.md): the experiment with Direct3D 9's pacing; not in the panel.
+    // O1g (docs/archive/optimization.md): the experiment with Direct3D 9's pacing; not in the panel.
     g_d3d9Pacing = Add(Item{"debug", "d3d9_pacing", "Direct3D 9 pacing (test)",
                             "How the Direct3D 9 output is paced. vsync (default): each present waits for the "
                             "refresh. timer: no vsync; our own high-resolution timer spaces the frames one refresh "
@@ -252,7 +255,7 @@ void RegisterCoreItems()
                              "or screenshot them (they flash by on a fast computer). 0: as fast as the game loads. "
                              "Only at start-up, so set it in emperor_engine.ini before starting the game.",
                              Type::Int, "0", Effect::Restart, true, false, 0, 5000, 100, nullptr, nullptr, nullptr, 0});
-    // B plan (docs/affinity.md): only in the file (troubleshooting), not in the panel. [debug] cpu_affinity_graphics
+    // B plan (docs/archive/affinity.md): only in the file (troubleshooting), not in the panel. [debug] cpu_affinity_graphics
     // (the 0.1.3 test builds) is part of auto now.
     core::settings::Retire("debug", "cpu_affinity_graphics", nullptr);
     g_cpuAffinity = Add(Item{"compat", "cpu_affinity", "Processor affinity",
@@ -272,21 +275,11 @@ extern "C" const char *const core_d3d9_pacing_names[3] = {"vsync", "timer", "dwm
 
 extern "C" void core_config_load(void *module)
 {
+    (void)module; // our files' folder (core/platform/files): before it is decided, the folder of this module
     RegisterCoreItems();
-    wchar_t path[MAX_PATH];
-    DWORD len = GetModuleFileNameW(static_cast<HMODULE>(module), path, MAX_PATH);
-    wchar_t *slash = nullptr;
-    for (DWORD i = 0; i < len; ++i) {
-        if (path[i] == L'\\' || path[i] == L'/') {
-            slash = path + i;
-        }
-    }
-    if (slash && static_cast<size_t>(slash - path) + sizeof(kFileName) / sizeof(wchar_t) + 1 <= MAX_PATH) {
-        std::memcpy(slash + 1, kFileName, sizeof(kFileName));
-    }
-    else {
-        std::memcpy(path, kFileName, sizeof(kFileName));
-    }
+    core_files_bring_over(kFileName);
+    wchar_t path[MAX_PATH * 2];
+    std::swprintf(path, sizeof(path) / sizeof(path[0]), L"%ls%ls", core_files_folder(), kFileName);
     core::settings::Load(path);
 }
 

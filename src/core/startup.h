@@ -1,8 +1,8 @@
 // Process start-up of the engine DLL: the work that has to happen before the game's own code runs.
 //
 // The proxy ddraw.dll is a static import of the game exe, so its DllMain runs before the exe's entry point --
-// but under the loader lock, where user32 must not be called. core_startup_attach (from DllMain) therefore
-// only installs hooks (kernel32 only, see core/hook/hook.h):
+// but under the loader lock, where user32 and shell32 must not be called. core_startup_attach (from DllMain) therefore
+// only installs hooks (kernel32 only, see core/hook/hook.h) and keeps the rest for later (core_startup_ensure):
 //   - the exe's entry point, found through its PE header (no game address): runs the start-up work after
 //     every DLL is initialized and the loader lock is released, before the C runtime and WinMain;
 //   - CreateWindowExA: fallback for the same work if the entry hook is missing or the DLL was loaded late
@@ -15,8 +15,23 @@
 extern "C" {
 #endif
 
-/* From DllMain(DLL_PROCESS_ATTACH) after core_log_open. */
-void core_startup_attach(void *module);
+/* From DllMain(DLL_PROCESS_ATTACH). Installs the exception log and the exe entry point hook, and keeps deferred: the
+   rest of the start-up (deciding our files' folder, opening the log, reading the settings, installing the hooks),
+   which returns nonzero for the full start-up and 0 for a process that only gets the logging wrapper (the editor).
+   It runs once:
+     - static_load (the DLL is a static import of the exe, DllMain's reserved != NULL): at the exe's entry point, after
+       the loader lock;
+     - otherwise (LoadLibrary after the entry point: the offline tests), or when the entry point hook cannot be
+       installed: at once, in DllMain (in_loader_lock = 1: nothing of shell32, our files stay in the game folder). */
+void core_startup_attach(void *module, int (*deferred)(int in_loader_lock), int static_load);
+
+/* Runs the deferred start-up work if it has not run yet (any thread; others wait for it); DirectDrawCreate calls it as
+   a safety net. Returns what it returned. */
+int core_startup_ensure(void);
+
+/* From the deferred start-up work, after the settings are read: the core's own setting callbacks, the virtual
+   display's hooks (emulated back end) and CreateWindowExA. */
+void core_startup_install_hooks(void);
 
 /* From DllMain(DLL_PROCESS_DETACH) when the DLL is unloaded with FreeLibrary (not on process exit). */
 void core_startup_detach(void);

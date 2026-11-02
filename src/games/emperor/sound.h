@@ -1,4 +1,4 @@
-// O4 (docs/optimization.md): the game's sound, through Miles (mss32.dll), on the game thread only.
+// O4 (docs/archive/optimization.md): the game's sound, through Miles (mss32.dll), on the game thread only.
 //   - [sound] background_sound (O4a): pause (default) -- when the game window loses the focus (WM_KILLFOCUS, or
 //     WM_ACTIVATE minimized) the game calls sound_stop_all, which closes the music and stops every sound, so another
 //     song starts when one comes back; we pause them instead and let them go on as soon as the window has the focus

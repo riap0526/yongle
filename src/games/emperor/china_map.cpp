@@ -113,7 +113,7 @@ int FitPercent()
 // not redraw outside the map (docs/archive/resolution_ui_r2c.md §1; the original shows it, with what popups leave
 // behind). It is kept when the first map frame after a city frame is drawn and put back on every frame, so nothing
 // is left behind. The city is still: the game does not draw it while the map is shown. (Blurring it would take about
-// 0.1 s at 2560x1440, a visible stop when the map opens: not done, docs/optimization.md O2c.)
+// 0.1 s at 2560x1440, a visible stop when the map opens: not done, docs/archive/optimization.md O2c.)
 enum Background { kMapBackground, kCityBackground };
 const char *const kBackgrounds[] = {"map", "city"};
 const char *const kBackgroundLabels[] = {"map (the same map, blurred and darkened)", "city (your city as you left it)"};

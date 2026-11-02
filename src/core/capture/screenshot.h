@@ -12,7 +12,7 @@
 // the frame fills the window 1:1 with nothing around or over it, it equals the game picture and is not saved (O1b).
 // The game layer supplies the tag (SetTagProvider; "frame" without one). The game frame is copied on the calling
 // (game) thread; encoding and writing happen on one writer thread at normal priority, one picture at a time
-// (O1b, docs/optimization.md), which logs one line per file with the time of each step.
+// (O1b, docs/archive/optimization.md), which logs one line per file with the time of each step.
 // Nothing here knows a game.
 #pragma once
 
@@ -37,9 +37,10 @@ bool Save(const void *pixels, int pitch, int w, int h, const char *label = nullp
 // report), without a screen picture.
 bool SaveOne(const void *pixels, int pitch, int w, int h, const char *label, const char *kind);
 
-// Any thread: saves one 16-bit RGB565 picture as <fileName> next to the DLL (not in shots\), replacing it; written on
-// a worker thread, which logs the result (R2d.1: the city picture for the front-end screens' background). wait: written
-// on the calling thread before returning (when the process is about to end, which would cut a worker short).
+// Any thread: saves one 16-bit RGB565 picture as <fileName> in our files' folder (core/platform/files; not in
+// shots\), replacing it; written on a worker thread, which logs the result (R2d.1: the city picture for the front-end
+// screens' background). wait: written on the calling thread before returning (when the process is about to end, which
+// would cut a worker short).
 bool SaveAs(const void *pixels, int pitch, int w, int h, const char *fileName, bool wait = false);
 
 // Game thread, when the game ends (not from DllMain: the loader lock is held there): waits until the pictures queued

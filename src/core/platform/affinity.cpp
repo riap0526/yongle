@@ -20,7 +20,7 @@ enum State : int { kOff, kBinding, kOn, kExternal, kReverted };
 const char *const kStateName[] = {"off", "binding", "on", "external", "reverted"};
 
 std::atomic<int> g_state{kOff};
-std::atomic<DWORD_PTR> g_original{0}; // O: the process's mask at start (docs/affinity.md section 3.1)
+std::atomic<DWORD_PTR> g_original{0}; // O: the process's mask at start (docs/archive/affinity.md section 3.1)
 std::atomic<DWORD_PTR> g_ours{0};     // W: our threads' mask
 std::atomic<long> g_attached{0}; // threads put on a mask as they started (DLL_THREAD_ATTACH)
 bool g_started = false;          // Start ran (game thread)
@@ -136,7 +136,7 @@ void ModuleName(const char *where, char *out, size_t size)
 }
 
 // ---------------------------------------------------------------------------------------------
-// The graphics stack (docs/affinity.md section 5): a thread that starts in one of these modules is a graphics thread.
+// The graphics stack (docs/archive/affinity.md section 5): a thread that starts in one of these modules is a graphics thread.
 // Found three ways, by module name (a module unloaded meanwhile leaves nothing behind that a later one could match):
 //   renderer: first loaded on the output thread while it made the renderer (the loader's notification);
 //   driver:   the display driver's user-mode DLLs for D3D9 and D3D10/11 (D3DKMTQueryAdapterInfo,
@@ -573,7 +573,7 @@ void Scan(bool listAll)
 }
 
 // ---------------------------------------------------------------------------------------------
-// Widening (docs/affinity.md section 3.3)
+// Widening (docs/archive/affinity.md section 3.3)
 
 struct Victim {
     HANDLE h;
@@ -724,7 +724,7 @@ void LogReverted(const char *why, DWORD error)
              static_cast<unsigned long>(ThreadMask(g_gameThread)));
 }
 
-// docs/affinity.md section 3.7: the process back on the original mask (each thread's mask has to stay within it).
+// docs/archive/affinity.md section 3.7: the process back on the original mask (each thread's mask has to stay within it).
 void Revert(const char *why, DWORD error)
 {
     int s = g_state.load();

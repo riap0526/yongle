@@ -4,6 +4,7 @@
 #include "core/display/logical_size.h"
 #include "core/display/virtual_display.h"
 #include "core/log.h"
+#include "core/platform/files.h"
 #include "core/settings/settings.h"
 
 #include <imgui.h>
@@ -559,6 +560,13 @@ void DrawSettings(float scale)
         ImGui::TextDisabled("Settings file: %s", saved);
     }
     ImGui::EndDisabled();
+    // Where the log, the settings and the screenshots are (core/platform/files): the game folder, or Documents\My
+    // Games\Yongle when the game folder is protected.
+    ImGui::TextDisabled("Yongle's files: %s", core_files_folder_utf8());
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Open folder")) {
+        core_files_open_folder();
+    }
     ConfirmWindow(scale);
 }
 

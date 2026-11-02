@@ -1,4 +1,4 @@
-// Offline test of core/diag/environment (not the game; O1a, docs/optimization.md): the start-up lines (modules from
+// Offline test of core/diag/environment (not the game; O1a, docs/archive/optimization.md): the start-up lines (modules from
 // outside Windows' folder, processors, power, priority), a module loaded later, the processor time of a busy and an
 // idle thread, and the resources line. Writes test_env.log next to the exe and checks its lines.
 #include "core/diag/environment.h"

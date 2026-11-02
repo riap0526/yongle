@@ -1,4 +1,4 @@
-// O4b (docs/optimization.md): the city's random ambient sounds a given number of times per second instead of once in
+// O4b (docs/archive/optimization.md): the city's random ambient sounds a given number of times per second instead of once in
 // N main-loop passes. The game keeps its own test (rand() * N >> 15 == 1 on each city pass, a chance of about 1/N);
 // AmbientRate only sets N from the passes per second it measures, so that passes/s / N = the rate wanted. With no
 // rate (original) N is the value the game read from Audio\sound_fxU.txt (FREQUENCY_L2), put back when switched to

@@ -93,7 +93,7 @@ void MeasureFromNow();
 
 // Game thread (the window's subclass): the user started (true) or ended (false) moving or sizing the window with the
 // mouse (WM_ENTERSIZEMOVE, WM_EXITSIZEMOVE). While it lasts the output is not rebuilt for the new size; it is once,
-// at the end (O1, docs/optimization.md §1.5).
+// at the end (O1, docs/archive/optimization.md §1.5).
 void SetSizing(bool on);
 
 // For the rate log (one caller): the intervals between the frames presented since the last call (O1g): count, mean,
