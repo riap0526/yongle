@@ -261,4 +261,154 @@ std::string UpdateIni(const std::string &text, const std::vector<IniChange> &cha
     return out;
 }
 
+FilledIni FillTemplate(const std::string &tmplIn, const std::string &text)
+{
+    // The template as plain LF text without a BOM (the build may have given it CRLF).
+    std::string tmpl;
+    for (size_t i = BomLength(tmplIn); i < tmplIn.size(); ++i) {
+        if (tmplIn[i] != '\r') tmpl += tmplIn[i];
+    }
+
+    // The template: its lines, the section of each, its keys.
+    const std::vector<Span> tl = Lines(tmpl);
+    std::vector<Parsed> tp;
+    std::vector<std::string> tsec;
+    std::vector<std::string> sections{""}; // in order; "" = before the first header
+    {
+        std::string section;
+        for (const Span &s : tl) {
+            tp.push_back(Parse(tmpl, s));
+            if (tp.back().kind == Parsed::kSection) {
+                section = Name(tmpl, tp.back());
+                sections.push_back(section);
+            }
+            tsec.push_back(section);
+        }
+    }
+    auto inTemplate = [&](const std::string &section, const std::string &key) {
+        for (size_t i = 0; i < tl.size(); ++i) {
+            if (tp[i].kind == Parsed::kKey && SameName(tsec[i], section) && SameName(Name(tmpl, tp[i]), key)) {
+                return true;
+            }
+        }
+        return false;
+    };
+    auto templateSection = [&](const std::string &section) -> int {
+        for (size_t k = 0; k < sections.size(); ++k) {
+            if (SameName(sections[k], section)) return static_cast<int>(k);
+        }
+        return -1;
+    };
+
+    // The file: its values, and the lines kept as written (per template section, or per other section).
+    struct Value {
+        std::string section, key, value;
+    };
+    std::vector<Value> values;
+    std::vector<std::vector<std::string>> extras(sections.size());
+    std::vector<std::pair<std::string, std::vector<std::string>>> otherSections;
+    FilledIni r;
+    {
+        std::string section;
+        for (const Span &s : Lines(text)) {
+            const Parsed p = Parse(text, s);
+            if (p.kind == Parsed::kSection) {
+                section = Name(text, p);
+                continue;
+            }
+            if (p.kind != Parsed::kKey && p.kind != Parsed::kInvalid) {
+                continue; // comments and blank lines: the template's own replace them
+            }
+            if (p.kind == Parsed::kKey && inTemplate(section, Name(text, p))) {
+                values.push_back(Value{section, Name(text, p), text.substr(p.valueBegin, p.valueEnd - p.valueBegin)});
+                continue;
+            }
+            std::string raw = text.substr(s.begin, s.end - s.begin);
+            while (!raw.empty() && Space(raw.back())) raw.pop_back();
+            ++r.extra;
+            const int k = templateSection(section);
+            if (k >= 0) {
+                extras[k].push_back(raw);
+                continue;
+            }
+            bool added = false;
+            for (auto &o : otherSections) {
+                if (SameName(o.first, section)) {
+                    o.second.push_back(raw);
+                    added = true;
+                }
+            }
+            if (!added) {
+                otherSections.emplace_back(section, std::vector<std::string>{raw});
+            }
+        }
+    }
+
+    // The template's lines with the values; each section's kept lines after its last line that is not blank.
+    std::vector<int> lastOf(sections.size(), -1);
+    for (size_t i = 0; i < tl.size(); ++i) {
+        if (tp[i].kind != Parsed::kEmpty) {
+            lastOf[templateSection(tsec[i])] = static_cast<int>(i);
+        }
+    }
+    std::vector<std::string> out;
+    auto keep = [&](const std::vector<std::string> &lines) {
+        out.push_back("");
+        out.push_back("; Not described above (kept as written):");
+        out.insert(out.end(), lines.begin(), lines.end());
+    };
+    for (size_t k = 0; k < sections.size(); ++k) {
+        if (lastOf[k] < 0 && !extras[k].empty()) { // a section of the template with nothing in it: at its header
+            for (size_t i = 0; i < tl.size(); ++i) {
+                if (tp[i].kind == Parsed::kSection && SameName(Name(tmpl, tp[i]), sections[k])) lastOf[k] = static_cast<int>(i);
+            }
+        }
+    }
+    if (lastOf[0] < 0 && !extras[0].empty()) { // no header comment in the template: first in the file
+        out.insert(out.end(), extras[0].begin(), extras[0].end());
+        out.push_back("");
+    }
+    for (size_t i = 0; i < tl.size(); ++i) {
+        std::string line = tmpl.substr(tl[i].begin, tl[i].end - tl[i].begin);
+        if (tp[i].kind == Parsed::kKey) {
+            const std::string key = Name(tmpl, tp[i]);
+            const Value *v = nullptr;
+            for (const Value &x : values) {
+                if (SameName(x.section, tsec[i]) && SameName(x.key, key)) v = &x;
+            }
+            if (v) {
+                ++r.kept;
+                line = line.substr(0, tp[i].valueBegin - tl[i].begin) + v->value + line.substr(tp[i].valueEnd - tl[i].begin);
+                while (!line.empty() && Space(line.back())) line.pop_back();
+            }
+            else {
+                ++r.added;
+            }
+        }
+        out.push_back(line);
+        for (size_t k = 0; k < sections.size(); ++k) {
+            if (lastOf[k] == static_cast<int>(i) && !extras[k].empty()) keep(extras[k]);
+        }
+    }
+    if (!otherSections.empty()) {
+        while (!out.empty() && out.back().empty()) out.pop_back();
+        out.push_back("");
+        out.push_back("; Sections not described above (kept as written):");
+        for (const auto &o : otherSections) {
+            out.push_back("[" + o.first + "]");
+            out.insert(out.end(), o.second.begin(), o.second.end());
+        }
+    }
+
+    const bool crlf = text.find("\r\n") != std::string::npos;
+    const std::string eol = crlf ? "\r\n" : "\n";
+    r.text = text.substr(0, BomLength(text));
+    const bool endsWithEol = !tmpl.empty() && tmpl.back() == '\n';
+    for (size_t i = 0; i < out.size(); ++i) {
+        r.text += out[i];
+        if (i + 1 < out.size() || endsWithEol || !otherSections.empty()) r.text += eol;
+    }
+    return r;
+}
+
 } // namespace core::settings

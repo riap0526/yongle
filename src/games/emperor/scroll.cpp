@@ -40,9 +40,11 @@
 #include "core/ddraw/surface_memory.h"
 #include "core/diag/guard.h"
 #include "core/diag/perf.h"
+#include "core/display/scaled_rect.h"
 #include "core/log.h"
 #include "core/scroll/smooth_scroll.h"
 #include "games/emperor/site.h"
+#include "games/emperor/zoom.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -131,6 +133,8 @@ void FallBack()
         logged = true;
         core_log("scroll: smooth scrolling is off after an error: the game's whole-tile scrolling from now on");
     }
+    // R5: the zoomed view must not reach the game's own drawing (straight into the back buffer): 100% first.
+    emperor::zoom::Off("smooth scrolling was switched off after an error");
 }
 
 // Someone else moved the camera (minimap click, "go to", rotation, loading a game): start again on a whole tile.
@@ -418,6 +422,7 @@ struct RenderCall {
 // to and from the city buffer.
 const int kCityDrawPhase = core::diag::perf::Register("city drawn by the game", core::diag::perf::Thread::Game);
 const int kCityCopyPhase = core::diag::perf::Register("city buffer copies (ours)", core::diag::perf::Thread::Game);
+const int kCityZoomPhase = core::diag::perf::Register("city zoom scaling (ours)", core::diag::perf::Thread::Game);
 
 void DrawCity(int vx, int vy, int orientation)
 {
@@ -440,6 +445,98 @@ void DrawPlain(RenderCall &c, bool offGrid, int right, int bottom)
     c.r.Undo();
 }
 
+// R5 (docs/resolution_ui/r5_city_zoom.md section 8.7): the game's view is the zoomed one (games/emperor/zoom via
+// games/emperor/resolution), bufW x bufH pixels of city for the showW x showH pixels on the screen. The game draws it
+// into our buffer, on the tile grid as always, with one more column and two more half rows for the remainder; while
+// it draws, draw_buffer, screen_pitch, dd_width and dd_height are our buffer's (the blitters address rows with
+// screen_pitch, and image_draw_core / image_clip_x cull against dd_width), and all are put back after. The visible
+// part (from the remainder) is then shrunk (average or nearest) or enlarged (sharp bilinear) onto the screen.
+// Before drawing, the view is checked against the map's range again (zoom::Recheck); a view that does not fit is not
+// drawn at all (never larger than the map: r5_city_zoom.md section 8.2).
+int g_zoomPitchPx = 0, g_zoomRows = 0; // the buffer's last layout (cleared when it changes)
+bool g_loggedZoomSkip = false;
+
+bool RenderZoomed(RenderCall &c)
+{
+    emperor::zoom::Recheck();
+    const int percent = emperor::zoom::Percent();
+    if (percent == 100 || g_extRight <= 0 || g_extBottom <= 0) {
+        return false; // not zoomed: the usual drawing
+    }
+    BYTE *back = *kDrawBuffer;
+    const int pitch = *kScreenPitch, width = pitch / 2, height = *kDdHeight;
+    const int halfH = *kTileHalfHeight, colPx = *kTileWidth + 2, rowPx = 2 * halfH;
+    const int left = *kClipLeft, top = *kClipTop;
+    const int cols = *kWidthTiles, rows = *kHeightRows;
+    const int showRight = g_extRight < width ? g_extRight : width;
+    const int showBottom = g_extBottom < height ? g_extBottom : height;
+    const int showW = showRight - left, showH = showBottom - top;
+    int bufW = 0, bufH = 0;
+    emperor::zoom::BufferSize(&bufW, &bufH);
+    const int right2 = left + (cols + 1) * colPx - 2, bottom2 = top + (rows + 1) * halfH;
+    const int px = g_px, py = g_py;
+    const bool fits = emperor::zoom::ViewFits(cols, rows);
+    if (!back || showW <= 0 || showH <= 0 || bufW <= 0 || bufH <= 0 || halfH <= 0 || colPx <= 2 || left < 0 ||
+        top < 0 || !fits || px + bufW > right2 - left || py + bufH > bottom2 - top) {
+        if (!g_loggedZoomSkip) {
+            g_loggedZoomSkip = true;
+            core_log("zoom: city not drawn this frame (%s; view %d x %d, buffer part %d x %d, remainder %d,%d)",
+                     fits ? "the layout does not add up" : "the view is larger than the map's range", cols, rows,
+                     bufW, bufH, px, py);
+        }
+        c.plain = false;
+        return true; // nothing drawn (the last frame's city stays): never drawn larger than the map
+    }
+    const int pitchPx = (right2 + 2 + 15) & ~15;
+    const int totalRows = bottom2 + 2 * rowPx; // spare rows below the clip, as the back buffer has
+    const size_t size = static_cast<size_t>(pitchPx) * 2 * totalRows;
+    if (!CityBuffer(size)) {
+        char why[96];
+        std::snprintf(why, sizeof(why), "no memory for a %.1f MB city buffer", size / (1024.0 * 1024.0));
+        emperor::zoom::Off(why); // laid out at 100 now; this frame is drawn the usual way below
+        return false;
+    }
+    if (pitchPx != g_zoomPitchPx || totalRows != g_zoomRows) {
+        std::memset(g_city, 0, size); // a new layout: no rows of the last one left around the map
+        g_zoomPitchPx = pitchPx;
+        g_zoomRows = totalRows;
+        core_log("zoom: city buffer %d x %d px (%.1f MB) for %d%%: view %d x %d (+1, +2 while drawing), clip "
+                 "(%d,%d)-(%d,%d), shown %d x %d of it on %d x %d px",
+                 pitchPx, totalRows, size / (1024.0 * 1024.0), percent, cols, rows, left, top, right2, bottom2, bufW,
+                 bufH, showW, showH);
+    }
+    g_cityPitch = pitchPx * 2;
+    g_cityRows = totalRows;
+    c.r.Set(kDrawBuffer.ptr(), g_city);
+    c.r.Set(kScreenPitch.ptr(), pitchPx * 2);
+    c.r.Set(kDdWidth.ptr(), pitchPx);
+    c.r.Set(kDdHeight.ptr(), totalRows);
+    c.r.Set(kClipRight.ptr(), right2);
+    c.r.Set(kClipBottom.ptr(), bottom2);
+    c.r.Set(kWidthTiles.ptr(), cols + 1);
+    c.r.Set(kHeightRows.ptr(), rows + 2);
+    g_renderShown = {left, top, right2, bottom2};
+    c.r.Set(&g_inRender, true);
+    DrawCity(c.vx, c.vy, c.orientation);
+    c.r.Undo();
+    const std::int64_t start = core::diag::perf::Now();
+    const WORD *city = reinterpret_cast<const WORD *>(g_city);
+    const core::display::Pixels16 src{city + static_cast<size_t>(top + py) * pitchPx + left + px, pitchPx, bufW,
+                                      bufH};
+    WORD *screen = reinterpret_cast<WORD *>(back);
+    if (percent > 100) {
+        const core::display::Target16 dst{screen + static_cast<size_t>(top) * width + left, width, showW, showH};
+        core::display::ShrinkRgb565(src, showW, showH, emperor::zoom::AverageShrink(), dst);
+    }
+    else {
+        const core::display::Target16 dst{screen, width, width, height};
+        const RECT clip{left, top, showRight, showBottom};
+        core::display::ScaleRgb565(src, 100.0 / percent, true, dst, left, top, clip);
+    }
+    core::diag::perf::Add(kCityZoomPhase, core::diag::perf::Now() - start);
+    return true;
+}
+
 // city_render with the pixel remainder (see the top of this file) and the extent (R2b.1). While the game draws,
 // draw_buffer, the clip's right and bottom and the viewport size are ours (all in c.r, put back after the draw or
 // when it is abandoned). The clip stays on the tile grid (whole columns, whole half rows): the game's quick tile
@@ -450,6 +547,9 @@ void DrawPlain(RenderCall &c, bool offGrid, int right, int bottom)
 void Render(RenderCall &c)
 {
     SyncView();
+    if (RenderZoomed(c)) {
+        return;
+    }
     BYTE *back = *kDrawBuffer;
     const int pitch = *kScreenPitch, width = pitch / 2, height = *kDdHeight;
     const int halfH = *kTileHalfHeight, colPx = *kTileWidth + 2, rowPx = 2 * halfH;
@@ -549,8 +649,10 @@ void AfterRender()
     }
     const BYTE *back = *kDrawBuffer;
     const int pitch = *kScreenPitch, width = pitch / 2, height = *kDdHeight;
-    const int right = g_extRight > *kClipRight ? (g_extRight < width ? g_extRight : width) : *kClipRight;
-    const int bottom = g_extBottom > *kClipBottom ? (g_extBottom < height ? g_extBottom : height) : *kClipBottom;
+    const bool zoomed = emperor::zoom::Percent() != 100 && g_extRight > 0 && g_extBottom > 0; // clip = our buffer's
+    const int right = zoomed || g_extRight > *kClipRight ? (g_extRight < width ? g_extRight : width) : *kClipRight;
+    const int bottom =
+        zoomed || g_extBottom > *kClipBottom ? (g_extBottom < height ? g_extBottom : height) : *kClipBottom;
     if (back && *kClipLeft >= 0 && *kClipTop >= 0 && *kClipLeft < right && *kClipTop < bottom && right <= width &&
         bottom <= height) {
         g_cityDrawn(back, pitch, *kClipLeft, *kClipTop, right, bottom);
@@ -586,7 +688,7 @@ int __cdecl ScreenToGrid_detour(int x, int y)
 
 int __cdecl MouseToGrid_detour(int unused)
 {
-    if (OffShownCity(*kMouseX, *kMouseY)) {
+    if (emperor::zoom::Percent() != 100 || OffShownCity(*kMouseX, *kMouseY)) { // R5b: no tile while zoomed
         return 0;
     }
     int r = 0;
@@ -597,6 +699,9 @@ int __cdecl MouseToGrid_detour(int unused)
 
 int __cdecl ScreenToGridRaw_detour(int x, int y, int unused)
 {
+    if (emperor::zoom::Percent() != 100) {
+        return 0; // R5b: the military drag selection selects nothing while zoomed (the mouse is not converted yet)
+    }
     int r = 0;
     auto call = [&] { r = Original(o_ScreenToGridRaw, kScreenToGridRaw)(x, y, unused); };
     Converted(true, call);

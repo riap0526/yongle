@@ -60,6 +60,7 @@ add_library(ddraw SHARED
     src/core/display/framing.cpp
     src/core/display/moved_rect.cpp
     src/core/display/scaled_rect.cpp
+    src/core/display/city_zoom.cpp
     src/core/display/common_sizes.cpp
     src/core/capture/screenshot.cpp
     src/core/diag/guard.cpp
@@ -91,6 +92,7 @@ add_library(ddraw SHARED
     src/games/emperor/display_options.cpp
     src/games/emperor/sound.cpp
     src/games/emperor/intro.cpp
+    src/games/emperor/zoom.cpp
     src/games/emperor/ambient_rate.cpp
 )
 # Augustus code (AGPL-3.0): third_party/augustus/README.md. Compiled as part of the DLL.
@@ -130,6 +132,15 @@ configure_file(proxy/ddraw/version.rc.in ${CMAKE_CURRENT_BINARY_DIR}/version.rc 
 target_sources(ddraw PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/version.rc)
 # Default settings file, copied next to the DLL (copy it into testbed\ together with ddraw.dll).
 configure_file(proxy/ddraw/emperor_engine.ini ${CMAKE_CURRENT_BINARY_DIR}/emperor_engine.ini COPYONLY)
+# The same file embedded in the DLL (games/emperor: core::settings::SetTemplate), so an older file's descriptions are
+# brought up to date at start-up; editing the ini re-runs this (configure_file above makes it a configure input).
+file(READ proxy/ddraw/emperor_engine.ini YONGLE_INI_TEMPLATE)
+string(FIND "${YONGLE_INI_TEMPLATE}" ")yongle_ini\"" YONGLE_INI_DELIM)
+if(NOT YONGLE_INI_DELIM EQUAL -1)
+    message(FATAL_ERROR "emperor_engine.ini contains the raw string delimiter )yongle_ini\"")
+endif()
+configure_file(src/games/emperor/ini_template.h.in ${CMAKE_CURRENT_BINARY_DIR}/generated/ini_template.h @ONLY)
+target_include_directories(ddraw PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
 
 # Smoke test that loads a ddraw.dll by path and calls DirectDrawCreate (not the game).
 add_executable(test_load proxy/ddraw/test_load.c)
@@ -184,6 +195,13 @@ target_include_directories(test_moved_rect PRIVATE src)
 target_link_options(test_moved_rect PRIVATE -static)
 
 # Offline test of core/display/scaled_rect (the China map's scaling, mouse mapping and backdrop; R2c).
+# Offline test of core/display/city_zoom and the shrinking in core/display/scaled_rect (R5,
+# docs/resolution_ui/r5_city_zoom.md): the zoom limit for map and screen sizes, the cap, averaged and nearest shrinking.
+add_executable(test_city_zoom proxy/ddraw/test_city_zoom.cpp src/core/display/city_zoom.cpp
+    src/core/display/scaled_rect.cpp)
+target_include_directories(test_city_zoom PRIVATE src)
+target_link_options(test_city_zoom PRIVATE -static)
+
 add_executable(test_scaled_rect proxy/ddraw/test_scaled_rect.cpp src/core/display/scaled_rect.cpp)
 target_include_directories(test_scaled_rect PRIVATE src)
 target_link_options(test_scaled_rect PRIVATE -static)
@@ -252,13 +270,14 @@ add_executable(test_restore proxy/ddraw/test_restore.cpp
     src/games/emperor/scroll.cpp src/games/emperor/resolution.cpp src/games/emperor/emperor.cpp
     src/games/emperor/ui_fixes.cpp src/games/emperor/china_map.cpp src/games/emperor/display_options.cpp
     src/games/emperor/sound.cpp src/games/emperor/ambient_rate.cpp src/games/emperor/intro.cpp
+    src/games/emperor/zoom.cpp src/core/display/city_zoom.cpp
     src/core/scroll/smooth_scroll.cpp src/core/diag/guard.cpp src/core/diag/report.cpp src/core/diag/perf.cpp
     src/core/diag/environment.cpp src/core/diag/stall.cpp src/core/platform/affinity.cpp src/core/log.cpp
     src/core/display/logical_size.cpp
     src/core/display/moved_rect.cpp src/core/display/scaled_rect.cpp src/core/ddraw/surface_memory.cpp
     src/core/assets/sg3.cpp src/core/config.cpp src/core/settings/settings.cpp src/core/settings/ini_text.cpp
     src/core/ui/hotkey.cpp src/core/hook/hook.cpp src/core/platform/files.cpp)
-target_include_directories(test_restore PRIVATE src)
+target_include_directories(test_restore PRIVATE src ${CMAKE_CURRENT_BINARY_DIR}/generated)
 target_compile_options(test_restore PRIVATE -fno-exceptions)
 target_link_options(test_restore PRIVATE -static)
 target_link_libraries(test_restore PRIVATE minhook augustus_core imgui winmm)

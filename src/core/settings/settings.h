@@ -80,6 +80,15 @@ void Retire(const char *section, const char *key, Migrate migrate);
 // file, the panel and the log all use the current name.
 void RenameValue(const char *section, const char *key, const char *oldValue, const char *newValue);
 
+// The text of the settings file this version ships (start-up, before Load; the game layer embeds it). Load then
+// rewrites an existing file whose text differs from it filled with the file's values (core/settings/ini_text.h
+// FillTemplate): descriptions of this version, settings it lacks at their defaults, the values as they were, lines
+// it does not know kept as written; the file as it was is kept in emperor_engine.ini.bak. A missing file is made
+// again from the template, with the values of emperor_engine.ini.bak when there is one (the .bak is left as it is),
+// else at the defaults. Without a template (e.g. offline tests) the descriptions in the file are never changed and a
+// missing file is not made.
+void SetTemplate(const char *text);
+
 // Called when the item's value changed (game thread; also once per item after Load, with initial = true). Returns
 // false when the change could not take effect now (the panel then says a restart is needed). Up to 4 callbacks per
 // item (e.g. core_config's typed view and the owner), called in the order they were added.

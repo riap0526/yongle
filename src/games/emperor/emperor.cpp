@@ -49,8 +49,10 @@
 #include "games/emperor/scroll.h"
 #include "games/emperor/sound.h"
 #include "games/emperor/intro.h"
+#include "games/emperor/zoom.h"
 #include "games/emperor/site.h"
 #include "games/emperor/ui_fixes.h"
+#include "ini_template.h" // generated from proxy/ddraw/emperor_engine.ini (CMakeLists.txt)
 
 #include <imgui.h>
 #include <mmsystem.h>
@@ -176,12 +178,15 @@ void LogRates(const char *why)
     core::diag::TakeIntegrity(&multi, &torn);
     static const char *const kPresent[] = {"original", "display", "cap60"};
     double s = ms / 1000.0;
+    int mapCols = 0, mapRows = 0;
+    emperor::zoom::MapRange(&mapCols, &mapRows); // R5: tools/verify/r5b_rates.py groups the windows by these
     core_log("rates%s: loop %.0f/s, sim ticks %.1f/s, game presents %.1f/s, frames shown %.1f/s over %lu ms "
-             "(present=%s, display %d Hz, game speed %d%%, screen %d, timer %u us); frame check: %ld game frames "
-             "with 2+ presents, %ld torn%s%s",
+             "(present=%s, display %d Hz, game speed %d%%, screen %d, city zoom %d%% on map %dx%d %s, timer %u us); "
+             "frame check: %ld game frames with 2+ presents, %ld torn%s%s",
              why, g_loops / s, g_ticks / s, presented / s, shown / s, ms, kPresent[core_config_get()->present],
-             core::output::RefreshHz(), *kGameSpeed, static_cast<int>(*kGameScreen), core_timer_resolution_us(),
-             multi, torn, scroll, paceNote);
+             core::output::RefreshHz(), *kGameSpeed, static_cast<int>(*kGameScreen), emperor::zoom::Percent(), mapCols,
+             mapRows, emperor::zoom::AverageShrink() ? "average" : "nearest", core_timer_resolution_us(), multi, torn,
+             scroll, paceNote);
     char times[768], longest[768];
     perf::TakeWindow(times, sizeof(times), longest, sizeof(longest));
     if (times[0]) {
@@ -614,6 +619,9 @@ extern "C" void emperor_register_settings(void)
     emperor::fullscreen::RegisterSettings();
     emperor::sound::RegisterSettings();
     emperor::intro::RegisterSettings();
+    emperor::zoom::RegisterSettings();
+    // The settings file this version ships: an older file gets its descriptions (CMake embeds the file).
+    core::settings::SetTemplate(emperor::kIniTemplate);
 }
 
 extern "C" int emperor_editor_exe(void)
@@ -665,6 +673,12 @@ extern "C" void emperor_attach(void)
         emperor::fullscreen::Attach();
         emperor::china_map::Attach(); // needs the emulated DirectDraw's resolutions (the map only fits beyond 1024)
         emperor::display_options::Attach(); // R3: our display settings in the game's Display options
+        if (scroll) {
+            emperor::zoom::Attach(); // R5: drawn by smooth scrolling's city render, laid out by resolution's viewport
+        }
+        else {
+            core_log("zoom: not installed (smooth scrolling's hooks are not): the city stays at 100%%");
+        }
     }
     emperor::ui_fixes::Attach();
     emperor::sound::Attach(); // O4: [sound] background_sound, ambient_sounds; pan within 0..127

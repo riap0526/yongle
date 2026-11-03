@@ -14,7 +14,7 @@ The answer is the same whether or not the game runs as administrator, so there i
 The files:
 
 - `ddraw_proxy.log`: the log. Over 4 MB it is renamed to `ddraw_proxy.old.log` at the next start; it can be deleted at any time.
-- `emperor_engine.ini`: the settings. A backup `emperor_engine.ini.bak` is written when old settings are cleaned up.
+- `emperor_engine.ini`: the settings. When a new version of Yongle first starts, it brings the file's descriptions up to date (your values are kept) and keeps the file as it was in `emperor_engine.ini.bak`; the same backup is written when old settings are cleaned up. If the file is missing, it is made again, with the values of `emperor_engine.ini.bak` when there is one, otherwise at the defaults.
 - `menu_background_auto.png`: the last city you played, for the menu backdrop.
 - `shots\`: screenshots (F11) and problem reports (F12).
 

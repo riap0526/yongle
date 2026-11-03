@@ -35,6 +35,7 @@
 
 #include "games/emperor/fullscreen.h"
 #include "games/emperor/scroll.h"
+#include "games/emperor/zoom.h"
 
 #include "core/assets/sg3.h"
 #include "core/ddraw/surface_memory.h"
@@ -382,6 +383,7 @@ bool StandardSize(int w, int h)
 void __cdecl ViewportSmall_detour() // 58x30 tiles: 640/800/1024 -> 10x31, 13x39, 17x50
 {
     int w = *kScreenWidth, h = *kScreenHeight;
+    emperor::zoom::ResetView(); // R5: the large tiles only
     if (StandardSize(w, h) || w < 1024) {
         Original(o_ViewportSmall, kViewportSmall)();
     }
@@ -395,12 +397,28 @@ void __cdecl ViewportLarge_detour() // 78x40 tiles: 800 -> 7x29, 1024 -> 10x37 (
 {
     int w = *kScreenWidth, h = *kScreenHeight;
     if (StandardSize(w, h) || w < 1024) {
+        emperor::zoom::ResetView(); // R5: our layout only
         Original(o_ViewportLarge, kViewportLarge)();
         UpdateCityExtent(true);
         return;
     }
-    Viewport({LargeColumns(w), (h - kTopBar) / 20 + 1, 0x4e, 0x28}, {10, 37, 0x4e, 0x28});
+    // R5: the zoomed view (docs/resolution_ui/r5_city_zoom.md section 8.7) for the city as shown on the screen, from
+    // the top bar to the bottom and to the sidebar; capped to the map's range by games/emperor/zoom.
+    int cols = LargeColumns(w), rows = (h - kTopBar) / 20 + 1;
+    emperor::zoom::ViewFor(*kSidebarX, h - kTopBar, 0x4e + 2, 0x28 / 2, &cols, &rows);
+    Viewport({cols, rows, 0x4e, 0x28}, {10, 37, 0x4e, 0x28});
     UpdateCityExtent(true);
+}
+
+// R5 (games/emperor/zoom): the city view laid out again after the scale or the map changed.
+void RelayoutCity()
+{
+    if (*kSmallTiles == 1) {
+        ViewportSmall_detour();
+    }
+    else {
+        ViewportLarge_detour();
+    }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1516,6 +1534,7 @@ bool Attach(const core_config *cfg)
     Install(kFillRect, &FillRect_detour, o_FillRect);
     core::display::SetKeyFilter(&KeyFilter);
     core::display::SetGameMinimum(kMinW, kMinH);
+    emperor::zoom::SetRelayout(&RelayoutCity);
     g_installed = true;
     char what[48];
     Describe(g_setting, what, sizeof(what));

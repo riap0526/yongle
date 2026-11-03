@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <vector>
 
 namespace core::display {
 namespace {
@@ -101,6 +102,72 @@ bool ScaleRgb565(const Pixels16 &src, double scale, bool sharp, const Target16 &
         }
         for (int c = 0; c < n; ++c) {
             d[c] = Lerp(a[c], b[c], t.w);
+        }
+    }
+    return true;
+}
+
+bool ShrinkRgb565(const Pixels16 &src, int outW, int outH, bool average, const Target16 &dst)
+{
+    if (!src.px || !dst.px || src.w <= 0 || src.h <= 0 || src.stride < src.w || outW <= 0 || outH <= 0 ||
+        outW > src.w || outH > src.h || outW > dst.w || outH > dst.h || dst.stride < dst.w) {
+        return false;
+    }
+    // Source pixel boundaries of each output column and row: [b[i], b[i + 1]).
+    std::vector<int> bx(outW + 1), by(outH + 1);
+    for (int i = 0; i <= outW; ++i) {
+        bx[i] = static_cast<int>(static_cast<long long>(i) * src.w / outW);
+    }
+    for (int j = 0; j <= outH; ++j) {
+        by[j] = static_cast<int>(static_cast<long long>(j) * src.h / outH);
+    }
+    const int maxW = (src.w + outW - 1) / outW, maxH = (src.h + outH - 1) / outH;
+    if (!average || maxW * maxH > 32) {
+        // Nearest: the source pixel at the centre of each block.
+        std::vector<int> cx(outW);
+        for (int i = 0; i < outW; ++i) {
+            cx[i] = (bx[i] + bx[i + 1] - 1) / 2;
+        }
+        for (int j = 0; j < outH; ++j) {
+            const WORD *s = src.px + static_cast<size_t>((by[j] + by[j + 1] - 1) / 2) * src.stride;
+            WORD *d = dst.px + static_cast<size_t>(j) * dst.stride;
+            for (int i = 0; i < outW; ++i) {
+                d[i] = s[cx[i]];
+            }
+        }
+        return true;
+    }
+    // Average: every source pixel of the block counted once (spread sums: at most 32 pixels, checked above), then
+    // divided by the block's size with a 16.16 reciprocal.
+    std::vector<DWORD> column(src.w);
+    std::vector<DWORD> inverse(33);
+    for (int n = 1; n <= 32; ++n) {
+        inverse[n] = (65536u + n / 2) / n;
+    }
+    for (int j = 0; j < outH; ++j) {
+        const int y0 = by[j], y1 = by[j + 1] > y0 ? by[j + 1] : y0 + 1;
+        const WORD *row = src.px + static_cast<size_t>(y0) * src.stride;
+        for (int x = 0; x < src.w; ++x) {
+            column[x] = Spread(row[x]);
+        }
+        for (int y = y0 + 1; y < y1; ++y) {
+            row = src.px + static_cast<size_t>(y) * src.stride;
+            for (int x = 0; x < src.w; ++x) {
+                column[x] += Spread(row[x]);
+            }
+        }
+        WORD *d = dst.px + static_cast<size_t>(j) * dst.stride;
+        for (int i = 0; i < outW; ++i) {
+            const int x0 = bx[i], x1 = bx[i + 1] > x0 ? bx[i + 1] : x0 + 1;
+            DWORD sum = 0;
+            for (int x = x0; x < x1; ++x) {
+                sum += column[x];
+            }
+            const DWORD inv = inverse[(x1 - x0) * (y1 - y0)];
+            const DWORD b = ((sum & 0x3FFu) * inv + 0x8000u) >> 16;
+            const DWORD r = (((sum >> 11) & 0x3FFu) * inv + 0x8000u) >> 16;
+            const DWORD g = ((sum >> 21) * inv + 0x8000u) >> 16;
+            d[i] = static_cast<WORD>((r > 31 ? 31 : r) << 11 | (g > 63 ? 63 : g) << 5 | (b > 31 ? 31 : b));
         }
     }
     return true;

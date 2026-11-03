@@ -30,6 +30,12 @@ struct Target16 {
 // False (nothing written) when the arguments make no sense.
 bool ScaleRgb565(const Pixels16 &src, double scale, bool sharp, const Target16 &dst, int x, int y, const RECT &clip);
 
+// R5: src shrunk to outW x outH (outW <= src.w, outH <= src.h) at dst's first row and column. average: each output
+// pixel the average of the source pixels its block covers (blocks of whole source pixels, as evenly spread as they
+// can be; up to 32 pixels a block, nearest beyond); otherwise nearest (the source pixel at the block's centre). False
+// (nothing written) when the arguments make no sense.
+bool ShrinkRgb565(const Pixels16 &src, int outW, int outH, bool average, const Target16 &dst);
+
 // The source's inverse of ScaleRgb565: the source pixel under destination pixel (dx, dy) of a picture drawn at
 // (x, y) by `scale`. False when it is outside the picture.
 bool ScaledToSource(int dx, int dy, int x, int y, double scale, int srcW, int srcH, int *sx, int *sy);

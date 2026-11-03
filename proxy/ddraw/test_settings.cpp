@@ -247,6 +247,89 @@ int main()
               "renamed value: nothing to do the next time");
     }
 
+    // An older file and this version's template: rewritten once with the template's descriptions, the values kept
+    // (a renamed one under its new name), a removed setting gone, an unknown line kept; the old file in .bak.
+    {
+        cs::Retire("test", "gone", nullptr);
+        static const char tmpl[] = "; Header of this version.\n"
+                                   "\n"
+                                   "[test]\n"
+                                   "; scaled       = new description (default)\n"
+                                   "; scaled_black = another\n"
+                                   "look = scaled\n";
+        cs::SetTemplate(tmpl);
+        const std::wstring bakPath = std::wstring(g_path) + L".bak";
+        const std::string old = "; Header of an older version.\r\n"
+                                "[test]\r\n"
+                                "; framed = old description\r\n"
+                                "look = black\r\n"
+                                "; a removed setting\r\n"
+                                "gone = 1\r\n"
+                                "mistyped = 9\r\n";
+        WriteAll(old);
+        cs::Load(g_path);
+        std::string bak;
+        if (FILE *f = _wfopen(bakPath.c_str(), L"rb")) {
+            char buf[256];
+            size_t got;
+            while ((got = std::fread(buf, 1, sizeof(buf), f)) > 0) bak.append(buf, got);
+            std::fclose(f);
+        }
+        const std::string want = "; Header of this version.\r\n"
+                                 "\r\n"
+                                 "[test]\r\n"
+                                 "; scaled       = new description (default)\r\n"
+                                 "; scaled_black = another\r\n"
+                                 "look = scaled_black\r\n"
+                                 "\r\n"
+                                 "; Not described above (kept as written):\r\n"
+                                 "mistyped = 9\r\n";
+        Check(ReadAll() == want && bak == old && Value("test", "look") == "scaled_black",
+              "template: older file rewritten, values kept, old file in .bak");
+        DeleteFileW(bakPath.c_str());
+        cs::Load(g_path);
+        Check(ReadAll() == want && GetFileAttributesW(bakPath.c_str()) == INVALID_FILE_ATTRIBUTES,
+              "template: nothing to do the next time");
+        WriteAll(old);
+        SetFileAttributesW(g_path, FILE_ATTRIBUTE_READONLY);
+        cs::Load(g_path);
+        Check(ReadAll() == old && Value("test", "look") == "scaled_black",
+              "template: read-only file left as it is, values still read");
+        SetFileAttributesW(g_path, FILE_ATTRIBUTE_NORMAL);
+
+        // The file deleted by mistake, its .bak still there: made again with the .bak's values; the .bak unchanged.
+        DeleteFileW(g_path);
+        {
+            FILE *f = _wfopen(bakPath.c_str(), L"wb");
+            std::fwrite(old.data(), 1, old.size(), f);
+            std::fclose(f);
+        }
+        cs::Request(cs::Find("test", "look"), "scaled", true); // so that the value read can be seen
+        cs::RunPending();
+        DeleteFileW(g_path);
+        cs::Load(g_path);
+        std::string bak2;
+        if (FILE *f = _wfopen(bakPath.c_str(), L"rb")) {
+            char buf[256];
+            size_t got;
+            while ((got = std::fread(buf, 1, sizeof(buf), f)) > 0) bak2.append(buf, got);
+            std::fclose(f);
+        }
+        Check(ReadAll() == want && bak2 == old && Value("test", "look") == "scaled_black",
+              "template: no file, .bak there: made from the template with the .bak's values");
+
+        // No file and no .bak: the template itself, every setting at its default.
+        DeleteFileW(bakPath.c_str());
+        DeleteFileW(g_path);
+        cs::Load(g_path);
+        Check(ReadAll() == tmpl && Value("test", "look") == "scaled" &&
+                  GetFileAttributesW(bakPath.c_str()) == INVALID_FILE_ATTRIBUTES,
+              "template: no file, no .bak: the template, at the defaults");
+        if (ReadAll() != tmpl) std::printf("  file:\n%s\n", ReadAll().c_str());
+        DeleteFileW(g_path);
+        cs::SetTemplate(nullptr);
+    }
+
     std::printf("RESULT: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
     return g_failures ? 1 : 0;
 }

@@ -43,4 +43,21 @@ struct IniKey {
 // line after it when that would follow another blank line, a section header or the start of the file. Everything else stays exactly as it was.
 std::string RemoveIniKeys(const std::string &text, const std::vector<IniKey> &keys);
 
+// The file as this version's template would have it: the template's text with the values of text filled in.
+//  - Every key of the template takes the value text gives it (same section, names case-insensitive; the last line
+//    wins, as when reading), as written (not checked: a wrong value stays visible); a key text does not have keeps
+//    the template's value (its default). Comments after a value in text are not kept.
+//  - Keys of text that the template does not have, and lines that are not settings, are kept as written at the end
+//    of their section, under "; Not described above (kept as written):"; sections the template does not have go to
+//    the end of the file, under "; Sections not described above (kept as written):".
+//  - text's line ends (CRLF when it has any) and BOM are kept.
+// Filling the result again gives the same text, so a file is rewritten only once per template.
+struct FilledIni {
+    std::string text;
+    int kept = 0;  // template keys whose value came from text
+    int added = 0; // template keys text did not have (at their defaults)
+    int extra = 0; // lines of text kept as written
+};
+FilledIni FillTemplate(const std::string &tmpl, const std::string &text);
+
 } // namespace core::settings

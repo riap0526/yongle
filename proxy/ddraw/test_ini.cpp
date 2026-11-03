@@ -46,8 +46,32 @@ void Check(bool ok, const char *what)
 
 } // namespace
 
-int main()
+std::string ReadFile(const char *path)
 {
+    std::string s;
+    if (FILE *f = std::fopen(path, "rb")) {
+        char buf[4096];
+        size_t n;
+        while ((n = std::fread(buf, 1, sizeof(buf), f)) > 0) s.append(buf, n);
+        std::fclose(f);
+    }
+    return s;
+}
+
+int main(int argc, char **argv)
+{
+    // test_ini <template> <older file> <output>: writes what FillTemplate makes of a real older file (for checking
+    // the upgrade from earlier releases by eye; e.g. their emperor_engine.ini from git show v0.1.0:...).
+    if (argc == 4) {
+        const core::settings::FilledIni f = core::settings::FillTemplate(ReadFile(argv[1]), ReadFile(argv[2]));
+        if (FILE *o = std::fopen(argv[3], "wb")) {
+            std::fwrite(f.text.data(), 1, f.text.size(), o);
+            std::fclose(o);
+        }
+        std::printf("%d kept, %d added at their defaults, %d kept as written\n", f.kept, f.added, f.extra);
+        return 0;
+    }
+
     const std::string base = "; Emperor engine settings\r\n"
                              "\r\n"
                              "[display]\r\n"
@@ -122,6 +146,73 @@ int main()
               "[display]\r\n; How the menus are shown:\r\n; framed = ...\r\nfullscreen_pictures = framed\r\n\r\n"
               "; The map of China:\r\nchina_map = native\r\n\r\n[debug]\r\n",
           "RemoveIniKeys: a key right after its section header");
+
+    // FillTemplate: an older file brought up to this version's template.
+    const std::string tmpl = "; Settings. Header.\n"
+                             "\n"
+                             "[display]\n"
+                             "; mode:\n"
+                             "; a = first (default)\n"
+                             "; b = second\n"
+                             "mode = a\n"
+                             "; Size. Default: 100.\n"
+                             "size = 100\n"
+                             "\n"
+                             "[sound]\n"
+                             "; on = sounds (default)\n"
+                             "sound = on\n";
+    Check(core::settings::FillTemplate(tmpl, tmpl).text == tmpl, "FillTemplate: the template itself is unchanged");
+    const std::string older = "\xEF\xBB\xBF; Settings. An older header.\r\n"
+                              "\r\n"
+                              "[Display]\r\n"
+                              "; mode: framed = old description\r\n"
+                              "MODE = b ; my note\r\n"
+                              "size=150\r\n"
+                              "size = 125\r\n"
+                              "typo_key = 1\r\n"
+                              "not a setting\r\n"
+                              "\r\n"
+                              "[mine]\r\n"
+                              "x = 2\r\n";
+    const core::settings::FilledIni f = core::settings::FillTemplate(tmpl, older);
+    const std::string want = "\xEF\xBB\xBF; Settings. Header.\r\n"
+                             "\r\n"
+                             "[display]\r\n"
+                             "; mode:\r\n"
+                             "; a = first (default)\r\n"
+                             "; b = second\r\n"
+                             "mode = b\r\n"
+                             "; Size. Default: 100.\r\n"
+                             "size = 125\r\n"
+                             "\r\n"
+                             "; Not described above (kept as written):\r\n"
+                             "typo_key = 1\r\n"
+                             "not a setting\r\n"
+                             "\r\n"
+                             "[sound]\r\n"
+                             "; on = sounds (default)\r\n"
+                             "sound = on\r\n"
+                             "\r\n"
+                             "; Sections not described above (kept as written):\r\n"
+                             "[mine]\r\n"
+                             "x = 2\r\n";
+    Check(f.text == want, "FillTemplate: values, defaults, kept lines, CRLF and BOM");
+    if (f.text != want) std::printf("  got:\n    %s\n", Show(f.text).c_str());
+    Check(f.kept == 2 && f.added == 1 && f.extra == 3, "FillTemplate: counts (2 kept, 1 added, 3 as written)");
+    Check(core::settings::FillTemplate(tmpl, f.text).text == f.text, "FillTemplate: filling again changes nothing");
+    const std::string lf = "[display]\nsize = 200\n";
+    const std::string lfGot = core::settings::FillTemplate(tmpl, lf).text;
+    Check(lfGot.find('\r') == std::string::npos && lfGot.find("size = 200\n") != std::string::npos &&
+              lfGot.find("mode = a\n") != std::string::npos && lfGot.find("sound = on\n") != std::string::npos,
+          "FillTemplate: LF file, missing settings at their defaults");
+    std::string crTmpl; // a template checked out with CRLF line ends gives the same result
+    for (char c : tmpl) crTmpl += c == '\n' ? std::string("\r\n") : std::string(1, c);
+    Check(core::settings::FillTemplate(crTmpl, older).text == want, "FillTemplate: a CRLF template is the same");
+    const std::string top = "stray = 1\n[display]\nmode = b\n";
+    const std::string topGot = core::settings::FillTemplate(tmpl, top).text;
+    Check(topGot.find("; Settings. Header.\n\n; Not described above (kept as written):\nstray = 1\n\n[display]") == 0 &&
+              core::settings::FillTemplate(tmpl, topGot).text == topGot,
+          "FillTemplate: a key before the first section stays before it");
 
     std::printf("RESULT: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
     return g_failures ? 1 : 0;

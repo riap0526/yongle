@@ -247,7 +247,7 @@ void RegisterCoreItems()
                             Type::Choice, "vsync", Effect::Restart, false, false, 0, 0, 0, nullptr,
                             core_d3d9_pacing_names, kD3d9PacingLabels, 3});
     g_labels = Add(Item{"debug", "frame_labels", "Frame labels",
-                        "For checking the framed pictures' layout (tools/verify/frame_check.py): the border's dark "
+                        "For development: checking the framed pictures' layout. The border's dark "
                         "lines red, the rest of the border green, padding yellow, the picture white, outside blue.",
                         Type::Bool, "off", Effect::Live, true, true, 0, 0, 0, nullptr, nullptr, nullptr, 0});
     g_loadingHold = Add(Item{"debug", "loading_stage_ms", "Loading stage time (ms)",

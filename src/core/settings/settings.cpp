@@ -202,6 +202,12 @@ struct Renamed {
 };
 Renamed g_renamed[16];
 int g_renamedCount = 0;
+const char *g_template = nullptr;
+
+void SetTemplate(const char *text)
+{
+    g_template = text;
+}
 
 void RenameValue(const char *section, const char *key, const char *oldValue, const char *newValue)
 {
@@ -313,6 +319,21 @@ void Load(const wchar_t *path)
     std::swprintf(g_path, MAX_PATH, L"%ls", path);
     bool exists = false;
     std::string text = ReadFileText(path, &exists);
+    wchar_t bak[MAX_PATH + 8];
+    std::swprintf(bak, sizeof(bak) / sizeof(bak[0]), L"%ls.bak", path);
+    // No file (e.g. deleted by mistake) and a template: the file is made again from the template, with the values of
+    // emperor_engine.ini.bak when there is one (the file as it was the last time it was rewritten), else the defaults.
+    bool fromBak = false;
+    const bool remake = !exists && g_template;
+    for (int i = 0; i < g_count; ++i) { // what the file does not set is its default (also when loaded again)
+        Copy(g_items[i].value, kValueSize, g_items[i].item.defaultValue);
+    }
+    if (remake) {
+        text = ReadFileText(bak, &fromBak);
+        if (!fromBak) {
+            text.clear();
+        }
+    }
     std::vector<IniLine> lines;
     std::vector<int> invalid;
     ReadIni(text, &lines, &invalid);
@@ -384,21 +405,55 @@ void Load(const wchar_t *path)
         core_log("config: [%s] %s = %s (carried over from a removed setting)", c.section.c_str(), c.key.c_str(),
                  c.value.c_str());
     }
+    std::string updated = text;
     if (!retired.empty() || !renamed.empty()) {
-        wchar_t bak[MAX_PATH + 8];
-        std::swprintf(bak, sizeof(bak) / sizeof(bak[0]), L"%ls.bak", path);
-        DWORD error = 0;
         std::vector<IniChange> changes = carried;
         changes.insert(changes.end(), renamed.begin(), renamed.end());
-        const std::string cleaned = UpdateIni(RemoveIniKeys(text, retired), changes);
-        if (WriteFileAtomic(bak, text, &error) && WriteFileAtomic(path, cleaned, &error)) {
-            core_log("config: removed %d line(s) of settings that no longer exist, renamed %d value(s) (the file as it "
-                     "was: emperor_engine.ini.bak)",
-                     static_cast<int>(retired.size()), static_cast<int>(renamed.size()));
+        updated = UpdateIni(RemoveIniKeys(text, retired), changes);
+    }
+    FilledIni filled;
+    const bool fill = (exists || remake) && g_template;
+    if (fill) {
+        filled = FillTemplate(g_template, updated);
+        updated = filled.text;
+    }
+    if (remake) {
+        // The .bak stays as it is (it is where the values came from).
+        DWORD error = 0;
+        if (WriteFileAtomic(path, updated, &error)) {
+            if (fromBak) {
+                core_log("config: emperor_engine.ini was missing: made again from this version's template with the "
+                         "values of emperor_engine.ini.bak (%d value(s) from it, %d setting(s) at their defaults, %d "
+                         "line(s) kept as written)",
+                         filled.kept, filled.added, filled.extra);
+            }
+            else {
+                core_log("config: emperor_engine.ini was missing (and no emperor_engine.ini.bak): made from this "
+                         "version's template, all settings at their defaults");
+            }
         }
         else {
-            core_log("config: could not update the old settings in the file (error %lu); removed ones are ignored, "
-                     "renamed values are taken as their new names",
+            core_log("config: emperor_engine.ini is missing and could not be made (error %lu); %s", error,
+                     fromBak ? "the values of emperor_engine.ini.bak are used" : "defaults");
+        }
+    }
+    else if (updated != text) {
+        DWORD error = 0;
+        if (WriteFileAtomic(bak, text, &error) && WriteFileAtomic(path, updated, &error)) {
+            if (!retired.empty() || !renamed.empty()) {
+                core_log("config: removed %d line(s) of settings that no longer exist, renamed %d value(s)",
+                         static_cast<int>(retired.size()), static_cast<int>(renamed.size()));
+            }
+            if (fill) {
+                core_log("config: emperor_engine.ini rewritten from this version's template: %d value(s) kept, %d "
+                         "setting(s) added at their defaults, %d line(s) kept as written",
+                         filled.kept, filled.added, filled.extra);
+            }
+            core_log("config: the file as it was: emperor_engine.ini.bak");
+        }
+        else {
+            core_log("config: could not update the file (error %lu); it is read as it is: removed settings are "
+                     "ignored, renamed values are taken as their new names",
                      error);
         }
     }
@@ -410,7 +465,8 @@ void Load(const wchar_t *path)
     Describe(what, sizeof(what));
     char p[MAX_PATH * 2];
     WideCharToMultiByte(CP_UTF8, 0, path, -1, p, sizeof(p), nullptr, nullptr);
-    core_log("config: %s; %s", exists ? p : "emperor_engine.ini not found, defaults", what);
+    core_log("config: %s; %s",
+             exists || remake ? p : "emperor_engine.ini not found, defaults", what);
     for (int i = 0; i < g_count; ++i) {
         for (int k = 0; k < g_items[i].applyCount; ++k) {
             g_items[i].apply[k](i, g_items[i].value, true);
