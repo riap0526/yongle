@@ -488,6 +488,7 @@ void __cdecl SimTick_detour()
 void __cdecl ScreenPresent_detour(int param)
 {
     emperor::fullscreen::OnPresent();
+    emperor::zoom::OnPresent();
     if (param == 1 || *kPresentForce != 0) {
         core::output::HoldNextFrame(kPresentGateMs);
     }

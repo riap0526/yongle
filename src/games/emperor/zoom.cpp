@@ -1,5 +1,6 @@
 #include "games/emperor/zoom.h"
 
+#include "core/capture/screenshot.h"
 #include "core/diag/guard.h"
 #include "core/display/city_zoom.h"
 #include "core/log.h"
@@ -28,6 +29,18 @@ const Var<int> kMapRowMin{0x115f6e0};
 const Var<int> kMapRowMax{0x115f6dc};
 const Var<char> kGameScreen{0x10de045};
 const Var<char> kRedraw{0x10de036};
+// view_clamp's bottom margin (r5_city_zoom.md section 9.1): map_bottom_margin 0x53d700 (__fastcall, ecx = 0xbebf38)
+// reads this + 0x19628 + (0 for direction 0, 1 for 2, 2 for 4, 3 for any other) -- the highest tile along the edge at
+// the bottom of the screen (0x535960). view_clamp's bottom limit is the map's minus (margin + 4) when it is not 0.
+const Var<unsigned char> kBottomMargin{0xbebf38 + 0x19628}; // 4 bytes
+const Var<int> kDirection{0x101d0d0};                       // 0, 2, 4, 6
+// The game's frame (for the small city view's screenshot).
+const Var<BYTE *> kDrawBuffer{0x1156df8};
+const Var<int> kScreenPitch{0x10de000};
+const Var<int> kDdWidth{0x10de008};
+const Var<int> kDdHeight{0x10de004};
+
+constexpr int kZoomCap = 150; // larger views cost too much speed (R5b's first test)
 
 using Void_fn = void(__cdecl *)();
 using RenderAt_fn = void(__cdecl *)(int, int, int, int);
@@ -41,8 +54,9 @@ bool g_average = true;
 void (*g_relayout)() = nullptr;
 
 core::display::ZoomLayout g_now{100, 0, 0, false, true, 0, 0, 0, 0};
-int g_lastMapCols = -1, g_lastMapRows = -1;
-int g_logged[6] = {-1, -1, -1, -1, -1, -1}; // percent, requested, map cols, map rows, show w, show h
+int g_lastMapCols = -1, g_lastMapRows = -1, g_lastClampRows = -1;
+int g_logged[7] = {-1, -1, -1, -1, -1, -1, -1}; // percent, requested, map cols, map rows, clamp rows, show w, show h
+int g_loggedMargin = -1;
 
 int MapCols()
 {
@@ -54,6 +68,31 @@ int MapRows()
     return *kMapRowMax - *kMapRowMin;
 }
 
+int MarginIndex()
+{
+    const int d = *kDirection;
+    return d == 0 ? 0 : d == 2 ? 1 : d == 4 ? 2 : 3;
+}
+
+int Margin()
+{
+    return kBottomMargin.ptr()[MarginIndex()];
+}
+
+// The half rows view_clamp can hold now: its bottom limit minus its top one (r5_city_zoom.md section 9.1). The
+// margin is kept as the game has it: without it, the rows below raised ground at the bottom edge show leftovers of
+// earlier frames (nothing is drawn there; R5b's second test, r5b_city_zoom.md section 5).
+int ClampRows()
+{
+    const int m = Margin();
+    return MapRows() - (m != 0 ? m + 4 : 0);
+}
+
+void Clamp()
+{
+    Original(o_ViewClamp, kViewClamp)();
+}
+
 // The view laid out again, then view_x / view_y clamped to it at once (the game's own view_clamp, not our hook): a
 // larger view at the map's edge must not reach past the map until the game clamps next.
 void Relayout(const char *why)
@@ -61,31 +100,43 @@ void Relayout(const char *why)
     if (g_relayout && core::diag::Enabled(g_feature)) {
         core_log("zoom: the city view is laid out again (%s)", why);
         g_relayout();
-        Original(o_ViewClamp, kViewClamp)();
+        Clamp();
     }
 }
 
-// Before every view_clamp: a new map (loading a game) or a view larger than the map gets the view laid out again
-// first, so the view is never clamped (and then drawn) larger than the map's range.
+// Before every view_clamp: a new map (loading a game), a turn (another bottom margin) or a view larger than the map
+// gets the view laid out again first, so the view is never clamped (and then drawn) larger than the map's range.
 void __cdecl ViewClamp_detour()
 {
-    if (g_attached && core::diag::Enabled(g_feature) && g_requested != 100) {
-        if (MapCols() != g_lastMapCols || MapRows() != g_lastMapRows) {
-            Relayout("the map's range changed");
+    if (g_attached && core::diag::Enabled(g_feature)) {
+        const int m = Margin() | MarginIndex() << 8;
+        if (m != g_loggedMargin) {
+            g_loggedMargin = m;
+            core_log("zoom: the bottom margin for direction %d is %d half row(s)%s", *kDirection, m & 0xff,
+                     (m & 0xff) == 0 ? "" : " (+4: view_clamp keeps them below the screen)");
+        }
+        if (g_requested != 100 &&
+            (MapCols() != g_lastMapCols || MapRows() != g_lastMapRows || ClampRows() != g_lastClampRows)) {
+            Relayout(ClampRows() != g_lastClampRows && MapRows() == g_lastMapRows ? "another bottom margin"
+                                                                                  : "the map's range changed");
         }
     }
-    Original(o_ViewClamp, kViewClamp)();
+    Clamp();
 }
 
+// The small city view (0x46a320): where it is shown is not known yet (r5_city_zoom.md section 8.4); the first time,
+// the frame it is in is saved at the next present.
 bool g_loggedRenderAt = false;
+bool g_shotPending = false;
 
 void __cdecl RenderAt_detour(int vx, int vy, int a, int b)
 {
     if (!g_loggedRenderAt) {
         g_loggedRenderAt = true;
-        core_log("zoom: city_render_tiles_at (a small city view with its own viewport) drawn on screen 0x%02x "
-                 "(R5b: which window shows it)",
-                 static_cast<unsigned char>(*kGameScreen));
+        g_shotPending = true;
+        core_log("zoom: city_render_tiles_at (a small city view with its own viewport) drawn on screen 0x%02x at "
+                 "city zoom %d%%; the frame is saved as shots\\smallview_...",
+                 static_cast<unsigned char>(*kGameScreen), g_now.percent);
     }
     Original(o_RenderAt, kRenderAt)(vx, vy, a, b);
 }
@@ -129,9 +180,9 @@ void RegisterSettings()
         "display", "city_zoom", "City zoom (%)",
         "How much of the city is seen, in percent of the game's own size: 100 as the game draws it, 200 twice as much "
         "of the city (everything half the size), 50 half as much (everything twice the size). The sidebar and the "
-        "menus keep their size. The largest value is what the current map allows (the slider ends there; a larger "
-        "value in emperor_engine.ini is shown as large as allowed). Test version: while it is not 100, clicks on the "
-        "city do nothing.",
+        "menus keep their size. At most 150 (more of the city costs too much speed), and at most what the current "
+        "map allows (the slider ends there; a larger value in emperor_engine.ini is shown as large as allowed). Test "
+        "version: while it is not 100, clicks on the city do nothing.",
         Type::Int, "100", Effect::Live, true, true, core::display::kZoomMin, core::display::kZoomMax, 5, nullptr,
         nullptr, nullptr, 0, "%", &LimitNow});
     core::settings::OnChange(i, &ApplyZoom);
@@ -160,16 +211,20 @@ int ViewFor(int showW, int showH, int colPx, int halfH, int *cols, int *rows)
 {
     g_lastMapCols = MapCols();
     g_lastMapRows = MapRows();
+    g_lastClampRows = ClampRows();
     // The zoomed city is drawn by smooth scrolling's city render (games/emperor/scroll): without it, no zoom (the game
     // would draw the zoomed view straight into the back buffer).
     if (!g_attached || !core::diag::Enabled(g_feature) || g_requested == 100 || !emperor::scroll::Working()) {
         g_now = core::display::ZoomLayout{100, 0, 0, false, false, 0, 0, 0, 0};
         if (g_attached && colPx > 0 && halfH > 0) { // the limit for the panel's slider only
-            g_now.limit = core::display::ZoomFor({100, showW, showH, colPx, halfH, g_lastMapCols, g_lastMapRows}).limit;
+            g_now.limit = core::display::ZoomFor({100, showW, showH, colPx, halfH, g_lastMapCols, g_lastMapRows,
+                                                  g_lastClampRows, kZoomCap})
+                              .limit;
         }
         return 100;
     }
-    const core::display::ZoomInput in{g_requested, showW, showH, colPx, halfH, g_lastMapCols, g_lastMapRows};
+    const core::display::ZoomInput in{g_requested,  showW,         showH,           colPx,   halfH,
+                                      g_lastMapCols, g_lastMapRows, g_lastClampRows, kZoomCap};
     g_now = core::display::ZoomFor(in);
     if (!g_now.unknownMap && g_now.limit == 0) { // not even 50% fits: the game's own size for this map
         g_now.percent = 100;
@@ -179,17 +234,19 @@ int ViewFor(int showW, int showH, int colPx, int halfH, int *cols, int *rows)
         *cols = g_now.cols;
         *rows = g_now.rows;
     }
-    const int key[6] = {g_now.percent, g_requested, g_lastMapCols, g_lastMapRows, showW, showH};
+    const int key[7] = {g_now.percent, g_requested, g_lastMapCols, g_lastMapRows, g_lastClampRows, showW, showH};
     if (std::memcmp(key, g_logged, sizeof(key)) != 0) {
         std::memcpy(g_logged, key, sizeof(key));
         // The buffer the drawing will use (games/emperor/scroll): the view plus one column and a row pair, a little
         // margin; 2 bytes a pixel.
         const double mb = (static_cast<double>(g_now.cols + 1) * colPx + 8) * ((g_now.rows + 3) * halfH + 48) * 2 /
                           (1024.0 * 1024.0);
-        core_log("zoom: city %d%% (asked %d%%%s) on %d x %d px, map range %d x %d: the map allows up to %d%% "
-                 "(Augustus' limit %d%%); view %d x %d, zoomed city %d x %d px, buffer about %.1f MB%s",
+        core_log("zoom: city %d%% (asked %d%%%s) on %d x %d px, map range %d x %d (the clamp holds %d half rows): "
+                 "up to %d%% allowed (cap %d%%, Augustus' limit %d%%); view %d x %d, zoomed city %d x %d px, buffer "
+                 "about %.1f MB%s",
                  g_now.percent, g_requested, g_now.capped ? ", capped" : "", showW, showH, g_lastMapCols,
-                 g_lastMapRows, g_now.limit, g_now.augustus, g_now.cols, g_now.rows, g_now.bufW, g_now.bufH, mb,
+                 g_lastMapRows, g_lastClampRows, g_now.limit, kZoomCap, g_now.augustus, g_now.cols, g_now.rows,
+                 g_now.bufW, g_now.bufH, mb,
                  g_now.unknownMap ? " (no map yet: 100%)"
                  : g_now.limit == 0 ? " -- THE MAP IS SMALLER THAN EVEN 50%: the game's own size"
                                     : "");
@@ -221,7 +278,24 @@ bool AverageShrink()
 
 bool ViewFits(int cols, int rows)
 {
-    return cols + 1 <= MapCols() && rows + 2 <= MapRows();
+    return core::display::ViewFitsMap(cols, rows, MapCols(), MapRows(), ClampRows());
+}
+
+void OnPresent()
+{
+    if (!g_shotPending) {
+        return;
+    }
+    g_shotPending = false;
+    core::diag::Guarded(
+        g_feature,
+        [](void *) {
+            const BYTE *back = *kDrawBuffer;
+            if (back && *kScreenPitch > 0 && *kDdWidth > 0 && *kDdHeight > 0) {
+                core::capture::SaveOne(back, *kScreenPitch, *kDdWidth, *kDdHeight, "smallview", "game");
+            }
+        },
+        nullptr);
 }
 
 void Off(const char *why)
@@ -234,7 +308,7 @@ void Off(const char *why)
     g_now = core::display::ZoomLayout{100, 0, 0, false, false, 0, 0, 0, 0};
     if (g_relayout) {
         g_relayout(); // ViewFor gives 100 now
-        Original(o_ViewClamp, kViewClamp)();
+        Clamp();
     }
 }
 
@@ -248,8 +322,8 @@ void Recheck()
     if (!g_attached || g_requested == 100 || !core::diag::Enabled(g_feature)) {
         return;
     }
-    if (MapCols() != g_lastMapCols || MapRows() != g_lastMapRows) {
-        Relayout("the map's range changed (drawing)");
+    if (MapCols() != g_lastMapCols || MapRows() != g_lastMapRows || ClampRows() != g_lastClampRows) {
+        Relayout("the map's range or the bottom margin changed (drawing)");
     }
     else if (g_now.percent != 100 && !ViewFits(g_now.cols, g_now.rows)) { // cannot stay so: ViewFor caps it
         Relayout("the view does not fit the map (drawing)");

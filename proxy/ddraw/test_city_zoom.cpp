@@ -6,10 +6,16 @@
 //   - for every percent 50..400: the buffer region shown plus any remainder stays inside the drawn clip;
 //   - enlarging (ScaleRgb565 at 100/percent) covers the whole city on the screen;
 //   - averaged and nearest shrinking: flat colours stay, a checkerboard averages to grey, nearest picks one pixel,
-//     nonsense is refused.
+//     nonsense is refused;
+//   - view_clamp's bottom margin (section 9.1): the limit's view is never taller than the clamp holds; the caller's
+//     cap (150);
+//   - the rows split over our workers (core/platform/parallel, section 9.2) give the same pixels as one thread, and
+//     with no workers everything runs on the caller.
 #include "core/display/city_zoom.h"
 #include "core/display/scaled_rect.h"
+#include "core/platform/parallel.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <vector>
@@ -179,6 +185,120 @@ int main()
         const cd::Target16 d4{tiny.data(), 10, 10, 10};
         bool big32 = cd::ShrinkRgb565(s, 10, 10, true, d4); // 30 x 20 blocks: more than 32 pixels, nearest
         CheckShown(big32, "a block over 32 pixels falls back to nearest");
+    }
+
+    // --- view_clamp's bottom margin (r5_city_zoom.md section 9.1): the view never taller than the clamp holds
+    {
+        bool ok = true;
+        for (const Screen &sc : screens) {
+            for (const Map &m : maps) {
+                for (int margin : {0, 1, 3, 6, 12}) {
+                    const int clampRows = m.rows - (margin ? margin + 4 : 0);
+                    cd::ZoomInput in{400, sc.showW, sc.showH, colPx, halfH, m.cols, m.rows, clampRows};
+                    const cd::ZoomLayout z = cd::ZoomFor(in);
+                    if (z.limit == 0) {
+                        continue;
+                    }
+                    if (z.rows > clampRows || z.rows + 2 > m.rows || z.cols + 1 > m.cols) {
+                        ok = false;
+                        std::printf("  %s map %d x %d margin %d: %d%% gives %d half rows (clamp %d)\n", sc.name,
+                                    m.cols, m.rows, margin, z.limit, z.rows, clampRows);
+                    }
+                    if (z.limit < cd::kZoomMax && cd::ZoomFits(in, z.limit + 1)) {
+                        ok = false;
+                    }
+                }
+            }
+        }
+        CheckShown(ok, "with a bottom margin: the limit's view fits the clamp, one percent more does not");
+        // The first test's case: 112 x 224 at 2560x1440 asked 315 gave 222 half rows; with a margin it must be less.
+        cd::ZoomInput in{315, 2334, 1400, colPx, halfH, 112, 224, 224 - (3 + 4)};
+        const cd::ZoomLayout z = cd::ZoomFor(in);
+        std::snprintf(what, sizeof(what), "112 x 224, margin 3: limit %d%%, %d half rows <= %d", z.limit, z.rows,
+                      224 - 7);
+        CheckShown(z.rows <= 224 - 7 && z.limit < 315, what);
+    }
+
+    // --- the caller's cap (games/emperor/zoom: 150)
+    {
+        cd::ZoomInput in{315, 2334, 1400, colPx, halfH, 112, 224, 0, 150};
+        const cd::ZoomLayout z = cd::ZoomFor(in);
+        CheckShown(z.percent == 150 && z.limit == 150 && z.capped, "cap 150: a request of 315 gives 150, capped");
+        in.requested = 125;
+        CheckShown(cd::ZoomFor(in).percent == 125, "cap 150: 125 stays 125");
+        in.mapCols = 54;
+        in.mapRows = 112;
+        in.requested = 150;
+        const cd::ZoomLayout s = cd::ZoomFor(in);
+        std::snprintf(what, sizeof(what), "cap 150 on the small map: the map's own limit %d%% when lower", s.limit);
+        CheckShown(s.limit <= 150 && s.percent == s.limit, what);
+    }
+
+    // --- the same pixels with the rows split over our workers (core/platform/parallel)
+    {
+        struct Case {
+            int sw, sh, ow, oh;
+        };
+        const Case cases[] = {{2919, 1751, 2334, 1400}, {3502, 2101, 2334, 1400}, {301, 203, 97, 61}, {64, 40, 63, 9}};
+        unsigned seed = 12345;
+        bool same = true;
+        for (const Case &k : cases) {
+            std::vector<WORD> src(static_cast<size_t>(k.sw) * k.sh);
+            for (WORD &w : src) {
+                seed = seed * 1103515245u + 12345u;
+                w = static_cast<WORD>(seed >> 16);
+            }
+            const cd::Pixels16 s{src.data(), k.sw, k.sw, k.sh};
+            for (bool average : {true, false}) {
+                std::vector<WORD> a(static_cast<size_t>(k.ow) * k.oh, 1), b(a.size(), 2);
+                cd::ShrinkRgb565(s, k.ow, k.oh, average, cd::Target16{a.data(), k.ow, k.ow, k.oh});
+                cd::ShrinkRgb565(s, k.ow, k.oh, average, cd::Target16{b.data(), k.ow, k.ow, k.oh},
+                                 &core::platform::parallel::ForRows);
+                same = same && a == b;
+            }
+            // Enlarging the shrunk size back up (50%-like): sharp bilinear, into a larger picture with a clip.
+            const cd::Pixels16 small{src.data(), k.sw, k.ow, k.oh};
+            const int tw = k.ow * 2 + 7, th = k.oh * 2 + 5;
+            std::vector<WORD> a(static_cast<size_t>(tw) * th, 3), b(a.size(), 3);
+            const RECT clip{3, 2, tw - 1, th - 2};
+            cd::ScaleRgb565(small, 2.0, true, cd::Target16{a.data(), tw, tw, th}, 3, 2, clip);
+            cd::ScaleRgb565(small, 2.0, true, cd::Target16{b.data(), tw, tw, th}, 3, 2, clip,
+                            &core::platform::parallel::ForRows);
+            same = same && a == b;
+        }
+        std::snprintf(what, sizeof(what), "split over %d worker(s): shrinking and enlarging give the same pixels",
+                      core::platform::parallel::Workers());
+        CheckShown(same, what);
+        // Timing (printed only; the real numbers come from the game's log): 125% at 2560x1440.
+        {
+            std::vector<WORD> big(2919 * 1751, 0x1234), out(2334 * 1400);
+            const cd::Pixels16 s{big.data(), 2919, 2919, 1751};
+            const cd::Target16 d{out.data(), 2334, 2334, 1400};
+            LARGE_INTEGER f, t0, t1, t2;
+            QueryPerformanceFrequency(&f);
+            double serial = 1e9, split = 1e9;
+            for (int i = 0; i < 20; ++i) {
+                QueryPerformanceCounter(&t0);
+                cd::ShrinkRgb565(s, 2334, 1400, true, d);
+                QueryPerformanceCounter(&t1);
+                cd::ShrinkRgb565(s, 2334, 1400, true, d, &core::platform::parallel::ForRows);
+                QueryPerformanceCounter(&t2);
+                serial = std::min(serial, (t1.QuadPart - t0.QuadPart) * 1000.0 / f.QuadPart);
+                split = std::min(split, (t2.QuadPart - t1.QuadPart) * 1000.0 / f.QuadPart);
+            }
+            std::printf("  timing, 2919 x 1751 -> 2334 x 1400 average: one thread %.2f ms, split %.2f ms (best of 20)\n",
+                        serial, split);
+        }
+        core::platform::parallel::LimitWorkers(0);
+        std::vector<WORD> src(300 * 200, 0x4321), a(150 * 100, 0);
+        cd::ShrinkRgb565(cd::Pixels16{src.data(), 300, 300, 200}, 150, 100, true, cd::Target16{a.data(), 150, 150, 100},
+                         &core::platform::parallel::ForRows);
+        bool flat = core::platform::parallel::Workers() == 0;
+        for (WORD w : a) {
+            flat = flat && w == 0x4321;
+        }
+        CheckShown(flat, "no workers: everything on the caller");
+        core::platform::parallel::LimitWorkers(core::platform::parallel::kMaxWorkers);
     }
 
     std::printf("RESULT: %s (%d checks, %d failure(s))\n", g_failures ? "FAILED" : "PASS", g_checks, g_failures);

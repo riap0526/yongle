@@ -22,17 +22,24 @@ void ZoomView(const ZoomInput &in, int percent, int *cols, int *rows)
     *rows = CeilDiv(ZoomedSize(in.showH, percent), in.halfH) + 1;
 }
 
+bool ViewFitsMap(int cols, int rows, int mapCols, int mapRows, int clampRows)
+{
+    return cols + 1 <= mapCols && rows + 2 <= mapRows && (clampRows <= 0 || rows <= clampRows);
+}
+
 bool ZoomFits(const ZoomInput &in, int percent)
 {
     int cols = 0, rows = 0;
     ZoomView(in, percent, &cols, &rows);
-    return cols + 1 <= in.mapCols && rows + 2 <= in.mapRows;
+    return ViewFitsMap(cols, rows, in.mapCols, in.mapRows, in.clampRows);
 }
 
 ZoomLayout ZoomFor(const ZoomInput &in)
 {
     ZoomLayout z{};
-    int want = in.requested < kZoomMin ? kZoomMin : in.requested > kZoomMax ? kZoomMax : in.requested;
+    const int cap = in.maxPercent > 0 && in.maxPercent < kZoomMax ? (in.maxPercent < kZoomMin ? kZoomMin : in.maxPercent)
+                                                                   : kZoomMax;
+    int want = in.requested < kZoomMin ? kZoomMin : in.requested > cap ? cap : in.requested;
     if (in.showW <= 0 || in.showH <= 0 || in.colPx <= 0 || in.halfH <= 0) {
         want = 100;
     }
@@ -43,7 +50,7 @@ ZoomLayout ZoomFor(const ZoomInput &in)
     }
     else {
         int limit = 0;
-        for (int p = kZoomMax; p >= kZoomMin; --p) {
+        for (int p = cap; p >= kZoomMin; --p) {
             if (ZoomFits(in, p)) {
                 limit = p;
                 break;
@@ -57,7 +64,8 @@ ZoomLayout ZoomFor(const ZoomInput &in)
         z.augustus = ax > ay ? ax : ay;
         z.augustus = z.augustus < 100 ? 100 : z.augustus;
         z.percent = limit == 0 ? kZoomMin : (want > limit ? limit : want);
-        z.capped = want > z.percent;
+        const int asked = in.requested < kZoomMin ? kZoomMin : in.requested > kZoomMax ? kZoomMax : in.requested;
+        z.capped = asked > z.percent; // by the map or by the cap
     }
     z.bufW = ZoomedSize(in.showW, z.percent);
     z.bufH = ZoomedSize(in.showH, z.percent);

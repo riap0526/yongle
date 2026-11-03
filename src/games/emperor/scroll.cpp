@@ -45,6 +45,7 @@
 #include "core/scroll/smooth_scroll.h"
 #include "games/emperor/site.h"
 #include "games/emperor/zoom.h"
+#include "core/platform/parallel.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -526,12 +527,14 @@ bool RenderZoomed(RenderCall &c)
     WORD *screen = reinterpret_cast<WORD *>(back);
     if (percent > 100) {
         const core::display::Target16 dst{screen + static_cast<size_t>(top) * width + left, width, showW, showH};
-        core::display::ShrinkRgb565(src, showW, showH, emperor::zoom::AverageShrink(), dst);
+        core::display::ShrinkRgb565(src, showW, showH, emperor::zoom::AverageShrink(), dst,
+                                    &core::platform::parallel::ForRows);
     }
     else {
         const core::display::Target16 dst{screen, width, width, height};
         const RECT clip{left, top, showRight, showBottom};
-        core::display::ScaleRgb565(src, 100.0 / percent, true, dst, left, top, clip);
+        core::display::ScaleRgb565(src, 100.0 / percent, true, dst, left, top, clip,
+                                   &core::platform::parallel::ForRows);
     }
     core::diag::perf::Add(kCityZoomPhase, core::diag::perf::Now() - start);
     return true;

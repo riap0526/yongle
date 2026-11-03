@@ -67,6 +67,10 @@ void TakeWindow(char *out, std::size_t size);
 // ones when that leaves none; 0 when nothing is left. Exposed for the offline test.
 std::uintptr_t ChooseOurs(std::uintptr_t original, std::uintptr_t system, const std::uintptr_t *cores, int count);
 
+// Logical processors our threads can use without sharing the game thread's (core/platform/parallel): our mask's
+// when the feature runs, else the process's minus one; 0 when there is only one.
+int ProcessorsApart();
+
 // For the offline test: "off", "binding", "on", "external" or "reverted".
 const char *StateName();
 

@@ -55,6 +55,7 @@ add_library(ddraw SHARED
     src/core/platform/timing.cpp
     src/core/platform/files.cpp
     src/core/platform/affinity.cpp
+    src/core/platform/parallel.cpp
     src/core/display/virtual_display.cpp
     src/core/display/logical_size.cpp
     src/core/display/framing.cpp
@@ -198,7 +199,8 @@ target_link_options(test_moved_rect PRIVATE -static)
 # Offline test of core/display/city_zoom and the shrinking in core/display/scaled_rect (R5,
 # docs/resolution_ui/r5_city_zoom.md): the zoom limit for map and screen sizes, the cap, averaged and nearest shrinking.
 add_executable(test_city_zoom proxy/ddraw/test_city_zoom.cpp src/core/display/city_zoom.cpp
-    src/core/display/scaled_rect.cpp)
+    src/core/display/scaled_rect.cpp src/core/platform/parallel.cpp src/core/platform/affinity.cpp
+    src/core/diag/guard.cpp src/core/log.cpp)
 target_include_directories(test_city_zoom PRIVATE src)
 target_link_options(test_city_zoom PRIVATE -static)
 
@@ -273,7 +275,7 @@ add_executable(test_restore proxy/ddraw/test_restore.cpp
     src/games/emperor/zoom.cpp src/core/display/city_zoom.cpp
     src/core/scroll/smooth_scroll.cpp src/core/diag/guard.cpp src/core/diag/report.cpp src/core/diag/perf.cpp
     src/core/diag/environment.cpp src/core/diag/stall.cpp src/core/platform/affinity.cpp src/core/log.cpp
-    src/core/display/logical_size.cpp
+    src/core/platform/parallel.cpp src/core/display/logical_size.cpp
     src/core/display/moved_rect.cpp src/core/display/scaled_rect.cpp src/core/ddraw/surface_memory.cpp
     src/core/assets/sg3.cpp src/core/config.cpp src/core/settings/settings.cpp src/core/settings/ini_text.cpp
     src/core/ui/hotkey.cpp src/core/hook/hook.cpp src/core/platform/files.cpp)

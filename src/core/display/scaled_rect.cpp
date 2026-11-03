@@ -58,9 +58,134 @@ void Taps(int count, int origin, double scale, bool sharp, int srcSize, std::vec
     }
 }
 
+// The output rows' work of ScaleRgb565 (each piece of rows on its own; scratch rows per thread).
+struct ScaleJob {
+    const Pixels16 *src;
+    const Target16 *dst;
+    const std::vector<Tap> *cols, *rows;
+    int left, top, n;
+};
+
+void ScaleRows(void *p, int begin, int end)
+{
+    const ScaleJob &j = *static_cast<const ScaleJob *>(p);
+    thread_local std::vector<WORD> a, b;
+    if (static_cast<int>(a.size()) < j.n) {
+        a.resize(j.n);
+        b.resize(j.n);
+    }
+    const std::vector<Tap> &cols = *j.cols;
+    const int n = j.n;
+    for (int r = begin; r < end; ++r) {
+        const Tap &t = (*j.rows)[r];
+        const WORD *s0 = j.src->px + static_cast<size_t>(t.i0) * j.src->stride;
+        const WORD *s1 = j.src->px + static_cast<size_t>(t.i1) * j.src->stride;
+        WORD *d = j.dst->px + static_cast<size_t>(j.top + r) * j.dst->stride + j.left;
+        for (int c = 0; c < n; ++c) {
+            const Tap &u = cols[c];
+            a[c] = Lerp(s0[u.i0], s0[u.i1], u.w);
+        }
+        if (t.w == 0 || t.i0 == t.i1) {
+            std::copy(a.begin(), a.begin() + n, d);
+            continue;
+        }
+        for (int c = 0; c < n; ++c) {
+            const Tap &u = cols[c];
+            b[c] = Lerp(s1[u.i0], s1[u.i1], u.w);
+        }
+        if (t.w >= 32) {
+            std::copy(b.begin(), b.begin() + n, d);
+            continue;
+        }
+        for (int c = 0; c < n; ++c) {
+            d[c] = Lerp(a[c], b[c], t.w);
+        }
+    }
+}
+
+// The output rows' work of ShrinkRgb565.
+struct ShrinkJob {
+    const Pixels16 *src;
+    const Target16 *dst;
+    const int *bx, *by, *cx; // block boundaries (outW + 1, outH + 1) and, for nearest, each column's centre
+    int outW;
+    bool average;
+};
+
+void ShrinkRows(void *p, int begin, int end)
+{
+    const ShrinkJob &j = *static_cast<const ShrinkJob *>(p);
+    const Pixels16 &src = *j.src;
+    const int outW = j.outW;
+    if (!j.average) {
+        // Nearest: the source pixel at the centre of each block.
+        for (int r = begin; r < end; ++r) {
+            const WORD *s = src.px + static_cast<size_t>((j.by[r] + j.by[r + 1] - 1) / 2) * src.stride;
+            WORD *d = j.dst->px + static_cast<size_t>(r) * j.dst->stride;
+            for (int i = 0; i < outW; ++i) {
+                d[i] = s[j.cx[i]];
+            }
+        }
+        return;
+    }
+    // Average: every source pixel of the block counted once (spread sums: at most 32 pixels, checked by the caller),
+    // then divided by the block's size with a 16.16 reciprocal.
+    static const struct Inverse {
+        DWORD v[33];
+        Inverse()
+        {
+            v[0] = 0;
+            for (int n = 1; n <= 32; ++n) {
+                v[n] = (65536u + n / 2) / n;
+            }
+        }
+    } inverse;
+    thread_local std::vector<DWORD> column;
+    if (static_cast<int>(column.size()) < src.w) {
+        column.resize(src.w);
+    }
+    for (int r = begin; r < end; ++r) {
+        const int y0 = j.by[r], y1 = j.by[r + 1] > y0 ? j.by[r + 1] : y0 + 1;
+        const WORD *row = src.px + static_cast<size_t>(y0) * src.stride;
+        for (int x = 0; x < src.w; ++x) {
+            column[x] = Spread(row[x]);
+        }
+        for (int y = y0 + 1; y < y1; ++y) {
+            row = src.px + static_cast<size_t>(y) * src.stride;
+            for (int x = 0; x < src.w; ++x) {
+                column[x] += Spread(row[x]);
+            }
+        }
+        WORD *d = j.dst->px + static_cast<size_t>(r) * j.dst->stride;
+        for (int i = 0; i < outW; ++i) {
+            const int x0 = j.bx[i], x1 = j.bx[i + 1] > x0 ? j.bx[i + 1] : x0 + 1;
+            DWORD sum = 0;
+            for (int x = x0; x < x1; ++x) {
+                sum += column[x];
+            }
+            const DWORD inv = inverse.v[(x1 - x0) * (y1 - y0)];
+            const DWORD b = ((sum & 0x3FFu) * inv + 0x8000u) >> 16;
+            const DWORD rr = (((sum >> 11) & 0x3FFu) * inv + 0x8000u) >> 16;
+            const DWORD g = ((sum >> 21) * inv + 0x8000u) >> 16;
+            d[i] = static_cast<WORD>((rr > 31 ? 31 : rr) << 11 | (g > 63 ? 63 : g) << 5 | (b > 31 ? 31 : b));
+        }
+    }
+}
+
+void RunRows(ForRows forRows, int count, RowsFn fn, void *ctx)
+{
+    if (forRows) {
+        forRows(count, fn, ctx);
+    }
+    else {
+        fn(ctx, 0, count);
+    }
+}
+
 } // namespace
 
-bool ScaleRgb565(const Pixels16 &src, double scale, bool sharp, const Target16 &dst, int x, int y, const RECT &clip)
+bool ScaleRgb565(const Pixels16 &src, double scale, bool sharp, const Target16 &dst, int x, int y, const RECT &clip,
+                 ForRows forRows)
 {
     if (!src.px || !dst.px || src.w <= 0 || src.h <= 0 || src.stride < src.w || dst.stride < dst.w || dst.w <= 0 ||
         dst.h <= 0 || !(scale >= 1.0) || scale > 64.0) {
@@ -77,44 +202,19 @@ bool ScaleRgb565(const Pixels16 &src, double scale, bool sharp, const Target16 &
     std::vector<Tap> cols, rows;
     Taps(right - left, x - left, scale, sharp, src.w, &cols);
     Taps(bottom - top, y - top, scale, sharp, src.h, &rows);
-    const int n = right - left;
-    std::vector<WORD> a(n), b(n);
-    for (int r = 0; r < bottom - top; ++r) {
-        const Tap &t = rows[r];
-        const WORD *s0 = src.px + static_cast<size_t>(t.i0) * src.stride;
-        const WORD *s1 = src.px + static_cast<size_t>(t.i1) * src.stride;
-        WORD *d = dst.px + static_cast<size_t>(top + r) * dst.stride + left;
-        for (int c = 0; c < n; ++c) {
-            const Tap &u = cols[c];
-            a[c] = Lerp(s0[u.i0], s0[u.i1], u.w);
-        }
-        if (t.w == 0 || t.i0 == t.i1) {
-            std::copy(a.begin(), a.end(), d);
-            continue;
-        }
-        for (int c = 0; c < n; ++c) {
-            const Tap &u = cols[c];
-            b[c] = Lerp(s1[u.i0], s1[u.i1], u.w);
-        }
-        if (t.w >= 32) {
-            std::copy(b.begin(), b.end(), d);
-            continue;
-        }
-        for (int c = 0; c < n; ++c) {
-            d[c] = Lerp(a[c], b[c], t.w);
-        }
-    }
+    ScaleJob job{&src, &dst, &cols, &rows, left, top, right - left};
+    RunRows(forRows, bottom - top, &ScaleRows, &job);
     return true;
 }
 
-bool ShrinkRgb565(const Pixels16 &src, int outW, int outH, bool average, const Target16 &dst)
+bool ShrinkRgb565(const Pixels16 &src, int outW, int outH, bool average, const Target16 &dst, ForRows forRows)
 {
     if (!src.px || !dst.px || src.w <= 0 || src.h <= 0 || src.stride < src.w || outW <= 0 || outH <= 0 ||
         outW > src.w || outH > src.h || outW > dst.w || outH > dst.h || dst.stride < dst.w) {
         return false;
     }
     // Source pixel boundaries of each output column and row: [b[i], b[i + 1]).
-    std::vector<int> bx(outW + 1), by(outH + 1);
+    std::vector<int> bx(outW + 1), by(outH + 1), cx;
     for (int i = 0; i <= outW; ++i) {
         bx[i] = static_cast<int>(static_cast<long long>(i) * src.w / outW);
     }
@@ -122,54 +222,15 @@ bool ShrinkRgb565(const Pixels16 &src, int outW, int outH, bool average, const T
         by[j] = static_cast<int>(static_cast<long long>(j) * src.h / outH);
     }
     const int maxW = (src.w + outW - 1) / outW, maxH = (src.h + outH - 1) / outH;
-    if (!average || maxW * maxH > 32) {
-        // Nearest: the source pixel at the centre of each block.
-        std::vector<int> cx(outW);
+    const bool avg = average && maxW * maxH <= 32;
+    if (!avg) {
+        cx.resize(outW);
         for (int i = 0; i < outW; ++i) {
             cx[i] = (bx[i] + bx[i + 1] - 1) / 2;
         }
-        for (int j = 0; j < outH; ++j) {
-            const WORD *s = src.px + static_cast<size_t>((by[j] + by[j + 1] - 1) / 2) * src.stride;
-            WORD *d = dst.px + static_cast<size_t>(j) * dst.stride;
-            for (int i = 0; i < outW; ++i) {
-                d[i] = s[cx[i]];
-            }
-        }
-        return true;
     }
-    // Average: every source pixel of the block counted once (spread sums: at most 32 pixels, checked above), then
-    // divided by the block's size with a 16.16 reciprocal.
-    std::vector<DWORD> column(src.w);
-    std::vector<DWORD> inverse(33);
-    for (int n = 1; n <= 32; ++n) {
-        inverse[n] = (65536u + n / 2) / n;
-    }
-    for (int j = 0; j < outH; ++j) {
-        const int y0 = by[j], y1 = by[j + 1] > y0 ? by[j + 1] : y0 + 1;
-        const WORD *row = src.px + static_cast<size_t>(y0) * src.stride;
-        for (int x = 0; x < src.w; ++x) {
-            column[x] = Spread(row[x]);
-        }
-        for (int y = y0 + 1; y < y1; ++y) {
-            row = src.px + static_cast<size_t>(y) * src.stride;
-            for (int x = 0; x < src.w; ++x) {
-                column[x] += Spread(row[x]);
-            }
-        }
-        WORD *d = dst.px + static_cast<size_t>(j) * dst.stride;
-        for (int i = 0; i < outW; ++i) {
-            const int x0 = bx[i], x1 = bx[i + 1] > x0 ? bx[i + 1] : x0 + 1;
-            DWORD sum = 0;
-            for (int x = x0; x < x1; ++x) {
-                sum += column[x];
-            }
-            const DWORD inv = inverse[(x1 - x0) * (y1 - y0)];
-            const DWORD b = ((sum & 0x3FFu) * inv + 0x8000u) >> 16;
-            const DWORD r = (((sum >> 11) & 0x3FFu) * inv + 0x8000u) >> 16;
-            const DWORD g = ((sum >> 21) * inv + 0x8000u) >> 16;
-            d[i] = static_cast<WORD>((r > 31 ? 31 : r) << 11 | (g > 63 ? 63 : g) << 5 | (b > 31 ? 31 : b));
-        }
-    }
+    ShrinkJob job{&src, &dst, bx.data(), by.data(), cx.data(), outW, avg};
+    RunRows(forRows, outH, &ShrinkRows, &job);
     return true;
 }
 

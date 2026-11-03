@@ -37,6 +37,10 @@ bool AverageShrink();
 // drawing before every zoomed frame.
 bool ViewFits(int cols, int rows);
 
+// The game's present (end of a frame): the first frame with the small city view (0x46a320) is saved as
+// shots\smallview_<tag>_game_... (where that view is shown is not known yet).
+void OnPresent();
+
 // Zoom off for the rest of the run (smooth scrolling, which draws the zoomed city, was switched off after an error):
 // the view is laid out again at 100 right away, before the city is drawn the game's way.
 void Off(const char *why);

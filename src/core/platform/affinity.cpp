@@ -83,7 +83,7 @@ struct Ours {
     std::atomic<DWORD> tid{0};
     std::atomic<const char *> name{nullptr};
 };
-constexpr int kOursMax = 8;
+constexpr int kOursMax = 16; // the output, the screenshot writer, the watchdog, the city background, parallel workers
 Ours g_oursList[kOursMax];
 std::atomic<bool> g_listFullLogged{false};
 
@@ -799,6 +799,19 @@ unsigned GraphicsHow(const wchar_t *path)
 const wchar_t *DriverPath(int i)
 {
     return i >= 0 && i < g_driverCount ? g_drivers[i].path : nullptr;
+}
+
+int ProcessorsApart()
+{
+    if (g_state.load() == kOn) {
+        return Bits(g_ours.load());
+    }
+    DWORD_PTR process = 0, system = 0;
+    if (!GetProcessAffinityMask(GetCurrentProcess(), &process, &system)) {
+        return 0;
+    }
+    const int n = Bits(process);
+    return n > 1 ? n - 1 : 0;
 }
 
 const char *StateName()

@@ -350,9 +350,15 @@ void SetViewport(int cols, int rows, int tileW, int tileH)
     if (rows > maxRows) rows = maxRows;
     Function<ViewportInit_fn>(kViewportInit)(0xe4, 0xe4, 0, kTopBar, cols, rows, tileW, tileH);
     int mapCols = *kMapColMax - *kMapColMin, mapRows = *kMapRowMax - *kMapRowMin;
-    core_log("resolution: city viewport %d x %d (tiles %dx%d) for %dx%d; current map view range %d x %d%s", cols,
-             rows, tileW, tileH, *kScreenWidth, *kScreenHeight, mapCols, mapRows,
-             mapCols > 0 && (cols > mapCols || rows > mapRows) ? " -- VIEWPORT LARGER THAN THE MAP" : "");
+    // Logged when it changes: a window with a small city view (0x5a25c0) sets the viewport again every frame.
+    static int logged[7] = {-1, -1, -1, -1, -1, -1, -1};
+    const int key[7] = {cols, rows, tileW, *kScreenWidth, *kScreenHeight, mapCols, mapRows};
+    if (std::memcmp(key, logged, sizeof(key)) != 0) {
+        std::memcpy(logged, key, sizeof(key));
+        core_log("resolution: city viewport %d x %d (tiles %dx%d) for %dx%d; current map view range %d x %d%s", cols,
+                 rows, tileW, tileH, *kScreenWidth, *kScreenHeight, mapCols, mapRows,
+                 mapCols > 0 && (cols > mapCols || rows > mapRows) ? " -- VIEWPORT LARGER THAN THE MAP" : "");
+    }
 }
 
 // Guarded viewport_init; the fallback calls it again with the game's own 1024 values (everything viewport_init
