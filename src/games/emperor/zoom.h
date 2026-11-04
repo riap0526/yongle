@@ -6,7 +6,8 @@
 //             bilinear always).
 // The game's view is the zoomed one all the time (games/emperor/resolution sets it), so view_clamp, centring, rotation,
 // the minimap's frame and bookmarks follow it; games/emperor/scroll draws the city into a buffer of that size and
-// scales it onto the screen. R5b: while the scale is not 100, clicks on the city do not reach the game.
+// scales it onto the screen; the clicks and the positions worked out outside the drawing are converted there too
+// (R5c).
 #pragma once
 
 namespace emperor::zoom {
@@ -53,5 +54,8 @@ void Recheck();
 
 // games/emperor/resolution: lays the city's view out again (the viewport hooks' work).
 void SetRelayout(void (*fn)());
+
+// For the offline test (test_restore): the percent and the buffer size in effect, as ViewFor would set them.
+void SetForTest(int percent, int bufW, int bufH);
 
 } // namespace emperor::zoom

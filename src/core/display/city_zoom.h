@@ -50,6 +50,13 @@ void ZoomView(const ZoomInput &in, int percent, int *cols, int *rows);
 bool ZoomFits(const ZoomInput &in, int percent);
 bool ViewFitsMap(int cols, int rows, int mapCols, int mapRows, int clampRows);
 
+// R5c: screen <-> zoomed buffer along one axis (r5_city_zoom.md section 10.1). origin: where the city starts on the
+// screen and in the buffer (the clip's left or top); f: buffer pixels per screen pixel (bufW / showW when shrinking,
+// percent / 100 when enlarging -- the sampling of ShrinkRgb565 / ScaleRgb565). The remainder of smooth scrolling is
+// not in here (the caller moves the origin for it).
+int ZoomToBuffer(int screen, int origin, double f); // the buffer pixel the screen pixel shows (a block's middle)
+int ZoomToScreen(int buffer, int origin, double f); // where a buffer position is on the screen
+
 // The layout for the input: percent = requested clamped to kZoomMin..min(limit, cap); 100 when the map is
 // unknown; kZoomMin when even that does not fit (logged by the caller; the drawing checks again and draws at the
 // game's own size then).

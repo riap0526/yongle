@@ -1,5 +1,7 @@
 #include "core/display/city_zoom.h"
 
+#include <cmath>
+
 namespace core::display {
 
 namespace {
@@ -20,6 +22,27 @@ void ZoomView(const ZoomInput &in, int percent, int *cols, int *rows)
 {
     *cols = CeilDiv(ZoomedSize(in.showW, percent) + 2, in.colPx);
     *rows = CeilDiv(ZoomedSize(in.showH, percent), in.halfH) + 1;
+}
+
+int ZoomToBuffer(int screen, int origin, double f)
+{
+    const int i = screen - origin;
+    if (f > 1.0) {
+        // Shrinking: screen pixel i shows the block [floor(i f), floor((i + 1) f)) (ShrinkRgb565's blocks); its middle
+        // pixel, the one nearest shrinking samples. (A tiny epsilon: i f is a whole number when i * bufW is a
+        // multiple of showW, and must not come out just below it.)
+        const int b0 = static_cast<int>(std::floor(i * f + 1e-9));
+        int b1 = static_cast<int>(std::floor((i + 1) * f + 1e-9));
+        b1 = b1 > b0 ? b1 : b0 + 1;
+        return origin + static_cast<int>(std::floor((b0 + b1 - 1) / 2.0)); // also left of the origin
+    }
+    // Enlarging (or 1:1): the buffer pixel under the screen pixel's centre.
+    return origin + static_cast<int>(std::floor((i + 0.5) * f));
+}
+
+int ZoomToScreen(int buffer, int origin, double f)
+{
+    return origin + static_cast<int>(std::lround((buffer - origin) / f));
 }
 
 bool ViewFitsMap(int cols, int rows, int mapCols, int mapRows, int clampRows)

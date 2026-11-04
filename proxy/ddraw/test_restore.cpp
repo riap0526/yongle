@@ -15,6 +15,7 @@
 #include "core/assets/sg3.h"
 #include "core/ddraw/surface_memory.h"
 #include "core/diag/guard.h"
+#include "core/display/city_zoom.h"
 #include "core/display/logical_size.h"
 #include "core/log.h"
 #include "games/emperor/china_map.h"
@@ -25,6 +26,7 @@
 #include "games/emperor/scroll.h"
 #include "games/emperor/site.h"
 #include "games/emperor/ui_fixes.h"
+#include "games/emperor/zoom.h"
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -358,8 +360,13 @@ void __cdecl FakeCityRender(int, int, int)
     }
 }
 
-int __cdecl FakeScreenToGrid(int, int)
+int g_convertArgs[2] = {};
+int g_mouseSeen[2] = {};
+
+int __cdecl FakeScreenToGrid(int x, int y)
 {
+    g_convertArgs[0] = x;
+    g_convertArgs[1] = y;
     ++g_convert.calls;
     g_convert.a = At<int>(aOriginX);
     g_convert.b = At<int>(aOriginY);
@@ -377,6 +384,8 @@ int __cdecl FakeMouseToGrid(int)
 {
     ++g_mouse.calls;
     const int x = At<int>(aMouseX), y = At<int>(aMouseY), ox = At<int>(aOriginX), oy = At<int>(aOriginY);
+    g_mouseSeen[0] = x;
+    g_mouseSeen[1] = y;
     if (x < ox || x >= ox + (At<int>(aTileW) + 2) * At<int>(aCols) || y < oy ||
         y >= oy + At<int>(aTileHalfH) * At<int>(aRows)) {
         return 0;
@@ -409,11 +418,21 @@ void __cdecl FakeNothing() {}
 
 void __fastcall FakeDragStart(int *) {}
 
+// R5c: what drag_select_draw sees of its limits and of grid_to_screen (the hooked one, as the game calls it).
+using GridToScreen_fn = void(__cdecl *)(int, int, int *, int *);
+GridToScreen_fn g_dragGts = nullptr;
+int g_dragLimits[2] = {}, g_dragGtsSeen[2] = {};
+
 void __fastcall FakeDragDraw(int *drag)
 {
     ++g_drag.calls;
     g_drag.a = drag[2];
     g_drag.b = drag[3];
+    g_dragLimits[0] = At<int>(aSidebarX);
+    g_dragLimits[1] = At<int>(aDdH);
+    if (g_dragGts) {
+        g_dragGts(1, 2, &g_dragGtsSeen[0], &g_dragGtsSeen[1]);
+    }
     if (Fires("drag_draw")) {
         Fault();
     }
@@ -851,6 +870,58 @@ void M4DragFault()
     Scroll<Drag_fn>("drag_select_draw")(drag);
     Check(!emperor::scroll::Working() && drag[2] == 300 && drag[3] == 400, "fault: drag start corner put back");
     Check(g_drag.calls == 3 && g_drag.a == 300 && g_drag.b == 400, "drawn again the game's own way");
+}
+
+// ---------------------------------------------------------------------------------------------
+// R5c: conversions while the city is zoomed (docs/resolution_ui/r5_city_zoom.md section 10)
+
+void R5cZoom()
+{
+    // The city on the screen: (0, 40) to (1678, 1080), 1678 x 1040; at 150% the buffer part shown is 2518 x 1561.
+    emperor::scroll::SetCityExtent(1678, 1080);
+    emperor::zoom::SetForTest(150, 2518, 1561);
+    emperor::scroll::SetRemainderForTest(5, 6);
+    const double fx = 2518.0 / 1678, fy = 1561.0 / 1040;
+    namespace cd = core::display;
+
+    Scroll<Convert_fn>("screen_to_grid")(100, 140);
+    Check(g_convertArgs[0] == cd::ZoomToBuffer(100, 0, fx) && g_convertArgs[1] == cd::ZoomToBuffer(140, 40, fy) &&
+              g_convert.a == -5 && g_convert.b == 34,
+          "zoomed screen_to_grid: the buffer pixel the point shows, the origin moved by the remainder");
+    Check(At<int>(aOriginX) == 0 && At<int>(aOriginY) == 40, "afterwards: the origin is the game's again");
+
+    At<int>(aMouseX) = 100;
+    At<int>(aMouseY) = 140;
+    Scroll<MouseToGrid_fn>("mouse_to_grid")(0);
+    Check(g_mouseSeen[0] == cd::ZoomToBuffer(100, 0, fx) && g_mouseSeen[1] == cd::ZoomToBuffer(140, 40, fy),
+          "zoomed mouse_to_grid: the game reads the mouse as the buffer pixel it shows");
+    Check(At<int>(aMouseX) == 100 && At<int>(aMouseY) == 140, "afterwards: the game's mouse is the screen's again");
+    const int before = g_mouse.calls;
+    At<int>(aMouseX) = 1700; // over the sidebar: the zoomed viewport reaches past it, the city on the screen does not
+    Check(Scroll<MouseToGrid_fn>("mouse_to_grid")(0) == 0 && g_mouse.calls == before,
+          "zoomed: a click on the sidebar is no tile (the city as shown on the screen, not the zoomed viewport)");
+    At<int>(aMouseX) = 100;
+
+    int sx = 0, sy = 0;
+    Scroll<GridToScreen_fn>("grid_to_screen")(1, 2, &sx, &sy); // the fake gives the (moved) origin: (-5, 34)
+    Check(sx == cd::ZoomToScreen(-5, 0, fx) && sy == cd::ZoomToScreen(34, 40, fy),
+          "zoomed grid_to_screen outside the drawing: back on the screen");
+
+    int drag[12] = {0, 0, 300, 400};
+    using Fn = void(__fastcall *)(int *);
+    Scroll<Fn>("drag_select_start")(drag);
+    g_dragGts = Scroll<GridToScreen_fn>("grid_to_screen");
+    emperor::scroll::SetRemainderForTest(7, 4);
+    Scroll<Drag_fn>("drag_select_draw")(drag);
+    Check(g_dragLimits[0] == cd::ZoomToBuffer(1678, 0, fx) && g_dragLimits[1] == cd::ZoomToBuffer(1080, 40, fy),
+          "zoomed drag_select_draw: its limits (sidebar_x, dd_height) as buffer pixels while it runs");
+    Check(g_dragGtsSeen[0] == -7 && g_dragGtsSeen[1] == 36,
+          "zoomed drag: grid_to_screen gives buffer pixels meanwhile (only the remainder moves the origin)");
+    Check(g_drag.a == 300 - 2 && g_drag.b == 400 + 2, "zoomed drag: the start corner moved by the remainder's change");
+    Check(At<int>(aSidebarX) == 1678 && At<int>(aDdH) == 1080 && drag[2] == 300 && drag[3] == 400,
+          "afterwards: sidebar_x, dd_height and the start corner are the game's again");
+    g_dragGts = nullptr;
+    Check(emperor::scroll::Working(), "smooth scrolling still on");
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1807,7 +1878,7 @@ const Scenario kScenarios[] = {
     {"r2b_fixed_original", &R2bFixedOriginal}, {"r2b_sidebar_edges", &R2bSidebarEdges},
     {"r2b_unknown_class", &R2bUnknownClass}, {"r2b17_ui_fixes", &R2b17UiFixes},
     {"r2c_china_map", &R2cChinaMap},   {"r3_display_options", &R3DisplayOptions},
-    {"o1_falling_behind", &O1FallingBehind},
+    {"o1_falling_behind", &O1FallingBehind}, {"r5c_zoom", &R5cZoom},
 };
 
 } // namespace

@@ -39,9 +39,10 @@ bool ScaleRgb565(const Pixels16 &src, double scale, bool sharp, const Target16 &
                  ForRows forRows = nullptr);
 
 // R5: src shrunk to outW x outH (outW <= src.w, outH <= src.h) at dst's first row and column. average: each output
-// pixel the average of the source pixels its block covers (blocks of whole source pixels, as evenly spread as they
-// can be; up to 32 pixels a block, nearest beyond); otherwise nearest (the source pixel at the block's centre). False
-// (nothing written) when the arguments make no sense.
+// pixel the area-weighted average of exactly the source area it covers (src.w / outW x src.h / outH pixels; a pixel
+// cut by its edge counts by the part covered, in 32nds), so details do not blink as the picture moves by a pixel;
+// otherwise nearest (the pixel in the middle of each whole-pixel block). False (nothing written) when the arguments
+// make no sense.
 bool ShrinkRgb565(const Pixels16 &src, int outW, int outH, bool average, const Target16 &dst,
                   ForRows forRows = nullptr);
 

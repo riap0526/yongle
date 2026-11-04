@@ -103,11 +103,49 @@ void ScaleRows(void *p, int begin, int end)
     }
 }
 
+// R5 (r5_city_zoom.md section 10.6): area-weighted shrinking. Output pixel i covers exactly f = src / out source
+// pixels; each source pixel it touches counts by how much of it is covered, in 32nds that add up to exactly 32 (so a
+// flat colour stays exact). Moving the picture by one source pixel then changes each output pixel a little instead of
+// moving a whole-pixel block boundary (which made small bright details blink while scrolling).
+struct AxisTaps {
+    std::vector<int> first, count, offset; // per output index: the first source index, how many, where its weights are
+    std::vector<unsigned char> weight;     // 32nds
+};
+
+void MakeTaps(int srcN, int outN, AxisTaps *t)
+{
+    t->first.resize(outN);
+    t->count.resize(outN);
+    t->offset.resize(outN);
+    t->weight.clear();
+    for (int i = 0; i < outN; ++i) {
+        // In units of 1/outN source pixel: output i spans [i srcN, (i + 1) srcN), source x spans [x outN, (x+1) outN).
+        const long long a = static_cast<long long>(i) * srcN, b = a + srcN;
+        const int x0 = static_cast<int>(a / outN), x1 = static_cast<int>((b - 1) / outN); // inclusive
+        t->first[i] = x0;
+        t->count[i] = x1 - x0 + 1;
+        t->offset[i] = static_cast<int>(t->weight.size());
+        int sum = 0, largest = 0;
+        for (int x = x0; x <= x1; ++x) {
+            const long long lo = std::max(a, static_cast<long long>(x) * outN);
+            const long long hi = std::min(b, static_cast<long long>(x + 1) * outN);
+            const int w = static_cast<int>(((hi - lo) * 32 + srcN / 2) / srcN);
+            t->weight.push_back(static_cast<unsigned char>(w));
+            sum += w;
+            if (w > t->weight[t->offset[i] + largest]) {
+                largest = x - x0;
+            }
+        }
+        t->weight[t->offset[i] + largest] = static_cast<unsigned char>(t->weight[t->offset[i] + largest] + 32 - sum);
+    }
+}
+
 // The output rows' work of ShrinkRgb565.
 struct ShrinkJob {
     const Pixels16 *src;
     const Target16 *dst;
-    const int *bx, *by, *cx; // block boundaries (outW + 1, outH + 1) and, for nearest, each column's centre
+    const int *by, *cx, *cy; // nearest: block boundaries of the rows (outH + 1), each column's and row's source pixel
+    const AxisTaps *tx, *ty; // average
     int outW;
     bool average;
 };
@@ -120,7 +158,7 @@ void ShrinkRows(void *p, int begin, int end)
     if (!j.average) {
         // Nearest: the source pixel at the centre of each block.
         for (int r = begin; r < end; ++r) {
-            const WORD *s = src.px + static_cast<size_t>((j.by[r] + j.by[r + 1] - 1) / 2) * src.stride;
+            const WORD *s = src.px + static_cast<size_t>(j.cy[r]) * src.stride;
             WORD *d = j.dst->px + static_cast<size_t>(r) * j.dst->stride;
             for (int i = 0; i < outW; ++i) {
                 d[i] = s[j.cx[i]];
@@ -128,45 +166,48 @@ void ShrinkRows(void *p, int begin, int end)
         }
         return;
     }
-    // Average: every source pixel of the block counted once (spread sums: at most 32 pixels, checked by the caller),
-    // then divided by the block's size with a 16.16 reciprocal.
-    static const struct Inverse {
-        DWORD v[33];
-        Inverse()
-        {
-            v[0] = 0;
-            for (int n = 1; n <= 32; ++n) {
-                v[n] = (65536u + n / 2) / n;
-            }
-        }
-    } inverse;
+    // Down the rows first, in the 0x07E0F81F spread form: a weight of up to 32 (and weights adding up to 32) keeps
+    // each field in its room (blue and green 11 bits, red 10), so one 32-bit add per source pixel.
     thread_local std::vector<DWORD> column;
     if (static_cast<int>(column.size()) < src.w) {
         column.resize(src.w);
     }
+    const AxisTaps &tx = *j.tx, &ty = *j.ty;
     for (int r = begin; r < end; ++r) {
-        const int y0 = j.by[r], y1 = j.by[r + 1] > y0 ? j.by[r + 1] : y0 + 1;
-        const WORD *row = src.px + static_cast<size_t>(y0) * src.stride;
-        for (int x = 0; x < src.w; ++x) {
-            column[x] = Spread(row[x]);
-        }
-        for (int y = y0 + 1; y < y1; ++y) {
-            row = src.px + static_cast<size_t>(y) * src.stride;
+        const int y0 = ty.first[r], ny = ty.count[r];
+        const unsigned char *wy = ty.weight.data() + ty.offset[r];
+        {
+            const WORD *row = src.px + static_cast<size_t>(y0) * src.stride;
+            const DWORD w = wy[0];
             for (int x = 0; x < src.w; ++x) {
-                column[x] += Spread(row[x]);
+                column[x] = Spread(row[x]) * w;
             }
         }
+        for (int k = 1; k < ny; ++k) {
+            const WORD *row = src.px + static_cast<size_t>(y0 + k) * src.stride;
+            const DWORD w = wy[k];
+            if (w == 0) {
+                continue;
+            }
+            for (int x = 0; x < src.w; ++x) {
+                column[x] += Spread(row[x]) * w;
+            }
+        }
+        // Then across: each field on its own (up to 2016 x 32), then / 1024 with rounding.
         WORD *d = j.dst->px + static_cast<size_t>(r) * j.dst->stride;
         for (int i = 0; i < outW; ++i) {
-            const int x0 = j.bx[i], x1 = j.bx[i + 1] > x0 ? j.bx[i + 1] : x0 + 1;
-            DWORD sum = 0;
-            for (int x = x0; x < x1; ++x) {
-                sum += column[x];
+            const int x0 = tx.first[i], nx = tx.count[i];
+            const unsigned char *wx = tx.weight.data() + tx.offset[i];
+            DWORD b = 0, rr = 0, g = 0;
+            for (int k = 0; k < nx; ++k) {
+                const DWORD v = column[x0 + k], w = wx[k];
+                b += (v & 0x7FFu) * w;
+                rr += ((v >> 11) & 0x3FFu) * w;
+                g += (v >> 21) * w;
             }
-            const DWORD inv = inverse.v[(x1 - x0) * (y1 - y0)];
-            const DWORD b = ((sum & 0x3FFu) * inv + 0x8000u) >> 16;
-            const DWORD rr = (((sum >> 11) & 0x3FFu) * inv + 0x8000u) >> 16;
-            const DWORD g = ((sum >> 21) * inv + 0x8000u) >> 16;
+            b = (b + 512) >> 10;
+            rr = (rr + 512) >> 10;
+            g = (g + 512) >> 10;
             d[i] = static_cast<WORD>((rr > 31 ? 31 : rr) << 11 | (g > 63 ? 63 : g) << 5 | (b > 31 ? 31 : b));
         }
     }
@@ -213,23 +254,28 @@ bool ShrinkRgb565(const Pixels16 &src, int outW, int outH, bool average, const T
         outW > src.w || outH > src.h || outW > dst.w || outH > dst.h || dst.stride < dst.w) {
         return false;
     }
-    // Source pixel boundaries of each output column and row: [b[i], b[i + 1]).
-    std::vector<int> bx(outW + 1), by(outH + 1), cx;
-    for (int i = 0; i <= outW; ++i) {
-        bx[i] = static_cast<int>(static_cast<long long>(i) * src.w / outW);
+    AxisTaps tx, ty;
+    std::vector<int> by, cx, cy;
+    if (average) {
+        MakeTaps(src.w, outW, &tx);
+        MakeTaps(src.h, outH, &ty);
     }
-    for (int j = 0; j <= outH; ++j) {
-        by[j] = static_cast<int>(static_cast<long long>(j) * src.h / outH);
-    }
-    const int maxW = (src.w + outW - 1) / outW, maxH = (src.h + outH - 1) / outH;
-    const bool avg = average && maxW * maxH <= 32;
-    if (!avg) {
+    else {
+        // Nearest: the source pixel in the middle of each whole-pixel block [b[i], b[i + 1]).
         cx.resize(outW);
+        cy.resize(outH);
         for (int i = 0; i < outW; ++i) {
-            cx[i] = (bx[i] + bx[i + 1] - 1) / 2;
+            const int b0 = static_cast<int>(static_cast<long long>(i) * src.w / outW);
+            const int b1 = static_cast<int>(static_cast<long long>(i + 1) * src.w / outW);
+            cx[i] = (b0 + b1 - 1) / 2;
+        }
+        for (int j = 0; j < outH; ++j) {
+            const int b0 = static_cast<int>(static_cast<long long>(j) * src.h / outH);
+            const int b1 = static_cast<int>(static_cast<long long>(j + 1) * src.h / outH);
+            cy[j] = (b0 + b1 - 1) / 2;
         }
     }
-    ShrinkJob job{&src, &dst, bx.data(), by.data(), cx.data(), outW, avg};
+    ShrinkJob job{&src, &dst, nullptr, cx.data(), cy.data(), &tx, &ty, outW, average};
     RunRows(forRows, outH, &ShrinkRows, &job);
     return true;
 }

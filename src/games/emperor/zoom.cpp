@@ -181,8 +181,7 @@ void RegisterSettings()
         "How much of the city is seen, in percent of the game's own size: 100 as the game draws it, 200 twice as much "
         "of the city (everything half the size), 50 half as much (everything twice the size). The sidebar and the "
         "menus keep their size. At most 150 (more of the city costs too much speed), and at most what the current "
-        "map allows (the slider ends there; a larger value in emperor_engine.ini is shown as large as allowed). Test "
-        "version: while it is not 100, clicks on the city do nothing.",
+        "map allows (the slider ends there; a larger value in emperor_engine.ini is shown as large as allowed).",
         Type::Int, "100", Effect::Live, true, true, core::display::kZoomMin, core::display::kZoomMax, 5, nullptr,
         nullptr, nullptr, 0, "%", &LimitNow});
     core::settings::OnChange(i, &ApplyZoom);
@@ -333,6 +332,11 @@ void Recheck()
 void SetRelayout(void (*fn)())
 {
     g_relayout = fn;
+}
+
+void SetForTest(int percent, int bufW, int bufH)
+{
+    g_now = core::display::ZoomLayout{percent, 0, 0, false, false, bufW, bufH, 0, 0};
 }
 
 } // namespace emperor::zoom

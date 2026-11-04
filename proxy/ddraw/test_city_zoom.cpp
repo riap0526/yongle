@@ -183,8 +183,35 @@ int main()
         CheckShown(!cd::ShrinkRgb565(s, 400, 300, true, d3), "larger than the source: refused");
         std::vector<WORD> tiny(10 * 10, 0x7777);
         const cd::Target16 d4{tiny.data(), 10, 10, 10};
-        bool big32 = cd::ShrinkRgb565(s, 10, 10, true, d4); // 30 x 20 blocks: more than 32 pixels, nearest
-        CheckShown(big32, "a block over 32 pixels falls back to nearest");
+        bool big32 = cd::ShrinkRgb565(s, 10, 10, true, d4); // 30 x 20 pixels an output pixel
+        CheckShown(big32, "30 x 20 source pixels an output pixel: still averaged");
+
+        // Section 10.6 (the shimmer): a white line one source pixel wide, moved one pixel at a time across black,
+        // keeps its total brightness on the screen (area-weighted: f = 1.25 and 1.5); whole-pixel blocks of uneven
+        // width made it jump between full and half brightness.
+        for (const int sw2 : {2919, 3502}) {
+            const int ow = 2334, h2 = 4;
+            std::vector<WORD> line(static_cast<size_t>(sw2) * h2), out(static_cast<size_t>(ow) * h2);
+            double lo = 1e9, hi = 0;
+            for (int x = 1000; x < 1040; ++x) {
+                std::fill(line.begin(), line.end(), 0);
+                for (int y = 0; y < h2; ++y) {
+                    line[static_cast<size_t>(y) * sw2 + x] = 0xFFFF;
+                }
+                cd::ShrinkRgb565(cd::Pixels16{line.data(), sw2, sw2, h2}, ow, h2, true,
+                                 cd::Target16{out.data(), ow, ow, h2});
+                double sum = 0;
+                for (int i = 0; i < ow; ++i) {
+                    sum += (out[static_cast<size_t>(i) + ow] >> 5) & 63; // the green of the second row
+                }
+                lo = std::min(lo, sum);
+                hi = std::max(hi, sum);
+            }
+            std::snprintf(what, sizeof(what),
+                          "a moving 1 px line at %d -> %d px: brightness on the screen %.0f..%.0f (within 10%%)", sw2,
+                          ow, lo, hi);
+            CheckShown(lo > 0 && hi <= lo * 1.1 + 1, what);
+        }
     }
 
     // --- view_clamp's bottom margin (r5_city_zoom.md section 9.1): the view never taller than the clamp holds
@@ -232,6 +259,56 @@ int main()
         const cd::ZoomLayout s = cd::ZoomFor(in);
         std::snprintf(what, sizeof(what), "cap 150 on the small map: the map's own limit %d%% when lower", s.limit);
         CheckShown(s.limit <= 150 && s.percent == s.limit, what);
+    }
+
+    // --- R5c: screen <-> buffer (section 10.1): round trips within one screen pixel, every screen pixel lands in the
+    //     buffer part shown, and on the pixels the scaling samples for it
+    {
+        bool ok = true;
+        int worst = 0;
+        for (const Screen &sc : screens) {
+            for (int p = cd::kZoomMin; p <= 150; p += 5) {
+                if (p == 100) {
+                    continue;
+                }
+                const cd::ZoomInput in{p, sc.showW, sc.showH, colPx, halfH, 1000, 1000};
+                const cd::ZoomLayout z = cd::ZoomFor(in);
+                const int left = 0, top = 40;
+                const double fx = p > 100 ? static_cast<double>(z.bufW) / sc.showW : p / 100.0;
+                const double fy = p > 100 ? static_cast<double>(z.bufH) / sc.showH : p / 100.0;
+                for (int i = 0; i < sc.showW; ++i) {
+                    const int b = cd::ZoomToBuffer(left + i, left, fx) - left;
+                    const int back = cd::ZoomToScreen(left + b, left, fx) - left;
+                    worst = std::max(worst, std::abs(back - i));
+                    bool bad = b < 0 || b >= z.bufW || std::abs(back - i) > 1;
+                    if (p > 100) { // the block ShrinkRgb565 averages for output column i
+                        const long long b0 = static_cast<long long>(i) * z.bufW / sc.showW;
+                        const long long b1 = static_cast<long long>(i + 1) * z.bufW / sc.showW;
+                        bad = bad || b < b0 || b >= (b1 > b0 ? b1 : b0 + 1);
+                    }
+                    else { // the source pixel ScaleRgb565 centres output column i on (sharp bilinear's taps)
+                        const double v = (i + 0.5) * fx - 0.5;
+                        const int i0 = static_cast<int>(std::floor(v));
+                        bad = bad || b < i0 || b > i0 + 1;
+                    }
+                    if (bad && ok) {
+                        std::printf("  %s %d%%: screen x %d -> buffer %d -> screen %d (buffer %d wide)\n", sc.name, p,
+                                    i, b, back, z.bufW);
+                    }
+                    ok = ok && !bad;
+                }
+                for (int j = 0; j < sc.showH; ++j) {
+                    const int b = cd::ZoomToBuffer(top + j, top, fy) - top;
+                    const int back = cd::ZoomToScreen(top + b, top, fy) - top;
+                    if (b < 0 || b >= z.bufH || std::abs(back - j) > 1) {
+                        ok = false;
+                    }
+                }
+            }
+        }
+        std::snprintf(what, sizeof(what),
+                      "screen -> buffer -> screen within %d px; on the buffer part shown and the pixels sampled", worst);
+        CheckShown(ok && worst <= 1, what);
     }
 
     // --- the same pixels with the rows split over our workers (core/platform/parallel)
