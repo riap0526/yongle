@@ -57,6 +57,17 @@ bool ViewFitsMap(int cols, int rows, int mapCols, int mapRows, int clampRows);
 int ZoomToBuffer(int screen, int origin, double f); // the buffer pixel the screen pixel shows (a block's middle)
 int ZoomToScreen(int buffer, int origin, double f); // where a buffer position is on the screen
 
+// R5d (r5_city_zoom.md section 11): one wheel notch is a fixed 25 percent on a grid of 25 (50, 75, 100, 125, 150);
+// notches > 0 see more of the city. From base (the target still being moved to, or the percent now) each notch goes
+// to the next grid value past it, so a value off the grid (e.g. 110 from the ini) goes to 125 or 100 first; the
+// result is clamped to low..high (high below low: low).
+constexpr int kZoomNotch = 25;
+int ZoomNotch(int base, int notches, int low, int high);
+
+// R5d: how far the view moves (in buffer pixels, along one axis) when the scale goes from fBefore to fAfter buffer
+// pixels per screen pixel, so the city point under the cursor stays under it: (cursor - origin) x (fBefore - fAfter).
+double ZoomAnchorShift(int cursor, int origin, double fBefore, double fAfter);
+
 // The layout for the input: percent = requested clamped to kZoomMin..min(limit, cap); 100 when the map is
 // unknown; kZoomMin when even that does not fit (logged by the caller; the drawing checks again and draws at the
 // game's own size then).

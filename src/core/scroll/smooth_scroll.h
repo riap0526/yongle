@@ -34,4 +34,23 @@ private:
     speed_type y_{};
 };
 
+// R5d (docs/resolution_ui/r5_city_zoom.md section 11): a zoom percent moved towards its target as Augustus' zoom.c
+// does: speed.c at ZOOM_STEP (2 per 16.67 ms, taking the real elapsed time into account), each delta multiplied by
+// (percent / 100 + 1), never past the target.
+class SmoothZoom {
+public:
+    static constexpr int kStep = 2; // Augustus ZOOM_STEP
+
+    // A new target (a wheel notch, the middle button): the speed starts again from now.
+    void Start();
+    void StartAt(time_millis now);
+
+    // The percent for this frame (at most once per frame). smooth false: the target at once.
+    int Step(int percent, int target, bool smooth);
+    int StepAt(int percent, int target, bool smooth, time_millis now);
+
+private:
+    speed_type speed_{};
+};
+
 } // namespace core::scroll

@@ -1,4 +1,5 @@
-// R5 city zoom (docs/resolution_ui/r5_city_zoom.md; R5b: a fixed scale from the settings, no mouse conversion yet).
+// R5 city zoom (docs/resolution_ui/r5_city_zoom.md): R5b the scale from the settings, R5c clicks converted, R5d the
+// wheel (25 a notch around the cursor, smooth) and the middle button (back to 100); the wheel's scale is not saved.
 //   [display] city_zoom = 50..400 (percent, Augustus' scale: 100 the game's own size, 200 twice as much of the city
 //             seen); in effect at most what the map's range allows (core/display/city_zoom.h), worked out again when
 //             the map or the city's size changes (view_clamp, the viewport hooks).
@@ -54,6 +55,16 @@ void Recheck();
 
 // games/emperor/resolution: lays the city's view out again (the viewport hooks' work).
 void SetRelayout(void (*fn)());
+
+// R5d (r5_city_zoom.md section 11): the wheel over the city (city screens only) moves the scale 25 at a time, the
+// middle button back to 100, with the city point under the cursor kept there. Moving: a target not reached yet.
+// Advance: once per frame before the city is drawn (games/emperor/scroll), the next percent (all at once when not
+// smooth) laid out; true when the scale changed (the caller then moves the view for the anchor, the cursor position
+// of the last notch).
+bool Moving();
+bool Advance(bool smooth);
+void Anchor(int *x, int *y);
+int Cap(); // the largest percent used (speed)
 
 // For the offline test (test_restore): the percent and the buffer size in effect, as ViewFor would set them.
 void SetForTest(int percent, int bufW, int bufH);

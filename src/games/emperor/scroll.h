@@ -44,6 +44,9 @@ void SetCityExtent(int right, int bottom);
 // False once smooth scrolling was switched off after an error (core/diag guard).
 bool Working();
 
+// R5d: the screen position is on the city as shown (not the sidebar, not the top bar).
+bool OnCity(int x, int y);
+
 // R2d.1: called right after the game drew the city (before the interface), with the back buffer and the city's
 // rectangle on it (right and bottom exclusive). Game thread; the callback runs its own guard.
 using CityDrawn = void (*)(const BYTE *back, int pitch, int left, int top, int right, int bottom);

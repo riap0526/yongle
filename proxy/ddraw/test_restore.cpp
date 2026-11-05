@@ -58,6 +58,8 @@ using KeyFilter = bool (*)(UINT, WPARAM, LPARAM);
 void SetKeyFilter(KeyFilter) {}
 using FocusHandler = void (*)();
 void SetFocusHandler(FocusHandler) {}
+using MouseFilter = bool (*)(UINT, WPARAM, int, int);
+void SetMouseFilter(MouseFilter) {}
 bool Windowed() { return false; }
 void SetWindowClient(int, int) {}
 } // namespace core::display

@@ -45,6 +45,26 @@ int ZoomToScreen(int buffer, int origin, double f)
     return origin + static_cast<int>(std::lround((buffer - origin) / f));
 }
 
+int ZoomNotch(int base, int notches, int low, int high)
+{
+    int p = base;
+    for (int n = notches; n > 0; --n) {
+        p = (p / kZoomNotch + 1) * kZoomNotch; // the next grid value above
+    }
+    for (int n = notches; n < 0; ++n) {
+        p = ((p + kZoomNotch - 1) / kZoomNotch - 1) * kZoomNotch; // the next grid value below
+    }
+    if (high < low) {
+        high = low;
+    }
+    return p < low ? low : p > high ? high : p;
+}
+
+double ZoomAnchorShift(int cursor, int origin, double fBefore, double fAfter)
+{
+    return (cursor - origin) * (fBefore - fAfter);
+}
+
 bool ViewFitsMap(int cols, int rows, int mapCols, int mapRows, int clampRows)
 {
     return cols + 1 <= mapCols && rows + 2 <= mapRows && (clampRows <= 0 || rows <= clampRows);

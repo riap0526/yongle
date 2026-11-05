@@ -546,6 +546,7 @@ bool IsClientMouseMessage(UINT m)
 }
 
 KeyFilter g_keyFilter = nullptr;
+MouseFilter g_mouseFilter = nullptr;
 FocusHandler g_focusHandler = nullptr;
 bool g_filteredSysChar = false; // a WM_SYSKEYDOWN was taken by the filter: its WM_SYSCHAR is taken too
 
@@ -931,6 +932,9 @@ LRESULT CALLBACK SubclassProc(HWND hwnd, UINT m, WPARAM w, LPARAM l)
             if (++g_messageLogs <= kMapLogs) {
                 core_log("display: mouse message 0x%04x (%ld,%ld) -> mode (%ld,%ld)", m, in.x, in.y, p.x, p.y);
             }
+            if (g_mouseFilter && g_mouseFilter(m, w, p.x, p.y)) {
+                return 0;
+            }
         }
     }
     return CallWindowProcA(g_prevProc, hwnd, m, w, l);
@@ -1198,6 +1202,11 @@ SIZE ClientSize()
         o_GetClientRect(g_hwnd, &c);
     }
     return SIZE{c.right - c.left, c.bottom - c.top};
+}
+
+void SetMouseFilter(MouseFilter filter)
+{
+    g_mouseFilter = filter;
 }
 
 void SetKeyFilter(KeyFilter filter)

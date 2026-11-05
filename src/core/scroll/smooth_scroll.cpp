@@ -83,4 +83,34 @@ bool SmoothScroll::Moving() const
     return x_.current_speed != 0 || x_.desired_speed != 0 || y_.current_speed != 0 || y_.desired_speed != 0;
 }
 
+void SmoothZoom::Start()
+{
+    StartAt(Now());
+}
+
+void SmoothZoom::StartAt(time_millis now)
+{
+    time_set_millis(now);
+    speed_clear(&speed_);
+    speed_set_target(&speed_, kStep, SPEED_CHANGE_IMMEDIATE, 1);
+}
+
+int SmoothZoom::Step(int percent, int target, bool smooth)
+{
+    return StepAt(percent, target, smooth, Now());
+}
+
+int SmoothZoom::StepAt(int percent, int target, bool smooth, time_millis now)
+{
+    if (!smooth || percent == target) {
+        return target;
+    }
+    time_set_millis(now);
+    const int delta = speed_get_delta(&speed_) * (percent / 100 + 1);
+    if (percent < target) {
+        return percent + delta >= target ? target : percent + delta;
+    }
+    return percent - delta <= target ? target : percent - delta;
+}
+
 } // namespace core::scroll

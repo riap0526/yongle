@@ -378,6 +378,49 @@ int main()
         core::platform::parallel::LimitWorkers(core::platform::parallel::kMaxWorkers);
     }
 
+    // --- R5d: wheel notches (25 each, on the grid of 25, within the limits)
+    {
+        CheckShown(cd::ZoomNotch(100, 1, 50, 150) == 125 && cd::ZoomNotch(100, -1, 50, 150) == 75,
+                   "R5d notch: 100 -> 125 out, 75 in");
+        CheckShown(cd::ZoomNotch(100, 3, 50, 150) == 150 && cd::ZoomNotch(100, -5, 50, 150) == 50,
+                   "R5d notch: several notches stop at 150 and 50");
+        CheckShown(cd::ZoomNotch(110, 1, 50, 150) == 125 && cd::ZoomNotch(110, -1, 50, 150) == 100,
+                   "R5d notch: off the grid (110) -> 125 or 100 first");
+        CheckShown(cd::ZoomNotch(125, 1, 50, 140) == 140 && cd::ZoomNotch(140, 1, 50, 140) == 140,
+                   "R5d notch: a map limit of 140 -> 140, no further");
+        CheckShown(cd::ZoomNotch(100, -1, 50, 40) == 50, "R5d notch: a limit below 50 -> 50");
+        int p = 50;
+        bool steps = true;
+        for (int expect = 75; expect <= 150; expect += 25) {
+            p = cd::ZoomNotch(p, 1, 50, 150);
+            steps = steps && p == expect;
+        }
+        CheckShown(steps, "R5d notch: 50, 75, 100, 125, 150 one notch at a time");
+    }
+
+    // --- R5d: the city point under the cursor stays there (within a buffer pixel) from any grid scale to another
+    {
+        double worst = 0;
+        for (const Screen &sc : screens) {
+            for (int a = 50; a <= 150; a += 25) {
+                for (int b = 50; b <= 150; b += 25) {
+                    const cd::ZoomLayout la = cd::ZoomFor({a, sc.showW, sc.showH, colPx, halfH, 112, 224});
+                    const cd::ZoomLayout lb = cd::ZoomFor({b, sc.showW, sc.showH, colPx, halfH, 112, 224});
+                    const double fa = a > 100 ? static_cast<double>(la.bufW) / sc.showW : a / 100.0;
+                    const double fb = b > 100 ? static_cast<double>(lb.bufW) / sc.showW : b / 100.0;
+                    for (int x = 0; x < sc.showW; x += 37) {
+                        const double before = cd::ZoomToBuffer(x, 0, fa);
+                        const double after = cd::ZoomAnchorShift(x, 0, fa, fb) + cd::ZoomToBuffer(x, 0, fb);
+                        const double d = std::fabs(after - before);
+                        worst = d > worst ? d : worst;
+                    }
+                }
+            }
+        }
+        std::snprintf(what, sizeof(what), "R5d anchor: the point under the cursor moves at most %.2f buffer px", worst);
+        CheckShown(worst <= 1.5, what);
+    }
+
     std::printf("RESULT: %s (%d checks, %d failure(s))\n", g_failures ? "FAILED" : "PASS", g_checks, g_failures);
     return g_failures ? 1 : 0;
 }

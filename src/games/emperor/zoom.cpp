@@ -3,7 +3,9 @@
 #include "core/capture/screenshot.h"
 #include "core/diag/guard.h"
 #include "core/display/city_zoom.h"
+#include "core/display/virtual_display.h"
 #include "core/log.h"
+#include "core/scroll/smooth_scroll.h"
 #include "core/settings/settings.h"
 #include "games/emperor/scroll.h"
 #include "games/emperor/site.h"
@@ -34,6 +36,13 @@ const Var<char> kRedraw{0x10de036};
 // the bottom of the screen (0x535960). view_clamp's bottom limit is the map's minus (margin + 4) when it is not 0.
 const Var<unsigned char> kBottomMargin{0xbebf38 + 0x19628}; // 4 bytes
 const Var<int> kDirection{0x101d0d0};                       // 0, 2, 4, 6
+const Var<int> kViewX{0x101d0ac};
+const Var<int> kViewY{0x101d0b0};
+// The view as city_render last drew it (its arguments), which mouse_to_grid adds to the cursor's view tile for the
+// view_to_grid lookup. viewport_init sets it to the map's middle (its first two arguments halved, 0xe4 -> 0x72 and
+// 0xe4), so after a relayout it is written again with the current view (r5_city_zoom.md section 11.6).
+const Var<int> kViewDrawnX{0xadf8d8};
+const Var<int> kViewDrawnY{0xadf8d4};
 // The game's frame (for the small city view's screenshot).
 const Var<BYTE *> kDrawBuffer{0x1156df8};
 const Var<int> kScreenPitch{0x10de000};
@@ -52,6 +61,17 @@ bool g_attached = false;
 int g_requested = 100;
 bool g_average = true;
 void (*g_relayout)() = nullptr;
+
+// R5d (r5_city_zoom.md section 11): the wheel and the middle button move g_requested towards g_target, a little each
+// frame (games/emperor/scroll calls Advance before the city is drawn), with the city point under g_anchor kept under
+// the cursor. Not saved: city_zoom in emperor_engine.ini is the scale at start-up.
+int g_target = 100;
+int g_anchorX = 0, g_anchorY = 0;
+int g_wheel = 0; // wheel delta short of a notch (high-resolution wheels send less than 120)
+const char *g_by = "";
+core::scroll::SmoothZoom g_motion;
+int g_inputLogs = 0;
+constexpr int kInputLogs = 30;
 
 core::display::ZoomLayout g_now{100, 0, 0, false, true, 0, 0, 0, 0};
 int g_lastMapCols = -1, g_lastMapRows = -1, g_lastClampRows = -1;
@@ -93,14 +113,24 @@ void Clamp()
     Original(o_ViewClamp, kViewClamp)();
 }
 
+bool Animating()
+{
+    return g_attached && core::diag::Enabled(g_feature) && g_target != g_requested;
+}
+
 // The view laid out again, then view_x / view_y clamped to it at once (the game's own view_clamp, not our hook): a
-// larger view at the map's edge must not reach past the map until the game clamps next.
+// larger view at the map's edge must not reach past the map until the game clamps next. Not logged while the wheel
+// moves the scale (every frame then).
 void Relayout(const char *why)
 {
     if (g_relayout && core::diag::Enabled(g_feature)) {
-        core_log("zoom: the city view is laid out again (%s)", why);
+        if (!Animating()) {
+            core_log("zoom: the city view is laid out again (%s)", why);
+        }
         g_relayout();
         Clamp();
+        *kViewDrawnX = *kViewX; // viewport_init set them to the map's middle (see kViewDrawnX)
+        *kViewDrawnY = *kViewY;
     }
 }
 
@@ -147,6 +177,7 @@ bool ApplyZoom(int, const char *v, bool initial)
     g_requested = p < core::display::kZoomMin ? core::display::kZoomMin
                   : p > core::display::kZoomMax ? core::display::kZoomMax
                                                 : p;
+    g_target = g_requested; // the panel's value at once (a wheel movement under way ends)
     if (!initial && g_attached) {
         Relayout("city_zoom changed");
         *kRedraw = 1;
@@ -165,6 +196,89 @@ int LimitNow()
     return g_now.limit > 0 ? g_now.limit : core::display::kZoomMax;
 }
 
+// R5d: the wheel and the middle button over the city as shown, on the city screens (r5_city_zoom.md section 8.1:
+// 1, the building submenu 7, the army screens 0x48 / 0x49). Elsewhere (the sidebar: its building categories, other
+// screens) the game has them as always.
+bool CityScreen()
+{
+    const char s = *kGameScreen;
+    return s == 1 || s == 7 || s == 0x48 || s == 0x49;
+}
+
+void MoveTowards(int target, int x, int y, const char *by)
+{
+    if (!Animating()) {
+        g_requested = g_now.percent; // from the scale in effect (a larger value from the ini was capped)
+    }
+    if (++g_inputLogs <= kInputLogs) {
+        core_log("zoom: %s at (%d,%d): %d%% -> %d%%%s", by, x, y, g_requested, target,
+                 target == g_requested ? " (nothing to do)" : "");
+    }
+    g_target = target;
+    g_anchorX = x;
+    g_anchorY = y;
+    g_by = by;
+    g_motion.Start();
+}
+
+struct MouseCall {
+    UINT m;
+    WPARAM w;
+    int x, y;
+    bool taken;
+};
+
+void TakeMouse(MouseCall &c)
+{
+    const bool wheel = c.m == WM_MOUSEWHEEL;
+    if (!wheel && c.m != WM_MBUTTONDOWN && c.m != WM_MBUTTONDBLCLK) {
+        return;
+    }
+    const int high = g_now.limit; // the cap and the map's limit (also worked out at 100%)
+    if (!g_attached || !emperor::scroll::Working() || high <= 0 || !CityScreen() ||
+        !emperor::scroll::OnCity(c.x, c.y)) {
+        if (wheel) {
+            g_wheel = 0;
+        }
+        return; // the game's own (the sidebar's categories)
+    }
+    c.taken = true;
+    const int low = core::display::kZoomMin;
+    if (!wheel) {
+        MoveTowards(100 < high ? 100 : high, c.x, c.y, "middle button");
+        return;
+    }
+    if (GET_KEYSTATE_WPARAM(c.w) & (MK_LBUTTON | MK_RBUTTON)) {
+        g_wheel = 0; // not while dragging (a road, a selection): the drag works in the scale it started in
+        return;
+    }
+    const int d = GET_WHEEL_DELTA_WPARAM(c.w);
+    if (g_wheel != 0 && (d > 0) != (g_wheel > 0)) {
+        g_wheel = 0; // turned the other way
+    }
+    g_wheel += d;
+    const int notches = g_wheel / WHEEL_DELTA;
+    g_wheel -= notches * WHEEL_DELTA;
+    if (notches != 0) {
+        // Wheel up (away from the player) zooms in (less of the city), as in Augustus.
+        const int base = Animating() ? g_target : g_now.percent;
+        MoveTowards(core::display::ZoomNotch(base, -notches, low, high), c.x, c.y, "wheel");
+    }
+}
+
+bool MouseFilter(UINT m, WPARAM w, int x, int y)
+{
+    if (!g_attached || !core::diag::Enabled(g_feature)) {
+        return false;
+    }
+    MouseCall c{m, w, x, y, false};
+    if (!core::diag::Guarded(g_feature, [](void *p) { TakeMouse(*static_cast<MouseCall *>(p)); }, &c)) {
+        Off("the wheel could not be handled");
+        return false;
+    }
+    return c.taken;
+}
+
 const char *const kShrink[] = {"average", "nearest"};
 const char *const kShrinkLabels[] = {"average (each screen pixel the mean of the city pixels it covers)",
                                      "nearest (one city pixel each, sharper, may shimmer)"};
@@ -177,11 +291,10 @@ void RegisterSettings()
     using core::settings::Item;
     using core::settings::Type;
     int i = core::settings::Register(Item{
-        "display", "city_zoom", "City zoom (%)",
-        "How much of the city is seen, in percent of the game's own size: 100 as the game draws it, 200 twice as much "
-        "of the city (everything half the size), 50 half as much (everything twice the size). The sidebar and the "
-        "menus keep their size. At most 150 (more of the city costs too much speed), and at most what the current "
-        "map allows (the slider ends there; a larger value in emperor_engine.ini is shown as large as allowed).",
+        "display", "city_zoom", "Starting city zoom (%)",
+        "The city's zoom when the game starts: 100 as the game draws it, more to see more of the city, less to see "
+        "it larger. From 50 to 150, and at most what the map allows. While playing, zoom with the mouse wheel over "
+        "the city; the middle mouse button goes back to 100.",
         Type::Int, "100", Effect::Live, true, true, core::display::kZoomMin, core::display::kZoomMax, 5, nullptr,
         nullptr, nullptr, 0, "%", &LimitNow});
     core::settings::OnChange(i, &ApplyZoom);
@@ -201,6 +314,7 @@ bool Attach()
     }
     Install(kViewClamp, &ViewClamp_detour, o_ViewClamp);
     Install(kRenderAt, &RenderAt_detour, o_RenderAt);
+    core::display::SetMouseFilter(&MouseFilter); // R5d: the wheel and the middle button over the city
     g_attached = true;
     core_log("zoom: city zoom installed (asked %d%%, shrinking %s)", g_requested, g_average ? "average" : "nearest");
     return true;
@@ -234,7 +348,7 @@ int ViewFor(int showW, int showH, int colPx, int halfH, int *cols, int *rows)
         *rows = g_now.rows;
     }
     const int key[7] = {g_now.percent, g_requested, g_lastMapCols, g_lastMapRows, g_lastClampRows, showW, showH};
-    if (std::memcmp(key, g_logged, sizeof(key)) != 0) {
+    if (!Animating() && std::memcmp(key, g_logged, sizeof(key)) != 0) { // R5d: once the wheel's movement ends
         std::memcpy(g_logged, key, sizeof(key));
         // The buffer the drawing will use (games/emperor/scroll): the view plus one column and a row pair, a little
         // margin; 2 bytes a pixel.
@@ -299,11 +413,16 @@ void OnPresent()
 
 void Off(const char *why)
 {
-    if (!core::diag::Enabled(g_feature)) {
+    static bool done = false;
+    if (done) {
         return;
     }
-    core::diag::Disable(g_feature, why);
+    done = true;
+    if (core::diag::Enabled(g_feature)) {
+        core::diag::Disable(g_feature, why); // else switched off by its guard already (the wheel)
+    }
     core_log("zoom: off for the rest of the run (%s): the city at 100%%", why);
+    g_target = g_requested;
     g_now = core::display::ZoomLayout{100, 0, 0, false, false, 0, 0, 0, 0};
     if (g_relayout) {
         g_relayout(); // ViewFor gives 100 now
@@ -334,6 +453,38 @@ void SetRelayout(void (*fn)())
     g_relayout = fn;
 }
 
+bool Moving()
+{
+    return Animating();
+}
+
+bool Advance(bool smooth)
+{
+    if (!Animating()) {
+        return false;
+    }
+    const int next = g_motion.Step(g_requested, g_target, smooth);
+    if (next == g_requested) {
+        return false;
+    }
+    g_requested = next;
+    Relayout(g_by); // logged (with the layout) only when the target is reached
+    if (!Animating()) {
+        *kRedraw = 1;
+    }
+    return true;
+}
+
+void Anchor(int *x, int *y)
+{
+    *x = g_anchorX;
+    *y = g_anchorY;
+}
+
+int Cap()
+{
+    return kZoomCap;
+}
 void SetForTest(int percent, int bufW, int bufH)
 {
     g_now = core::display::ZoomLayout{percent, 0, 0, false, false, bufW, bufH, 0, 0};

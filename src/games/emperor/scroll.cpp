@@ -54,6 +54,7 @@
 #include "games/emperor/zoom.h"
 #include "core/platform/parallel.h"
 
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -87,6 +88,8 @@ const DWORD kCityScrollCalls[] = {0x538508, 0x538544, 0x5385da, 0x539f4f, 0x5380
 
 const Var<int> kViewX{0x101d0ac};
 const Var<int> kViewY{0x101d0b0};
+const Var<int> kViewDrawnX{0xadf8d8}; // view_x / view_y as city_render last drew them (mouse_to_grid's table lookup)
+const Var<int> kViewDrawnY{0xadf8d4};
 const Var<int> kOriginX{0xadf8f0};
 const Var<int> kOriginY{0xadf8ec};
 const Var<int> kWidthTiles{0xadf8c4};
@@ -430,22 +433,70 @@ HeldKey g_left{kKeyLeft, VK_LEFT}, g_right{kKeyRight, VK_RIGHT}, g_up{kKeyUp, VK
 
 int g_lastFrame = -1;
 
-// One frame of smooth scrolling. r: the camera, view_scrolling and the key flags as they were before the frame (put
-// back if the frame is abandoned; kept when it completes).
-void SmoothFrame(core::diag::Restore &r)
+// R5d: the scale's factors now (buffer pixels per screen pixel; 1 at 100%) and where the city starts on the screen.
+bool Factors(ZoomMap *m)
 {
-    if (*kFrameCounter == g_lastFrame) {
-        return; // once per game_frame
+    if (ZoomNow(m)) {
+        return true;
     }
-    g_lastFrame = *kFrameCounter;
-    r.Save(kViewX.ptr());
-    r.Save(kViewY.ptr());
-    r.Save(kViewScrolling.ptr());
-    r.Save(kKeyLeft.ptr());
-    r.Save(kKeyRight.ptr());
-    r.Save(kKeyUp.ptr());
-    r.Save(kKeyDown.ptr());
-    SyncView();
+    if (emperor::zoom::Percent() != 100 || g_extRight <= 0 || g_extBottom <= 0) {
+        return false;
+    }
+    *m = {*kClipLeft, *kClipTop, g_extRight, g_extBottom, 1.0, 1.0};
+    return true;
+}
+
+double g_zoomShiftX = 0, g_zoomShiftY = 0; // the anchor's shift not moved yet (fractions; whole tiles when not smooth)
+
+// R5d (r5_city_zoom.md section 11.2): the scale one step towards the wheel's target, laid out, and the view moved so
+// the city point under the anchor (the cursor at the last notch) stays under it. At the map's edges view_clamp has
+// the last word (the point then moves a little, as in Augustus).
+void ZoomStep()
+{
+    ZoomMap a{}, b{};
+    const bool before = Factors(&a);
+    if (!emperor::zoom::Advance(g_smooth)) {
+        return;
+    }
+    const bool after = Factors(&b);
+    if (before && after) {
+        int ax = 0, ay = 0;
+        emperor::zoom::Anchor(&ax, &ay);
+        g_zoomShiftX += core::display::ZoomAnchorShift(ax, a.left, a.fx, b.fx);
+        g_zoomShiftY += core::display::ZoomAnchorShift(ay, a.top, a.fy, b.fy);
+    }
+    if (g_smooth) {
+        const int dx = static_cast<int>(std::lround(g_zoomShiftX)), dy = static_cast<int>(std::lround(g_zoomShiftY));
+        g_zoomShiftX -= dx;
+        g_zoomShiftY -= dy;
+        Move(dx, dy);
+    }
+    else { // the game's whole tiles: view_x by columns, view_y by row pairs
+        const int colPx = *kTileWidth + 2, rowPx = 2 * *kTileHalfHeight;
+        const int tx = static_cast<int>(std::lround(g_zoomShiftX / colPx));
+        const int ty = static_cast<int>(std::lround(g_zoomShiftY / rowPx));
+        g_zoomShiftX -= tx * colPx;
+        g_zoomShiftY -= ty * rowPx;
+        g_px = g_py = 0;
+        *kViewX += tx;
+        *kViewY += 2 * ty;
+        ViewClamp();
+    }
+    if (!emperor::zoom::Moving()) {
+        g_zoomShiftX = g_zoomShiftY = 0;
+    }
+    g_lastViewX = *kViewX; // also when only the layout's clamp moved it: not "someone else" (SyncView)
+    g_lastViewY = *kViewY;
+    // viewport_init (the relayout) set the drawn view's copy to the map's middle; mouse_to_grid looks tiles up from
+    // it until city_render writes it again, so the cursor tile (the building preview) jumped meanwhile (R5d's first
+    // test). The view as city_render will draw it.
+    *kViewDrawnX = *kViewX;
+    *kViewDrawnY = *kViewY;
+}
+
+// The edge scrolling and arrow keys of one frame.
+void SmoothFrame()
+{
     int x = *kCursorX, y = *kCursorY;
     bool left = g_left.Poll() || x < 1;
     bool right = g_right.Poll() || x >= *kDesktopW - 1;
@@ -469,6 +520,31 @@ void SmoothFrame(core::diag::Restore &r)
     g_movedX += std::abs(dx);
     g_movedY += std::abs(dy);
     Move(dx, dy);
+}
+
+// Once per game_frame, before the city is drawn: the wheel's zoom step (R5d), then smooth scrolling. r: the camera,
+// view_scrolling and the key flags as they were before the frame (put back if the frame is abandoned; kept when it
+// completes).
+void Frame(core::diag::Restore &r)
+{
+    if (*kFrameCounter == g_lastFrame) {
+        return;
+    }
+    g_lastFrame = *kFrameCounter;
+    r.Save(kViewX.ptr());
+    r.Save(kViewY.ptr());
+    r.Save(kViewScrolling.ptr());
+    r.Save(kKeyLeft.ptr());
+    r.Save(kKeyRight.ptr());
+    r.Save(kKeyUp.ptr());
+    r.Save(kKeyDown.ptr());
+    SyncView();
+    if (emperor::zoom::Moving()) {
+        ZoomStep();
+    }
+    if (g_smooth) {
+        SmoothFrame();
+    }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -552,6 +628,7 @@ void DrawPlain(RenderCall &c, bool offGrid, int right, int bottom)
 // Before drawing, the view is checked against the map's range again (zoom::Recheck); a view that does not fit is not
 // drawn at all (never larger than the map: r5_city_zoom.md section 8.2).
 int g_zoomPitchPx = 0, g_zoomRows = 0; // the buffer's last layout (cleared when it changes)
+int g_zoomRight2 = 0, g_zoomBottom2 = 0;
 bool g_loggedZoomSkip = false;
 
 bool RenderZoomed(RenderCall &c)
@@ -585,8 +662,20 @@ bool RenderZoomed(RenderCall &c)
         c.plain = false;
         return true; // nothing drawn (the last frame's city stays): never drawn larger than the map
     }
-    const int pitchPx = (right2 + 2 + 15) & ~15;
-    const int totalRows = bottom2 + 2 * rowPx; // spare rows below the clip, as the back buffer has
+    int pitchPx = (right2 + 2 + 15) & ~15;
+    int totalRows = bottom2 + 2 * rowPx; // spare rows below the clip, as the back buffer has
+    // R5d: while the wheel moves the scale, the layout changes every frame. The buffer then keeps the largest scale's
+    // pitch and rows, so it is not cleared whole every frame (36 MB at 150%); only what a larger layout adds is
+    // cleared. When the movement ends the layout is the exact one again and the buffer is cleared once.
+    const bool moving = emperor::zoom::Moving();
+    if (moving) {
+        const int capW = left + core::display::ZoomedSize(showW, emperor::zoom::Cap()) + 3 * colPx;
+        const int capRows = top + core::display::ZoomedSize(showH, emperor::zoom::Cap()) + 8 * halfH;
+        pitchPx = pitchPx > ((capW + 15) & ~15) ? pitchPx : (capW + 15) & ~15;
+        pitchPx = pitchPx > g_zoomPitchPx ? pitchPx : g_zoomPitchPx;
+        totalRows = totalRows > capRows ? totalRows : capRows;
+        totalRows = totalRows > g_zoomRows ? totalRows : g_zoomRows;
+    }
     const size_t size = static_cast<size_t>(pitchPx) * 2 * totalRows;
     if (!CityBuffer(size)) {
         char why[96];
@@ -594,15 +683,37 @@ bool RenderZoomed(RenderCall &c)
         emperor::zoom::Off(why); // laid out at 100 now; this frame is drawn the usual way below
         return false;
     }
-    if (pitchPx != g_zoomPitchPx || totalRows != g_zoomRows) {
+    const bool newLayout = pitchPx != g_zoomPitchPx || totalRows != g_zoomRows || right2 != g_zoomRight2 ||
+                           bottom2 != g_zoomBottom2;
+    if (pitchPx != g_zoomPitchPx || (newLayout && !moving)) {
         std::memset(g_city, 0, size); // a new layout: no rows of the last one left around the map
-        g_zoomPitchPx = pitchPx;
-        g_zoomRows = totalRows;
-        core_log("zoom: city buffer %d x %d px (%.1f MB) for %d%%: view %d x %d (+1, +2 while drawing), clip "
-                 "(%d,%d)-(%d,%d), shown %d x %d of it on %d x %d px",
-                 pitchPx, totalRows, size / (1024.0 * 1024.0), percent, cols, rows, left, top, right2, bottom2, bufW,
-                 bufH, showW, showH);
+        if (!moving) {
+            core_log("zoom: city buffer %d x %d px (%.1f MB) for %d%%: view %d x %d (+1, +2 while drawing), clip "
+                     "(%d,%d)-(%d,%d), shown %d x %d of it on %d x %d px",
+                     pitchPx, totalRows, size / (1024.0 * 1024.0), percent, cols, rows, left, top, right2, bottom2,
+                     bufW, bufH, showW, showH);
+        }
     }
+    else if (newLayout) { // moving: only the columns and rows the larger view adds
+        WORD *rowsAt = reinterpret_cast<WORD *>(g_city);
+        if (right2 > g_zoomRight2) {
+            const int from = g_zoomRight2 > 0 ? g_zoomRight2 : 0, to = right2 + 2 < pitchPx ? right2 + 2 : pitchPx;
+            for (int y = 0; y < totalRows && from < to; ++y) {
+                std::memset(rowsAt + static_cast<size_t>(y) * pitchPx + from, 0, (to - from) * 2);
+            }
+        }
+        if (bottom2 > g_zoomBottom2) {
+            const int from = g_zoomBottom2 > 0 ? g_zoomBottom2 : 0;
+            if (from < totalRows) {
+                std::memset(rowsAt + static_cast<size_t>(from) * pitchPx, 0,
+                            static_cast<size_t>(totalRows - from) * pitchPx * 2);
+            }
+        }
+    }
+    g_zoomPitchPx = pitchPx;
+    g_zoomRows = totalRows;
+    g_zoomRight2 = right2;
+    g_zoomBottom2 = bottom2;
     g_cityPitch = pitchPx * 2;
     g_cityRows = totalRows;
     c.r.Set(kDrawBuffer.ptr(), g_city);
@@ -711,6 +822,7 @@ void Render(RenderCall &c)
         DrawPlain(c, offGrid, right, bottom);
         return;
     }
+    g_zoomPitchPx = 0; // the buffer holds the screen's layout now: a zoomed frame clears it again
     // Start from what the back buffer holds there, as the game would draw over it.
     std::int64_t copyStart = core::diag::perf::Now();
     for (int y = top; y < bottom2; ++y) {
@@ -865,13 +977,17 @@ bool IsCityScrollCall(void *ret)
 
 int __cdecl GetDirection_detour()
 {
-    if (g_smooth && core::diag::Enabled(g_feature) && IsCityScrollCall(__builtin_return_address(0))) {
+    if ((g_smooth || emperor::zoom::Moving()) && core::diag::Enabled(g_feature) &&
+        IsCityScrollCall(__builtin_return_address(0))) {
         core::diag::Restore r;
-        if (core::diag::Guarded(g_feature, [](void *p) { SmoothFrame(*static_cast<core::diag::Restore *>(p)); }, &r,
-                                &r)) {
-            return 8; // view_scroll_step(8) does nothing: the camera has been moved already
+        if (core::diag::Guarded(g_feature, [](void *p) { Frame(*static_cast<core::diag::Restore *>(p)); }, &r, &r)) {
+            if (g_smooth) {
+                return 8; // view_scroll_step(8) does nothing: the camera has been moved already
+            }
         }
-        FallBack();
+        else {
+            FallBack();
+        }
     }
     return Original(o_GetDirection, kScrollGetDirection)();
 }
@@ -1138,6 +1254,15 @@ void SetCityDrawn(CityDrawn fn)
 bool Working()
 {
     return core::diag::Enabled(g_feature);
+}
+
+bool OnCity(int x, int y)
+{
+    if (g_inRender) {
+        return false;
+    }
+    const Shown s = ShownCity();
+    return x >= s.left && x < s.right && y >= s.top && y < s.bottom;
 }
 
 } // namespace emperor::scroll

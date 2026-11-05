@@ -60,6 +60,12 @@ void SetWindowClient(int w, int h);
 using KeyFilter = bool (*)(UINT message, WPARAM wparam, LPARAM lparam);
 void SetKeyFilter(KeyFilter filter);
 
+// A filter for the mouse messages of the game window (movement, buttons, the wheel), called on the game thread after
+// our panel and the framed-picture background had them, with the position in the mode's (the game's) coordinates;
+// returning true swallows the message. One filter (a game layer's); nullptr removes it.
+using MouseFilter = bool (*)(UINT message, WPARAM wparam, int x, int y);
+void SetMouseFilter(MouseFilter filter);
+
 // Called on the game thread when the game window gets the focus back (WM_ACTIVATEAPP becoming active, WM_SETFOCUS),
 // before the game and our panel see the message: e.g. what a game layer paused when the focus went goes on, whether
 // or not the panel is open. One handler; nullptr removes it.

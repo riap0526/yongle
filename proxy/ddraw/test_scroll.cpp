@@ -77,6 +77,37 @@ int main()
     s.Update(0, 0, cruise, cruise, &dx, &dy);
     Check(dx == 0 && !s.Moving(), "Reset stops at once", dx);
 
+    // R5d: the zoom moved towards its target as Augustus' zoom.c (fixed frame times: deterministic).
+    {
+        core::scroll::SmoothZoom z;
+        auto frames = [&z](int from, int to, int frameMs, int *stepsOut) {
+            time_millis now = 1000000;
+            z.StartAt(now);
+            int p = from, n = 0;
+            bool monotonic = true;
+            while (p != to && n < 1000) {
+                now += frameMs;
+                const int q = z.StepAt(p, to, true, now);
+                monotonic = monotonic && (to > from ? q >= p && q <= to : q <= p && q >= to);
+                p = q;
+                ++n;
+            }
+            *stepsOut = n;
+            return monotonic && p == to;
+        };
+        int n60 = 0, n144 = 0, nIn = 0, n30 = 0;
+        const bool up = frames(100, 125, 17, &n60);
+        Check(up && n60 >= 4 && n60 <= 8, "R5d zoom 100 -> 125 at 60 frames/s: frames (4..8)", n60);
+        const bool up144 = frames(100, 125, 7, &n144);
+        Check(up144 && n144 >= 10 && n144 <= 18, "R5d zoom 100 -> 125 at 144 frames/s: frames (10..18)", n144);
+        const bool in = frames(75, 50, 17, &nIn);
+        Check(in && nIn >= 10 && nIn <= 16, "R5d zoom 75 -> 50 at 60 frames/s (slower below 100): frames", nIn);
+        const bool slow = frames(150, 125, 33, &n30);
+        Check(slow && n30 >= 2 && n30 <= 5, "R5d zoom 150 -> 125 at 30 frames/s: frames (2..5)", n30);
+        Check(z.StepAt(100, 150, false, 0) == 150, "R5d zoom without smooth scrolling: at once", 150);
+        Check(z.StepAt(125, 125, true, 0) == 125, "R5d zoom at the target stays", 125);
+    }
+
     timeEndPeriod(1);
     std::printf("RESULT: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
     return g_failures ? 1 : 0;
