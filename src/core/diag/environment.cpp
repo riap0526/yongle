@@ -348,8 +348,16 @@ struct Measured {
     char throttle[40] = "";
     int priority = THREAD_PRIORITY_ERROR_RETURN;
 };
-Measured g_thread[3];
-const char *const kName[] = {"game thread", "output thread", "screenshot writer"};
+constexpr int kThreads = 4;
+Measured g_thread[kThreads]; // [Workers]: its handle is g_workers[0]; the samples are all workers'
+const char *const kName[] = {"game thread", "output thread", "screenshot writer", "parallel workers"};
+// R5e (docs/testing/r5e_laptop.md): the parallel workers measured together (on hybrid processors: whether they run
+// on performance or efficiency cores).
+std::atomic<HANDLE> g_workers[kMaxWorkers];
+std::atomic<int> g_workerCount{0};
+
+// A thread's processor time; Workers: all workers' together.
+bool CpuOf(int t, ULONGLONG *cpu);
 
 // ---------------------------------------------------------------------------------------------
 // Processor affinity (O1, 2026-10-30): GOG's compatibility settings include SingleProcAffinity, which keeps the
@@ -407,7 +415,7 @@ void CheckProcessMask()
     DescribeProcessMask(process, system, text, sizeof(text));
     char threads[200] = "";
     size_t len = 0;
-    for (int t = 0; t < 3; ++t) {
+    for (int t = 0; t < 3; ++t) { // the workers' masks are logged by core/platform/affinity when they start
         if (HANDLE h = g_thread[t].handle.load()) {
             int w = std::snprintf(threads + len, sizeof(threads) - len, "%s%s 0x%lx", len ? ", " : "", kName[t],
                                   static_cast<unsigned long>(ThreadMask(h)));
@@ -422,6 +430,30 @@ ULONGLONG Sum(const FILETIME &a, const FILETIME &b)
 {
     return ((static_cast<ULONGLONG>(a.dwHighDateTime) << 32) | a.dwLowDateTime) +
            ((static_cast<ULONGLONG>(b.dwHighDateTime) << 32) | b.dwLowDateTime);
+}
+
+bool CpuOf(int t, ULONGLONG *cpu)
+{
+    FILETIME c, e, k, u;
+    if (t != static_cast<int>(Thread::Workers)) {
+        HANDLE h = g_thread[t].handle.load();
+        if (!h || !GetThreadTimes(h, &c, &e, &k, &u)) {
+            return false;
+        }
+        *cpu = Sum(k, u);
+        return true;
+    }
+    const int n = g_workerCount.load();
+    *cpu = 0;
+    bool any = false;
+    for (int i = 0; i < n && i < kMaxWorkers; ++i) {
+        HANDLE h = g_workers[i].load();
+        if (h && GetThreadTimes(h, &c, &e, &k, &u)) {
+            *cpu += Sum(k, u);
+            any = true;
+        }
+    }
+    return any;
 }
 
 ULONGLONG g_lastWall = 0, g_lastProcess = 0, g_lastIdle = 0, g_lastBusyAll = 0;
@@ -508,7 +540,19 @@ void RegisterThread(Thread which)
         return;
     }
     Measured &m = g_thread[static_cast<int>(which)];
-    if (HANDLE old = m.handle.exchange(h)) {
+    if (which == Thread::Workers) {
+        const int i = g_workerCount.fetch_add(1); // the workers start at the same time
+        if (i >= kMaxWorkers) {
+            g_workerCount.fetch_sub(1);
+            CloseHandle(h);
+            return;
+        }
+        g_workers[i] = h; // read as null until here (CpuOf skips it)
+        if (i == 0) {
+            m.handle = h; // its priority and power throttling stand for the workers'
+        }
+    }
+    else if (HANDLE old = m.handle.exchange(h)) {
         CloseHandle(old);
     }
     DWORD_PTR process = 0, system = 0;
@@ -561,19 +605,22 @@ void TakeWindow(char *out, std::size_t size)
             len += w > 0 ? static_cast<size_t>(w) : 0;
         }
     };
-    for (int t = 0; t < 3; ++t) {
+    for (int t = 0; t < kThreads; ++t) {
         Measured &m = g_thread[t];
-        HANDLE h = m.handle.load();
-        if (!h) {
+        HANDLE h = m.handle.load(); // Workers: the first worker's (set once it is registered)
+        ULONGLONG cpu = 0;
+        if (!h || !CpuOf(t, &cpu)) {
             continue;
         }
-        FILETIME c, e, k, u;
-        if (!GetThreadTimes(h, &c, &e, &k, &u)) {
-            continue;
-        }
-        const ULONGLONG cpu = Sum(k, u);
         if (m.lastValid && span > 0) {
-            put("%s%s %.0f%% of the time on a processor", len ? ", " : "", kName[t], 100.0 * (cpu - m.lastCpu) / span);
+            if (t == static_cast<int>(Thread::Workers)) {
+                put("%s%s (%d) %.0f%% of the time on a processor together", len ? ", " : "", kName[t],
+                    g_workerCount.load(), 100.0 * (cpu - m.lastCpu) / span);
+            }
+            else {
+                put("%s%s %.0f%% of the time on a processor", len ? ", " : "", kName[t],
+                    100.0 * (cpu - m.lastCpu) / span);
+            }
             const long top = m.onTop.exchange(0), other = m.onOther.exchange(0);
             if (g_hybrid && top + other > 0) {
                 put(" (on performance cores %.0f%%)", 100.0 * top / (top + other));

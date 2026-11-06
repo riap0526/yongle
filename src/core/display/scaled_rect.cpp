@@ -103,7 +103,7 @@ void ScaleRows(void *p, int begin, int end)
     }
 }
 
-// R5 (r5_city_zoom.md section 10.6): area-weighted shrinking. Output pixel i covers exactly f = src / out source
+// R5 (resolution_ui_r5.md section 10.6): area-weighted shrinking. Output pixel i covers exactly f = src / out source
 // pixels; each source pixel it touches counts by how much of it is covered, in 32nds that add up to exactly 32 (so a
 // flat colour stays exact). Moving the picture by one source pixel then changes each output pixel a little instead of
 // moving a whole-pixel block boundary (which made small bright details blink while scrolling).

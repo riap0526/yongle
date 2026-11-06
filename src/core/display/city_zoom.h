@@ -1,4 +1,4 @@
-// City zoom (R5, docs/resolution_ui/r5_city_zoom.md): the scale definition of Augustus (100 = the game's own size,
+// City zoom (R5, docs/archive/resolution_ui_r5.md): the scale definition of Augustus (100 = the game's own size,
 // 200 = twice as much of the city seen, 50 = everything twice as large) and its limits. Nothing here knows a game:
 // the game layer passes the sizes in.
 //
@@ -6,7 +6,7 @@
 // scaled onto the screen. The game's view (columns x half rows) covers that buffer; while it draws, one more column
 // and two more half rows cover the smooth-scrolling remainder (games/emperor/scroll). The game's view must never be
 // larger than the map's range: its column flags (5 x 231 bytes, no bounds check) and an overlay pass that reads the
-// view table without a check rely on the view being clamped inside the map (r5_city_zoom.md section 8.2).
+// view table without a check rely on the view being clamped inside the map (resolution_ui_r5.md section 8.2).
 #pragma once
 
 namespace core::display {
@@ -20,7 +20,7 @@ struct ZoomInput {
     int halfH;        // a half row in pixels
     int mapCols, mapRows; // the map's range (view_clamp's limits); 0 or less: unknown
     // The half rows the game's clamp can hold (its bottom limit minus its top one), when that is less than mapRows
-    // (Emperor keeps a margin above the map's bottom edge: r5_city_zoom.md section 9.1). A view taller than this is
+    // (Emperor keeps a margin above the map's bottom edge: resolution_ui_r5.md section 9.1). A view taller than this is
     // pushed above the map's top. 0 or less: mapRows.
     int clampRows = 0;
     int maxPercent = 0; // a cap of the caller's (e.g. for speed); 0 or less: kZoomMax
@@ -50,14 +50,14 @@ void ZoomView(const ZoomInput &in, int percent, int *cols, int *rows);
 bool ZoomFits(const ZoomInput &in, int percent);
 bool ViewFitsMap(int cols, int rows, int mapCols, int mapRows, int clampRows);
 
-// R5c: screen <-> zoomed buffer along one axis (r5_city_zoom.md section 10.1). origin: where the city starts on the
+// R5c: screen <-> zoomed buffer along one axis (resolution_ui_r5.md section 10.1). origin: where the city starts on the
 // screen and in the buffer (the clip's left or top); f: buffer pixels per screen pixel (bufW / showW when shrinking,
 // percent / 100 when enlarging -- the sampling of ShrinkRgb565 / ScaleRgb565). The remainder of smooth scrolling is
 // not in here (the caller moves the origin for it).
 int ZoomToBuffer(int screen, int origin, double f); // the buffer pixel the screen pixel shows (a block's middle)
 int ZoomToScreen(int buffer, int origin, double f); // where a buffer position is on the screen
 
-// R5d (r5_city_zoom.md section 11): one wheel notch is a fixed 25 percent on a grid of 25 (50, 75, 100, 125, 150);
+// R5d (resolution_ui_r5.md section 11): one wheel notch is a fixed 25 percent on a grid of 25 (50, 75, 100, 125, 150);
 // notches > 0 see more of the city. From base (the target still being moved to, or the percent now) each notch goes
 // to the next grid value past it, so a value off the grid (e.g. 110 from the ini) goes to 125 or 100 first; the
 // result is clamped to low..high (high below low: low).

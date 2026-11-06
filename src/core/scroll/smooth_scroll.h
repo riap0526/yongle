@@ -34,7 +34,7 @@ private:
     speed_type y_{};
 };
 
-// R5d (docs/resolution_ui/r5_city_zoom.md section 11): a zoom percent moved towards its target as Augustus' zoom.c
+// R5d (docs/archive/resolution_ui_r5.md section 11): a zoom percent moved towards its target as Augustus' zoom.c
 // does: speed.c at ZOOM_STEP (2 per 16.67 ms, taking the real elapsed time into account), each delta multiplied by
 // (percent / 100 + 1), never past the target.
 class SmoothZoom {

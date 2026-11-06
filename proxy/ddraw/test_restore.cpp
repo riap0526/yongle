@@ -32,6 +32,7 @@
 #include <windows.h>
 #include <mmsystem.h>
 
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -860,7 +861,7 @@ void M4DirectionFault()
 
 void M4DragFault()
 {
-    int drag[8] = {0, 0, 300, 400};
+    int drag[16] = {0, 0, 300, 400}; // the game's drag structure (0xa59a68) reaches +0x30
     using Fn = void(__fastcall *)(int *);
     emperor::scroll::SetRemainderForTest(0, 0);
     Scroll<Fn>("drag_select_start")(drag);
@@ -875,7 +876,7 @@ void M4DragFault()
 }
 
 // ---------------------------------------------------------------------------------------------
-// R5c: conversions while the city is zoomed (docs/resolution_ui/r5_city_zoom.md section 10)
+// R5c: conversions while the city is zoomed (docs/archive/resolution_ui_r5.md section 10)
 
 void R5cZoom()
 {
@@ -909,7 +910,7 @@ void R5cZoom()
     Check(sx == cd::ZoomToScreen(-5, 0, fx) && sy == cd::ZoomToScreen(34, 40, fy),
           "zoomed grid_to_screen outside the drawing: back on the screen");
 
-    int drag[12] = {0, 0, 300, 400};
+    int drag[16] = {0, 0, 300, 400};
     using Fn = void(__fastcall *)(int *);
     Scroll<Fn>("drag_select_start")(drag);
     g_dragGts = Scroll<GridToScreen_fn>("grid_to_screen");
@@ -924,6 +925,85 @@ void R5cZoom()
           "afterwards: sidebar_x, dd_height and the start corner are the game's again");
     g_dragGts = nullptr;
     Check(emperor::scroll::Working(), "smooth scrolling still on");
+    // R5e: a drag pressed on the city: the smallest frame is 8 screen px (in buffer pixels, rounded up, + 2).
+    Check(drag[11] == static_cast<int>(std::ceil(8 * fx)) + 2 && drag[12] == static_cast<int>(std::ceil(8 * fy)) + 2,
+          "drag from the city: the smallest frame is 8 screen px (buffer pixels)");
+    int sidebarDrag[16] = {};
+    At<int>(aMouseX) = 1700; // pressed on the sidebar
+    Scroll<Fn>("drag_select_start")(sidebarDrag);
+    Check(sidebarDrag[11] == 4 && sidebarDrag[12] == 4, "drag from the sidebar: the game's own smallest frame");
+    At<unsigned char>(0x10de041) = 0x4d;
+    Check(Scroll<MouseToGrid_fn>("mouse_to_grid")(0) == 0,
+          "drag from the sidebar: the cursor there is no tile (a click on the sidebar orders nothing)");
+    At<unsigned char>(0x10de041) = 0;
+    At<int>(aMouseX) = 100;
+    Scroll<Fn>("drag_select_start")(drag); // pressed on the city again (100, 140), for the checks below
+    At<unsigned char>(0x10de041) = 0x4d;
+    At<int>(aMouseX) = 105; // 5 px: not a frame yet
+    At<int>(aMouseY) = 20;
+    Check(Scroll<MouseToGrid_fn>("mouse_to_grid")(0) == 0, "a drag of 5 px: not kept to the city (still a click)");
+    At<unsigned char>(0x10de041) = 0;
+    At<int>(aMouseX) = 100;
+    At<int>(aMouseY) = 140;
+
+    // R5e: the "Game paused" banner is centred on the city's width on the screen, not the zoomed buffer's.
+    using Width_fn = int(__cdecl *)();
+    Check(Scroll<Width_fn>("city_view_width_px")() == 1678, "zoomed city_view_width_px: the city's width on the screen");
+
+    // R5e: during a military drag selection (mouse mode 0x4d) a cursor on the sidebar is kept to the city's edge for
+    // mouse_to_grid, so the frame's corner stays on the city; the game's mouse is put back afterwards.
+    At<unsigned char>(0x10de041) = 0x4d;
+    At<int>(aMouseX) = 1700;
+    At<int>(aMouseY) = 20; // on the top bar too
+    const int calls = g_mouse.calls;
+    Scroll<MouseToGrid_fn>("mouse_to_grid")(0);
+    Check(g_mouse.calls == calls + 1 && g_mouseSeen[0] == cd::ZoomToBuffer(1677, 0, fx) &&
+              g_mouseSeen[1] == cd::ZoomToBuffer(40, 40, fy),
+          "drag selection: the cursor on the sidebar / top bar is taken at the city's edge");
+    Check(At<int>(aMouseX) == 1700 && At<int>(aMouseY) == 20, "afterwards: the game's mouse is the screen's again");
+    At<unsigned char>(0x10de041) = 0;
+    Check(Scroll<MouseToGrid_fn>("mouse_to_grid")(0) == 0 && g_mouse.calls == calls + 1,
+          "no drag selection: the sidebar is no tile, as before");
+
+    // R5e: drag_select_draw's grid_to_screen (returning to 0x44bbb5) gives the cursor's pixel (kept to the city, as the
+    // buffer pixel it shows) plus the cursor tile's height x 40, which the game takes off again. A stub at 0x44bb9c
+    // pushes (gx 1, gy 2, &sx, &sy) and calls the detour from 0x44bbb0, as the game does.
+    static int cornerX = 0, cornerY = 0;
+    BYTE *stub = reinterpret_cast<BYTE *>(0x44bb9c + g_imageShift);
+    const DWORD pushed[4] = {reinterpret_cast<DWORD>(&cornerY), reinterpret_cast<DWORD>(&cornerX), 2, 1};
+    for (int i = 0; i < 4; ++i) {
+        stub[i * 5] = 0x68;
+        *reinterpret_cast<DWORD *>(stub + i * 5 + 1) = pushed[i];
+    }
+    BYTE *call = reinterpret_cast<BYTE *>(0x44bbb0 + g_imageShift);
+    call[0] = 0xe8;
+    *reinterpret_cast<DWORD *>(call + 1) =
+        reinterpret_cast<DWORD>(Scroll<GridToScreen_fn>("grid_to_screen")) - reinterpret_cast<DWORD>(call + 5);
+    call[5] = 0x83; // add esp, 0x10
+    call[6] = 0xc4;
+    call[7] = 0x10;
+    call[8] = 0xc3;
+    using Stub_fn = void(__cdecl *)();
+    const Stub_fn corner = reinterpret_cast<Stub_fn>(stub);
+    At<unsigned char>(0x10de041) = 0x4d;
+    At<int>(0x101d0b4) = 1000;          // the cursor's tile
+    At<signed char>(0xbebf38 + 2 + 1000) = 2; // its height
+    At<int>(aMouseX) = 1700;
+    At<int>(aMouseY) = 20;
+    corner();
+    Check(cornerX == cd::ZoomToBuffer(1677, 0, fx) && cornerY == cd::ZoomToBuffer(42, 40, fy) + 80,
+          "drag frame corner: the cursor (kept to the city, 2 px inside at the top) as a buffer pixel, plus the "
+          "tile's height x 40");
+    At<int>(aMouseX) = -5; // left of the city: 2 px inside, so the game draws the left side (it leaves out 0 or less)
+    corner();
+    Check(cornerX == cd::ZoomToBuffer(2, 0, fx) && cornerX > 0, "drag frame corner: 2 px inside on the left");
+    At<unsigned char>(0x10de041) = 0;
+    cornerX = cornerY = -1;
+    corner();
+    Check(cornerX != cd::ZoomToBuffer(2, 0, fx) || cornerY != cd::ZoomToBuffer(42, 40, fy) + 80,
+          "no drag selection: grid_to_screen as before");
+    At<int>(aMouseX) = 100;
+    At<int>(aMouseY) = 140;
 }
 
 // ---------------------------------------------------------------------------------------------

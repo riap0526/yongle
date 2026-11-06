@@ -408,7 +408,7 @@ void __cdecl ViewportLarge_detour() // 78x40 tiles: 800 -> 7x29, 1024 -> 10x37 (
         UpdateCityExtent(true);
         return;
     }
-    // R5: the zoomed view (docs/resolution_ui/r5_city_zoom.md section 8.7) for the city as shown on the screen, from
+    // R5: the zoomed view (docs/archive/resolution_ui_r5.md section 8.7) for the city as shown on the screen, from
     // the top bar to the bottom and to the sidebar; capped to the map's range by games/emperor/zoom.
     int cols = LargeColumns(w), rows = (h - kTopBar) / 20 + 1;
     emperor::zoom::ViewFor(*kSidebarX, h - kTopBar, 0x4e + 2, 0x28 / 2, &cols, &rows);

@@ -11,6 +11,7 @@ All notable changes to Yongle. Downloads, with the SHA256 of each zip, are on th
 
 ### Added
 
+- **City zoom with the mouse wheel.** Over the city, the wheel zooms out to see more of it or in to see it larger, in steps of 25 % from 50 % to 150 % (less on small maps, so the view stays within the map), around the point under the cursor; with smooth scrolling on, the zoom is animated. The middle mouse button goes back to 100 %. Over the sidebar the wheel still changes the building category, as in the original. Clicks, building previews, roads and walls, selections, information windows and sounds all follow the zoom, and the scrolling speed on the screen stays the same. *Starting city zoom* (`city_zoom` in `[display]`, also in the settings panel) is the zoom the game starts with; what the wheel sets is not saved, and saved games are unchanged. When the city is zoomed out it is made smaller by averaging, so details do not shimmer while scrolling (`city_zoom_shrink = nearest` for sharper pixels). Not available at the game's own 1024×768 or with its small tiles.
 - **Skip the intro movie**: `intro_movie = skip` in `[display]` (also in the settings panel); takes effect the next time the game starts. The game's own `Emperor.ini` is not changed.
 
 ## 0.1.3 (2026-11-02)

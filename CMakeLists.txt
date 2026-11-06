@@ -197,8 +197,9 @@ target_link_options(test_moved_rect PRIVATE -static)
 
 # Offline test of core/display/scaled_rect (the China map's scaling, mouse mapping and backdrop; R2c).
 # Offline test of core/display/city_zoom and the shrinking in core/display/scaled_rect (R5,
-# docs/resolution_ui/r5_city_zoom.md): the zoom limit for map and screen sizes, the cap, averaged and nearest shrinking.
-add_executable(test_city_zoom proxy/ddraw/test_city_zoom.cpp src/core/display/city_zoom.cpp
+# docs/archive/resolution_ui_r5.md): the zoom limit for map and screen sizes, the cap, averaged and nearest shrinking.
+add_executable(test_city_zoom proxy/ddraw/test_city_zoom.cpp src/core/display/city_zoom.cpp src/core/diag/environment.cpp
+    src/core/platform/files.cpp
     src/core/display/scaled_rect.cpp src/core/platform/parallel.cpp src/core/platform/affinity.cpp
     src/core/diag/guard.cpp src/core/log.cpp)
 target_include_directories(test_city_zoom PRIVATE src)

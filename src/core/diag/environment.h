@@ -8,14 +8,18 @@
 
 namespace core::diag::env {
 
-enum class Thread { Game, Output, Writer }; // Writer: the screenshot writer (core/capture)
+// Writer: the screenshot writer (core/capture). Workers: the parallel workers (core/platform/parallel), up to
+// kMaxWorkers threads measured together (their processor time summed, so it can pass 100%).
+enum class Thread { Game, Output, Writer, Workers };
+constexpr int kMaxWorkers = 4;
 
 // Once at start-up (any thread): logs the modules from outside Windows' folder (with the known overlays named), the
 // power source and plan, the process's priority class and power throttling; later loads are noted as they happen and
 // logged with the next TakeWindow.
 void Start();
 
-// On the thread itself: the thread to measure (called again: the newer thread). Logs its processor affinity mask.
+// On the thread itself: the thread to measure (called again: the newer thread; Workers: one more worker, up to
+// kMaxWorkers). Logs its processor affinity mask.
 void RegisterThread(Thread which);
 
 // On the measured thread, once per pass or frame: which kind of core it runs on (hybrid processors: performance or

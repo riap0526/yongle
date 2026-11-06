@@ -1,4 +1,4 @@
-// R5 city zoom (docs/resolution_ui/r5_city_zoom.md): R5b the scale from the settings, R5c clicks converted, R5d the
+// R5 city zoom (docs/archive/resolution_ui_r5.md): R5b the scale from the settings, R5c clicks converted, R5d the
 // wheel (25 a notch around the cursor, smooth) and the middle button (back to 100); the wheel's scale is not saved.
 //   [display] city_zoom = 50..400 (percent, Augustus' scale: 100 the game's own size, 200 twice as much of the city
 //             seen); in effect at most what the map's range allows (core/display/city_zoom.h), worked out again when
@@ -16,8 +16,8 @@ namespace emperor::zoom {
 // From emperor_register_settings (DllMain).
 void RegisterSettings();
 
-// Checks and installs view_clamp's and city_render_tiles_at's hooks; false (logged) when a site does not match: the
-// city then stays at 100.
+// Checks and installs view_clamp's hook and the wheel's mouse filter; false (logged) when view_clamp does not match:
+// the city then stays at 100.
 bool Attach();
 
 // The scale in effect for the city on the screen (showW x showH pixels, columns of colPx, half rows of halfH) and the
@@ -39,10 +39,6 @@ bool AverageShrink();
 // drawing before every zoomed frame.
 bool ViewFits(int cols, int rows);
 
-// The game's present (end of a frame): the first frame with the small city view (0x46a320) is saved as
-// shots\smallview_<tag>_game_... (where that view is shown is not known yet).
-void OnPresent();
-
 // Zoom off for the rest of the run (smooth scrolling, which draws the zoomed city, was switched off after an error):
 // the view is laid out again at 100 right away, before the city is drawn the game's way.
 void Off(const char *why);
@@ -56,7 +52,7 @@ void Recheck();
 // games/emperor/resolution: lays the city's view out again (the viewport hooks' work).
 void SetRelayout(void (*fn)());
 
-// R5d (r5_city_zoom.md section 11): the wheel over the city (city screens only) moves the scale 25 at a time, the
+// R5d (resolution_ui_r5.md section 11): the wheel over the city (city screens only) moves the scale 25 at a time, the
 // middle button back to 100, with the city point under the cursor kept there. Moving: a target not reached yet.
 // Advance: once per frame before the city is drawn (games/emperor/scroll), the next percent (all at once when not
 // smooth) laid out; true when the scale changed (the caller then moves the view for the anchor, the cursor position

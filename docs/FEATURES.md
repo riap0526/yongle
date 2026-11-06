@@ -31,6 +31,7 @@ Back to the [README](../README.md). All settings are in `emperor_engine.ini` and
 ## Gameplay feel
 
 - **Pixel-smooth scrolling** of the city at the game's own average speed, with easing.
+- **City zoom.** The mouse wheel over the city zooms out to see more of it or in to see it larger, in steps of 25 % from 50 % to 150 % (less on small maps: the view stays within the map). The point under the cursor stays where it is, and the zoom is animated when smooth scrolling is on. The middle mouse button goes back to 100 %. Over the sidebar the wheel still changes the building category. Clicks, building, selections and sounds work at every zoom; the sidebar and the menus keep their size. The zoom the game starts with is a setting (`city_zoom`, *Starting city zoom* in the panel); the wheel's zoom is not saved, and saved games do not store it. Seeing more of the city is slower, since the game draws more of it.
 - **Steady game speed.** In the original, a large city at a high resolution runs slower, because the simulation waits for drawing. Yongle catches up on the missed simulation steps (as Augustus does), so every resolution runs at the speed you set.
 - **Predictable 100 % speed.** The original's 100 % runs as fast as the computer can draw; by default Yongle caps it to a steady pace one step above 90 % (the original behavior is a setting).
 - **The city keeps running while you scroll** (the original pauses it; a setting).

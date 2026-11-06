@@ -30,6 +30,7 @@ See **[CHANGELOG.md](CHANGELOG.md)** for what changed in each release.
 - **Menus, loading screens and the China map** at their own size in a frame, over a blurred picture of your city.
 - **Windowed mode** (F5 or Alt+Enter), resizable, with its size and position remembered.
 - **Pixel-smooth scrolling** of the city, at the game's own average speed.
+- **City zoom** with the mouse wheel (50–150 %, less on small maps), around the point under the cursor; the middle mouse button goes back to 100 %.
 - **Steady game speed** at every resolution, and a predictable 100 % speed.
 - **Music and sounds pause** while you are switched away; ambient sounds at a steady rate.
 - **Settings panel** (Insert) and Yongle's settings in the game's own Display options.
@@ -63,6 +64,8 @@ Yongle is a single `ddraw.dll` in the game folder. It provides its own DirectDra
 | F11             | Screenshot to `shots\`                                                                                |
 | F12             | Problem report (when something looks wrong)                                                           |
 | Shift+F7        | Cycle through a few resolutions until the game ends (for trying them out; the setting is not changed) |
+| Mouse wheel     | Over the city: zoom in and out. Over the sidebar: the building category, as in the original           |
+| Middle button   | Over the city: zoom back to 100 %                                                                     |
 
 ## Settings
 

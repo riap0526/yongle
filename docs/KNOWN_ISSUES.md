@@ -5,6 +5,7 @@ Back to the [README](../README.md). If you run into something not listed here, p
 ## Performance
 
 - **Laptops and slower computers: lower the resolution first.** Raise the display scale (Options → Display options, or the settings panel with Insert), or choose *Auto* (1080 pixels high on taller screens). The game then draws fewer pixels; this helps more than any other setting.
+- **City zoom above 100 % is slower**: the game draws more of the city (at 150 %, more than twice as much). If the game slows down, zoom in a little.
 
 ## Troubleshooting
 
@@ -14,6 +15,7 @@ Back to the [README](../README.md). If you run into something not listed here, p
 ## Display
 
 - The map and campaign editors and the multiplayer screens run at 1024×768 (centered), not at your resolution.
+- City zoom is not available at the game's own 1024×768 or with its small tiles: the mouse wheel then changes the building category, as in the original.
 - The campaign map screen has not been tested in play yet.
 - Small cosmetic quirks of the original are kept for now (e.g. text sitting slightly high in some dialog buttons).
 

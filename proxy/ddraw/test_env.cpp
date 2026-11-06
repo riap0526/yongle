@@ -47,6 +47,21 @@ void Busy(DWORD ms)
     }
 }
 
+// R5e: a parallel worker busy for 1.5 s.
+DWORD WINAPI BusyWorker(void *)
+{
+    env::RegisterThread(env::Thread::Workers);
+    const DWORD start = GetTickCount();
+    volatile unsigned x = 0;
+    while (GetTickCount() - start < 1500) {
+        for (int i = 0; i < 10000; ++i) {
+            x = x * 1664525u + 1013904223u;
+        }
+        env::NoteCore(env::Thread::Workers);
+    }
+    return 0;
+}
+
 // The log's text (it is written as lines arrive).
 char *ReadLog(char *buffer, size_t size)
 {
@@ -90,6 +105,22 @@ int main()
     Check(game >= 80, "busy game thread: most of the time on a processor");
     Check(output >= 0 && output <= 5, "idle output thread: almost none");
     Check(std::strstr(line, "logical processors") && std::strstr(line, "% busy"), "process and system shares");
+
+    // R5e: two busy parallel workers, measured together (their processor time summed).
+    HANDLE workers[2];
+    for (HANDLE &w : workers) {
+        w = CreateThread(nullptr, 0, &BusyWorker, nullptr, 0, nullptr);
+    }
+    Sleep(100); // both registered
+    env::TakeWindow(line, sizeof(line)); // the workers' counting starts
+    WaitForMultipleObjects(2, workers, TRUE, INFINITE);
+    env::TakeWindow(line, sizeof(line));
+    std::printf("cpu with workers: %s\n", line);
+    int together = -1;
+    if (const char *w = std::strstr(line, "parallel workers (2) ")) {
+        together = std::atoi(w + 21);
+    }
+    Check(together >= 120, "two busy workers measured together: more than one processor's time");
 
     static char log[256 * 1024];
     ReadLog(log, sizeof(log));

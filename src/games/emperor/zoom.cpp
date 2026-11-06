@@ -1,6 +1,5 @@
 #include "games/emperor/zoom.h"
 
-#include "core/capture/screenshot.h"
 #include "core/diag/guard.h"
 #include "core/display/city_zoom.h"
 #include "core/display/virtual_display.h"
@@ -13,48 +12,41 @@
 #include <cstdlib>
 #include <cstring>
 
-// Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e): docs/resolution_ui/r5_city_zoom.md section 8, names and
+// Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e): docs/archive/resolution_ui_r5.md section 8, names and
 // calling conventions in docs/symbols.md.
 namespace emperor::zoom {
 namespace {
 
 // view_clamp: __cdecl, no arguments; keeps view_x / view_y within the map's range minus the view's size.
 const Site kViewClamp{"view_clamp", 0x53cbd0, {0x51, 0x53, 0x8b, 0x1d, 0xe0, 0xf6, 0x15, 0x01}};
-// city_render_tiles_at(view_x, view_y, ?, arg): __cdecl, 4 arguments, ret. A small city view drawn with its own
-// viewport (0x53cac0: 5 x 15 small tiles) by 0x5a25c0, for a list of buildings (0x5a2670); which screen shows it is
-// logged (R5b test).
-const Site kRenderAt{"city_render_tiles_at", 0x46a320, {0x8b, 0x4c, 0x24, 0x08, 0x8b, 0x44, 0x24, 0x04}};
-
 const Var<int> kMapColMin{0x115f6e8}; // view_clamp's limits
 const Var<int> kMapColMax{0x115f6e4};
 const Var<int> kMapRowMin{0x115f6e0};
 const Var<int> kMapRowMax{0x115f6dc};
 const Var<char> kGameScreen{0x10de045};
 const Var<char> kRedraw{0x10de036};
-// view_clamp's bottom margin (r5_city_zoom.md section 9.1): map_bottom_margin 0x53d700 (__fastcall, ecx = 0xbebf38)
+// view_clamp's bottom margin (resolution_ui_r5.md section 9.1): map_bottom_margin 0x53d700 (__fastcall, ecx = 0xbebf38)
 // reads this + 0x19628 + (0 for direction 0, 1 for 2, 2 for 4, 3 for any other) -- the highest tile along the edge at
 // the bottom of the screen (0x535960). view_clamp's bottom limit is the map's minus (margin + 4) when it is not 0.
 const Var<unsigned char> kBottomMargin{0xbebf38 + 0x19628}; // 4 bytes
 const Var<int> kDirection{0x101d0d0};                       // 0, 2, 4, 6
+// The game's mouse mode: drag_select_start 0x44bb00 sets 0x4d ('M') for a military drag selection (0x44bb0d), the
+// drag is drawn while it is 0x4d (0x54b46f) and drag_select_finish clears it (0x44c107). R5e's first test: the wheel
+// zoomed during a drag although wheel messages with MK_LBUTTON are not taken (why MK_LBUTTON was not set then is not
+// known).
+const Var<unsigned char> kMouseMode{0x10de041};
+constexpr unsigned char kMouseModeDragSelect = 0x4d;
 const Var<int> kViewX{0x101d0ac};
 const Var<int> kViewY{0x101d0b0};
 // The view as city_render last drew it (its arguments), which mouse_to_grid adds to the cursor's view tile for the
 // view_to_grid lookup. viewport_init sets it to the map's middle (its first two arguments halved, 0xe4 -> 0x72 and
-// 0xe4), so after a relayout it is written again with the current view (r5_city_zoom.md section 11.6).
+// 0xe4), so after a relayout it is written again with the current view (resolution_ui_r5.md section 11.6).
 const Var<int> kViewDrawnX{0xadf8d8};
 const Var<int> kViewDrawnY{0xadf8d4};
-// The game's frame (for the small city view's screenshot).
-const Var<BYTE *> kDrawBuffer{0x1156df8};
-const Var<int> kScreenPitch{0x10de000};
-const Var<int> kDdWidth{0x10de008};
-const Var<int> kDdHeight{0x10de004};
-
 constexpr int kZoomCap = 150; // larger views cost too much speed (R5b's first test)
 
 using Void_fn = void(__cdecl *)();
-using RenderAt_fn = void(__cdecl *)(int, int, int, int);
 Void_fn o_ViewClamp;
-RenderAt_fn o_RenderAt;
 
 core::diag::Feature g_feature{"city zoom (games/emperor/zoom)"};
 bool g_attached = false;
@@ -62,9 +54,9 @@ int g_requested = 100;
 bool g_average = true;
 void (*g_relayout)() = nullptr;
 
-// R5d (r5_city_zoom.md section 11): the wheel and the middle button move g_requested towards g_target, a little each
-// frame (games/emperor/scroll calls Advance before the city is drawn), with the city point under g_anchor kept under
-// the cursor. Not saved: city_zoom in emperor_engine.ini is the scale at start-up.
+// R5d (resolution_ui_r5.md section 11): the wheel and the middle button move g_requested towards g_target, a little
+// each frame (games/emperor/scroll calls Advance before the city is drawn), with the city point under g_anchor kept
+// under the cursor. Not saved: city_zoom in emperor_engine.ini is the scale at start-up.
 int g_target = 100;
 int g_anchorX = 0, g_anchorY = 0;
 int g_wheel = 0; // wheel delta short of a notch (high-resolution wheels send less than 120)
@@ -99,7 +91,7 @@ int Margin()
     return kBottomMargin.ptr()[MarginIndex()];
 }
 
-// The half rows view_clamp can hold now: its bottom limit minus its top one (r5_city_zoom.md section 9.1). The
+// The half rows view_clamp can hold now: its bottom limit minus its top one (resolution_ui_r5.md section 9.1). The
 // margin is kept as the game has it: without it, the rows below raised ground at the bottom edge show leftovers of
 // earlier frames (nothing is drawn there; R5b's second test, r5b_city_zoom.md section 5).
 int ClampRows()
@@ -154,23 +146,6 @@ void __cdecl ViewClamp_detour()
     Clamp();
 }
 
-// The small city view (0x46a320): where it is shown is not known yet (r5_city_zoom.md section 8.4); the first time,
-// the frame it is in is saved at the next present.
-bool g_loggedRenderAt = false;
-bool g_shotPending = false;
-
-void __cdecl RenderAt_detour(int vx, int vy, int a, int b)
-{
-    if (!g_loggedRenderAt) {
-        g_loggedRenderAt = true;
-        g_shotPending = true;
-        core_log("zoom: city_render_tiles_at (a small city view with its own viewport) drawn on screen 0x%02x at "
-                 "city zoom %d%%; the frame is saved as shots\\smallview_...",
-                 static_cast<unsigned char>(*kGameScreen), g_now.percent);
-    }
-    Original(o_RenderAt, kRenderAt)(vx, vy, a, b);
-}
-
 bool ApplyZoom(int, const char *v, bool initial)
 {
     const int p = std::strcmp(v, "auto") == 0 ? 100 : std::atoi(v);
@@ -196,7 +171,7 @@ int LimitNow()
     return g_now.limit > 0 ? g_now.limit : core::display::kZoomMax;
 }
 
-// R5d: the wheel and the middle button over the city as shown, on the city screens (r5_city_zoom.md section 8.1:
+// R5d: the wheel and the middle button over the city as shown, on the city screens (resolution_ui_r5.md section 8.1:
 // 1, the building submenu 7, the army screens 0x48 / 0x49). Elsewhere (the sidebar: its building categories, other
 // screens) the game has them as always.
 bool CityScreen()
@@ -243,6 +218,10 @@ void TakeMouse(MouseCall &c)
         return; // the game's own (the sidebar's categories)
     }
     c.taken = true;
+    if (*kMouseMode == kMouseModeDragSelect) {
+        g_wheel = 0; // R5e: not during a military drag selection (its start corner is in the scale it began in)
+        return;
+    }
     const int low = core::display::kZoomMin;
     if (!wheel) {
         MoveTowards(100 < high ? 100 : high, c.x, c.y, "middle button");
@@ -307,13 +286,11 @@ void RegisterSettings()
 
 bool Attach()
 {
-    if (!Matches(kViewClamp) || !Matches(kRenderAt)) {
-        core_log("zoom: %s does not match: the city stays at 100%%",
-                 Matches(kViewClamp) ? kRenderAt.name : kViewClamp.name);
+    if (!Matches(kViewClamp)) {
+        core_log("zoom: %s does not match: the city stays at 100%%", kViewClamp.name);
         return false;
     }
     Install(kViewClamp, &ViewClamp_detour, o_ViewClamp);
-    Install(kRenderAt, &RenderAt_detour, o_RenderAt);
     core::display::SetMouseFilter(&MouseFilter); // R5d: the wheel and the middle button over the city
     g_attached = true;
     core_log("zoom: city zoom installed (asked %d%%, shrinking %s)", g_requested, g_average ? "average" : "nearest");
@@ -392,23 +369,6 @@ bool AverageShrink()
 bool ViewFits(int cols, int rows)
 {
     return core::display::ViewFitsMap(cols, rows, MapCols(), MapRows(), ClampRows());
-}
-
-void OnPresent()
-{
-    if (!g_shotPending) {
-        return;
-    }
-    g_shotPending = false;
-    core::diag::Guarded(
-        g_feature,
-        [](void *) {
-            const BYTE *back = *kDrawBuffer;
-            if (back && *kScreenPitch > 0 && *kDdWidth > 0 && *kDdHeight > 0) {
-                core::capture::SaveOne(back, *kScreenPitch, *kDdWidth, *kDdHeight, "smallview", "game");
-            }
-        },
-        nullptr);
 }
 
 void Off(const char *why)

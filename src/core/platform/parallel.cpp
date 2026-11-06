@@ -1,5 +1,6 @@
 #include "core/platform/parallel.h"
 
+#include "core/diag/environment.h"
 #include "core/diag/guard.h"
 #include "core/log.h"
 #include "core/platform/affinity.h"
@@ -66,6 +67,7 @@ struct Piece {
 DWORD WINAPI Worker(LPVOID)
 {
     core::platform::affinity::OurThread("parallel worker");
+    core::diag::env::RegisterThread(core::diag::env::Thread::Workers); // processor time and core kind in the log
     unsigned seen = 0;
     for (;;) {
         Job j;
@@ -76,6 +78,7 @@ DWORD WINAPI Worker(LPVOID)
             gen = seen = g_gen;
             j = g_job;
         }
+        core::diag::env::NoteCore(core::diag::env::Thread::Workers); // once per job: which kind of core
         Piece p{&j, 0};
         while (Claim(gen, j.pieces, &p.piece)) {
             if (!core::diag::Enabled(g_feature) ||

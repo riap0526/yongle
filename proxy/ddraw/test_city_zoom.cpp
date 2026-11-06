@@ -1,4 +1,4 @@
-// Offline test of core/display/city_zoom and ShrinkRgb565 (R5, docs/resolution_ui/r5_city_zoom.md section 8.2):
+// Offline test of core/display/city_zoom and ShrinkRgb565 (R5, docs/archive/resolution_ui_r5.md section 8.2):
 //   - for map ranges seen in the game (54x112 .. 112x224) and several screens: the limit is the largest percent whose
 //     view (plus the drawing's extra column and two half rows) is within the map's range, one more does not fit, and
 //     every percent up to it fits; a request above it is capped to it; an unknown map gives 100; a map too small for
@@ -93,7 +93,7 @@ int main()
         }
     }
 
-    // --- the numbers of r5_city_zoom.md section 8.2 (2560x1440: city 29 x 71 at 100%)
+    // --- the numbers of resolution_ui_r5.md section 8.2 (2560x1440: city 29 x 71 at 100%)
     {
         cd::ZoomInput in{400, 2334, 1400, colPx, halfH, 54, 112};
         const int small = cd::ZoomFor(in).limit;
@@ -214,7 +214,7 @@ int main()
         }
     }
 
-    // --- view_clamp's bottom margin (r5_city_zoom.md section 9.1): the view never taller than the clamp holds
+    // --- view_clamp's bottom margin (resolution_ui_r5.md section 9.1): the view never taller than the clamp holds
     {
         bool ok = true;
         for (const Screen &sc : screens) {
