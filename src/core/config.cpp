@@ -25,7 +25,8 @@ constexpr wchar_t kFileName[] = L"emperor_engine.ini";
 core_config g_config = {CORE_BACKEND_EMULATED, CORE_SCALING_SHARP_BILINEAR, CORE_PRESENT_DISPLAY,
                         CORE_RESOLUTION_SCALED, 1024, 768, 100, 1, 1, 0x2D /* Insert */, 0, 0,
                         0x7A /* F11 */, 0, 0x7B /* F12 */, 0, 0, 0, 0, 0,
-                        0 /* fail_direct3d9 */, 0 /* d3d9_pacing */, 0, 0, 0, CORE_WINDOW_CENTER, CORE_WINDOW_CENTER, 0, 0 /* cpu_affinity */};
+                        0 /* fail_direct3d9 */, 0 /* d3d9_pacing */, 0, 0, 0, CORE_WINDOW_CENTER, CORE_WINDOW_CENTER, 0, 0 /* cpu_affinity */,
+                        1 /* present_mode_log */, 0 /* window_background_test */};
 
 const char *const kBackend[] = {"emulated", "system"};
 const char *const kBackendLabels[] = {"emulated (our own DirectDraw)", "system (Windows' DirectDraw, logged)"};
@@ -68,7 +69,7 @@ int Index(const char *const *list, int n, const char *v)
 
 int g_backend, g_scaling, g_present, g_resolution, g_scale, g_timer, g_smooth, g_panelScale, g_panelKey,
     g_shotKey, g_reportKey, g_labels, g_loadingHold, g_perfOverlay, g_renderer, g_failD3d9, g_d3d9Pacing, g_window, g_windowW, g_windowH,
-    g_windowX, g_windowY, g_windowLock, g_cpuAffinity;
+    g_windowX, g_windowY, g_windowLock, g_cpuAffinity, g_presentModeLog, g_windowBackground;
 
 // Keeps core_config in step with the model (registered first, so owners' callbacks see the new typed value).
 bool Sync(int i, const char *v, bool)
@@ -109,6 +110,8 @@ bool Sync(int i, const char *v, bool)
     else if (i == g_failD3d9) g_config.fail_direct3d9 = std::strcmp(v, "on") == 0;
     else if (i == g_d3d9Pacing) g_config.d3d9_pacing = Index(core_d3d9_pacing_names, 3, v);
     else if (i == g_cpuAffinity) g_config.cpu_affinity = Index(kCpuAffinity, 2, v);
+    else if (i == g_presentModeLog) g_config.present_mode_log = std::strcmp(v, "on") == 0;
+    else if (i == g_windowBackground) core_config_set_live(&g_config.window_background_test, std::strcmp(v, "on") == 0);
     else if (i == g_shotKey) {
         core::ui::Hotkey key{0x7A, 0};
         core::ui::ParseHotkey(v, v + std::strlen(v), &key);
@@ -246,6 +249,17 @@ void RegisterCoreItems()
                             "effect after a restart.",
                             Type::Choice, "vsync", Effect::Restart, false, false, 0, 0, 0, nullptr,
                             core_d3d9_pacing_names, kD3d9PacingLabels, 3});
+    // Black block diagnosis (docs/resolution_ui/sdl_output_comparison.md §8): the present mode log is only in the file.
+    g_presentModeLog = Add(Item{"debug", "present_mode_log", "Present mode log",
+                                "on: the log records how Windows shows the game's frames (Direct3D 11 only) and the "
+                                "programs known to draw on the screen, for tracking down flashing black blocks. Takes "
+                                "effect after a restart.",
+                                Type::Bool, "on", Effect::Restart, false, false, 0, 0, 0, nullptr, nullptr, nullptr, 0});
+    g_windowBackground = Add(Item{"debug", "window_background_test", "Window background: test color",
+                                  "For tracking down flashing black blocks: the game window's background becomes "
+                                  "magenta. If the blocks flash magenta instead of black, press the report key and "
+                                  "tell us. Magenta may also show for a moment when the window changes size.",
+                                  Type::Bool, "off", Effect::Live, true, true, 0, 0, 0, nullptr, nullptr, nullptr, 0});
     g_labels = Add(Item{"debug", "frame_labels", "Frame labels",
                         "For development: checking the framed pictures' layout. The border's dark "
                         "lines red, the rest of the border green, padding yellow, the picture white, outside blue.",

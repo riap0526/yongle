@@ -6,6 +6,8 @@
 #include "core/capture/screenshot.h"
 #include "core/diag/environment.h"
 #include "core/diag/guard.h"
+#include "core/diag/present_mode.h"
+#include "core/diag/window_background.h"
 #include "core/diag/stall.h"
 #include "core/display/framing.h"
 #include "core/display/scaled_rect.h"
@@ -55,6 +57,14 @@ void Fail(const char *what)
 }
 
 SDL_Texture *g_bgOuter = nullptr, *g_bgFrame = nullptr; // the framed pictures' background layers (below)
+
+// The renderer's Direct3D 11 swap chain (SDL owns it; no reference is taken), or null for another renderer.
+IDXGISwapChain *D3d11SwapChain()
+{
+    return g_renderer ? static_cast<IDXGISwapChain *>(SDL_GetPointerProperty(
+                            SDL_GetRendererProperties(g_renderer), SDL_PROP_RENDERER_D3D11_SWAPCHAIN_POINTER, nullptr))
+                      : nullptr;
+}
 
 bool Direct3d9()
 {
@@ -620,6 +630,10 @@ void ApplyVsync(int interval)
     }
     g_measureStart = 0;
     g_measureFrames = g_measureArmed ? 0 : -1;
+    // Present mode log (core/diag/present_mode.h): the swap chain's setup with this interval, the game window.
+    if (core_config_get()->present_mode_log) {
+        core::diag::present_mode::Attach(D3d11SwapChain(), SDL_GetRendererName(g_renderer), g_vsync, g_hwnd);
+    }
 }
 
 // Output thread, after each frame presented: the measurement's end (3 s of frames; pauses longer than 200 ms between
@@ -1144,6 +1158,9 @@ void DrawFrame(const void *pixels, int pitch, int w, int h, const RECT &dst, SIZ
         }
         MeasureVsync();
         RecordInterval();
+        if (core_config_get()->present_mode_log) {
+            core::diag::present_mode::AfterPresent(D3d11SwapChain(), g_hwnd); // only logs (Direct3D 11 only)
+        }
     }
     if (ok) {
         ++g_shown;
@@ -1375,11 +1392,17 @@ DWORD WINAPI OutputThread(void *)
         }
         if (ReportKeyPressed()) {
             char label[24];
-            std::snprintf(label, sizeof(label), "report%d", core::diag::BeginReport("report key"));
+            const int report = core::diag::BeginReport("report key");
+            std::snprintf(label, sizeof(label), "report%d", report);
             ScreenshotHere(label);
+            if (core_config_get()->present_mode_log) {
+                core::diag::present_mode::Report(report); // the recent present mode changes
+            }
         }
         HandleRenderEvents();
         CheckWindowState();
+        // [debug] window_background_test (core/diag/window_background.h): applied or restored when it changes.
+        core::diag::window_background::Update(g_hwnd, core_config_live(core_config_get()->window_background_test) != 0);
         int r = g_ready.load();
         if (!(r & kNew) && panel) {
             const Frame &f = g_slots[g_read];

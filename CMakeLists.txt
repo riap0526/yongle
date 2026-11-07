@@ -69,6 +69,10 @@ add_library(ddraw SHARED
     src/core/diag/perf.cpp
     src/core/diag/environment.cpp
     src/core/diag/stall.cpp
+    src/core/diag/present_mode.cpp
+    src/core/diag/present_mode_tracker.cpp
+    src/core/diag/screen_programs.cpp
+    src/core/diag/window_background.cpp
     src/core/assets/sg3.cpp
     src/core/assets/image_file.cpp
     src/core/output/sdl_output.cpp
@@ -245,6 +249,15 @@ add_executable(test_stall proxy/ddraw/test_stall.cpp src/core/diag/stall.cpp src
 target_include_directories(test_stall PRIVATE src)
 target_link_options(test_stall PRIVATE -static)
 
+# Offline test of core/diag/present_mode (the bookkeeping, the report; the not-Direct3D-11 path; 2026-11-07), the screen
+# programs list and the window background test color.
+add_executable(test_present_mode proxy/ddraw/test_present_mode.cpp src/core/diag/present_mode.cpp
+    src/core/diag/present_mode_tracker.cpp src/core/diag/screen_programs.cpp src/core/diag/window_background.cpp
+    src/core/diag/guard.cpp src/core/log.cpp)
+target_include_directories(test_present_mode PRIVATE src)
+target_link_options(test_present_mode PRIVATE -static)
+target_link_libraries(test_present_mode PRIVATE dxguid user32 gdi32)
+
 # Offline test of the screenshot writer: the queue limit and the processor time per picture (O1, 2026-10-30).
 add_executable(test_screenshot proxy/ddraw/test_screenshot.cpp src/core/capture/screenshot.cpp src/core/platform/files.cpp
     src/core/diag/environment.cpp src/core/log.cpp src/core/platform/affinity.cpp src/core/diag/guard.cpp)
@@ -276,6 +289,7 @@ add_executable(test_restore proxy/ddraw/test_restore.cpp
     src/games/emperor/zoom.cpp src/core/display/city_zoom.cpp
     src/core/scroll/smooth_scroll.cpp src/core/diag/guard.cpp src/core/diag/report.cpp src/core/diag/perf.cpp
     src/core/diag/environment.cpp src/core/diag/stall.cpp src/core/platform/affinity.cpp src/core/log.cpp
+    src/core/diag/present_mode.cpp src/core/diag/present_mode_tracker.cpp src/core/diag/screen_programs.cpp
     src/core/platform/parallel.cpp src/core/display/logical_size.cpp
     src/core/display/moved_rect.cpp src/core/display/scaled_rect.cpp src/core/ddraw/surface_memory.cpp
     src/core/assets/sg3.cpp src/core/config.cpp src/core/settings/settings.cpp src/core/settings/ini_text.cpp

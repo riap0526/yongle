@@ -31,6 +31,8 @@
 //   frame_labels = off     ; on: framed pictures drawn in label colours for tools/verify/frame_check.py
 //   loading_stage_ms = 0   ; 0..5000: each start-up loading stage stays on screen at least this long (for looking)
 //   perf_overlay = off     ; on: FPS and where the time goes, in the top left corner while playing
+//   present_mode_log = on  ; how Windows shows our Direct3D 11 frames, in the log (core/diag/present_mode.h)
+//   window_background_test = off ; on: the game window's background brush magenta (core/diag/window_background.h)
 //
 //   [compat]
 //   cpu_affinity = auto    ; auto: our threads on the other processors, the game's on its original one | original
@@ -75,6 +77,8 @@ struct core_config {
     int window_x, window_y;    /* its top left corner (outer); CORE_WINDOW_CENTER: centred on its monitor */
     int window_lock_cursor;    /* nonzero: windowed, the cursor is kept inside the window while it is active */
     int cpu_affinity;          /* [compat] cpu_affinity (B plan, docs/archive/affinity.md): 0 auto, 1 original */
+    int present_mode_log;      /* [debug] present_mode_log (hidden): nonzero: core/diag/present_mode.h logs (default on) */
+    int window_background_test; /* [debug] window_background_test: nonzero: magenta class brush (live; core_config_live) */
 };
 
 #define CORE_WINDOW_CENTER (-2147483647 - 1)

@@ -30,6 +30,8 @@
 #   test_env    core/diag/environment: modules, processor time per thread, priorities, affinity and its changes,
 #               where our files are (no DLL; ~4 s)
 #   test_stall  core/diag/stall: long passes sampled with their call stack (no DLL)
+#   test_present_mode core/diag/present_mode: mode changes, errors counted, giving up, the once-a-second line, the
+#               not-Direct3D-11 path (no DLL; writes test_present_mode.log)
 #   test_affinity core/platform/affinity (B plan): scenarios on one processor in child processes, the last one
 #               test_emu.exe with the DLL started on one processor (writes test_affinity_*.log; ~15 s)
 #   test_screenshot core/capture/screenshot: the writer's queue limit, PNG level and processor time (no DLL; writes
@@ -88,6 +90,7 @@ Run 'test_report' 'emulated' @()
 Run 'test_guard' 'emulated' @()
 Run 'test_env' 'emulated' @()
 Run 'test_stall' 'emulated' @()
+Run 'test_present_mode' 'emulated' @()
 Run 'test_affinity' 'emulated' @()
 Run 'test_screenshot' 'emulated' @()
 Run 'test_log' 'emulated' @()
