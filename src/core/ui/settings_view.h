@@ -19,7 +19,19 @@ void DrawSettings(float scale);
 // draws frames that show it.
 bool WantsGameFrames();
 
-// The panel was closed: an unanswered "keep these settings?" is answered with Revert.
+// The panel was closed: an unanswered "keep these settings?" is answered with Revert (and a key change is cancelled).
 void PanelClosed();
+
+// Key settings (city picture, docs/archive/city_export.md section 5.3): "Change" waits for the next key with
+// the modifiers held (Ctrl, Shift, Alt); Esc cancels; a key already used by another of our key settings is refused.
+// Any thread: true while the panel waits for a key (the window subclass then gives every key message to the panel),
+// and afterwards until the key that ended the wait is released (so our key polls do not take it for a new press).
+bool CapturingKey();
+// Output thread (the panel's input): a key went down while CapturingKey(), with the modifiers held then.
+void CaptureKey(unsigned vk, bool ctrl, bool shift, bool alt);
+// From the game layer at start-up: a sentence for a key (and modifiers, core/ui/hotkey.h kMod*) the game itself uses,
+// shown when such a key is chosen; nullptr when the game does not use it.
+using GameKeyNote = const char *(*)(unsigned vk, unsigned mods);
+void SetGameKeyNote(GameKeyNote fn);
 
 } // namespace core::ui

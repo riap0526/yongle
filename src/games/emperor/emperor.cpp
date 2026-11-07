@@ -44,6 +44,7 @@
 #include "core/ui/perf_view.h"
 #include "core/ui/settings_view.h"
 #include "games/emperor/china_map.h"
+#include "games/emperor/city_picture.h"
 #include "games/emperor/display_options.h"
 #include "games/emperor/fullscreen.h"
 #include "games/emperor/resolution.h"
@@ -621,6 +622,7 @@ extern "C" void emperor_register_settings(void)
     emperor::sound::RegisterSettings();
     emperor::intro::RegisterSettings();
     emperor::zoom::RegisterSettings();
+    emperor::city_picture::RegisterSettings();
     // The settings file this version ships: an older file gets its descriptions (CMake embeds the file).
     core::settings::SetTemplate(emperor::kIniTemplate);
 }
@@ -680,6 +682,7 @@ extern "C" void emperor_attach(void)
         else {
             core_log("zoom: not installed (smooth scrolling's hooks are not): the city stays at 100%%");
         }
+        emperor::city_picture::Attach(scroll); // 0.2.0: the city and minimap pictures (scroll's city_render hook)
     }
     emperor::ui_fixes::Attach();
     emperor::sound::Attach(); // O4: [sound] background_sound, ambient_sounds; pan within 0..127

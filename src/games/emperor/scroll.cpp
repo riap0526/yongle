@@ -883,12 +883,17 @@ void AfterRender()
     }
 }
 
+AfterCity g_afterCity = nullptr;
+
 void __cdecl CityRender_detour(int vx, int vy, int orientation)
 {
     RenderCall c{vx, vy, orientation, false, {}};
     if (core::diag::Guarded(g_feature, [](void *p) { Render(*static_cast<RenderCall *>(p)); }, &c, &c.r)) {
         if (!c.plain) {
             AfterRender();
+            if (g_afterCity) {
+                g_afterCity(orientation);
+            }
             return;
         }
     }
@@ -897,6 +902,9 @@ void __cdecl CityRender_detour(int vx, int vy, int orientation)
     }
     DrawCity(vx, vy, orientation);
     AfterRender();
+    if (g_afterCity) {
+        g_afterCity(orientation);
+    }
 }
 
 // R5c: a screen position as the zoomed buffer pixel it shows (unchanged at 100% and in the drag's buffer mode).
@@ -1397,6 +1405,25 @@ void Remainder(int *px, int *py)
 void SetCityDrawn(CityDrawn fn)
 {
     g_cityDrawn = fn;
+}
+
+void SetAfterCity(AfterCity fn)
+{
+    g_afterCity = fn;
+}
+
+void PictureDrawing(core::diag::Restore &r, int right, int bottom)
+{
+    r.Set(&g_px, 0);
+    r.Set(&g_py, 0);
+    r.Set(&g_inRender, true);
+    g_map.fx = 0; // no zoom in the drawing's conversions (it is 0 outside a zoomed drawing anyway)
+    g_renderShown = {0, 0, right, bottom};
+}
+
+void DrawCityForPicture(int vx, int vy, int orientation)
+{
+    DrawCity(vx, vy, orientation);
 }
 
 bool Working()

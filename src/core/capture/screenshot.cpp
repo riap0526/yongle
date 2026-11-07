@@ -1,5 +1,6 @@
 #include "core/capture/screenshot.h"
 
+#include "core/capture/big_picture.h"
 #include "core/capture/png_encode.h"
 #include "core/diag/environment.h"
 #include "core/log.h"
@@ -30,6 +31,8 @@ struct Job {
     BYTE *pixels;         // the game frame's copy (freed after writing), or nullptr
     DWORD queued;         // GetTickCount when handed to the writer
     char note[48];        // e.g. "read back 12 ms, " for the screen picture
+    BigPicture *big;      // a city picture (written a row at a time; deleted after writing), or nullptr
+    BigOptions bigOptions;
     Job *next;            // the writer's queue
 };
 
@@ -76,8 +79,44 @@ ULONGLONG ThreadCpuMs()
 // 0.7-0.9 s of processor time per 2560x1440 picture.
 constexpr unsigned kPngLevel = 1;
 
+// A city picture (docs/archive/city_export.md section 4.4): encoded and written a row at a time, its blocks
+// freed as they are written.
+void WriteBigJob(Job *job)
+{
+    const DWORD start = GetTickCount();
+    const ULONGLONG cpu0 = ThreadCpuMs();
+    wchar_t wpath[1024];
+    char error[128] = "the path cannot be converted";
+    const BigOptions &o = job->bigOptions;
+    const bool ok = MultiByteToWideChar(CP_UTF8, 0, job->path, -1, wpath, 1024) &&
+                    WriteBig(*job->big, wpath, o, error, sizeof(error), true);
+    const int scale = o.scale < 1 ? 1 : o.scale > 8 ? 8 : o.scale;
+    if (ok) {
+        WIN32_FILE_ATTRIBUTE_DATA a{};
+        const double mb = GetFileAttributesExW(wpath, GetFileExInfoStandard, &a) ? a.nFileSizeLow / (1024.0 * 1024.0) +
+                                                                                       a.nFileSizeHigh * 4096.0
+                                                                                 : 0;
+        core_log("picture: saved %s (%d x %d%s, %.1f MB at PNG level %u; waited %lu ms, written in %lu ms, %lu ms of "
+                 "it on a processor)",
+                 job->name, job->big->Width() * scale, job->big->Height() * scale,
+                 o.transparent ? ", transparent outside the map" : "", mb, o.level, start - job->queued,
+                 GetTickCount() - start, static_cast<unsigned long>(ThreadCpuMs() - cpu0));
+    }
+    else {
+        core_log("picture: could not save %s: %s", job->name, error);
+    }
+    if (o.done) {
+        o.done(ok, ok ? job->name : error);
+    }
+    Drop(job);
+}
+
 void Write(Job *job)
 {
+    if (job->big) {
+        WriteBigJob(job);
+        return;
+    }
     const DWORD start = GetTickCount();
     const ULONGLONG cpu0 = ThreadCpuMs();
     bool ok = false;
@@ -191,6 +230,7 @@ void Drop(Job *job)
         SDL_DestroySurface(job->surface);
     }
     std::free(job->pixels);
+    delete job->big;
     std::free(job);
 }
 
@@ -200,6 +240,9 @@ void Start(Job *job)
     if (g_pending.load() >= kMaxQueued) {
         core_log("screenshot: %s not saved: %ld pictures are still being written (at most %ld at a time)", job->name,
                  g_pending.load(), kMaxQueued);
+        if (job->big && job->bigOptions.done) {
+            job->bigOptions.done(false, "other pictures are still being saved");
+        }
         Drop(job);
         return;
     }
@@ -397,6 +440,34 @@ bool SaveAs(const void *pixels, int pitch, int w, int h, const char *fileName, b
     else {
         Start(job);
     }
+    return true;
+}
+
+bool SaveBig(BigPicture *pic, const BigOptions &o)
+{
+    if (!pic) {
+        return false;
+    }
+    char folder[1024], time[32], kind[64];
+    std::snprintf(kind, sizeof(kind), "%s", o.kind && *o.kind ? o.kind : "picture");
+    const int scale = o.scale < 1 ? 1 : o.scale > 8 ? 8 : o.scale;
+    auto *job = static_cast<Job *>(std::calloc(1, sizeof(Job)));
+    if (!job || !ShotsFolder(folder, sizeof(folder))) {
+        std::free(job);
+        delete pic;
+        if (o.done) {
+            o.done(false, "the shots folder cannot be made");
+        }
+        return false;
+    }
+    TimeStamp(time, sizeof(time));
+    const int w = pic->Width() * scale, h = pic->Height() * scale;
+    std::snprintf(job->name, sizeof(job->name), "shots\\%s_%dx%d_%s.png", kind, w, h, time);
+    std::snprintf(job->path, sizeof(job->path), "%s%s_%dx%d_%s.png", folder, kind, w, h, time);
+    job->big = pic;
+    job->bigOptions = o;
+    job->bigOptions.kind = nullptr; // copied into the name above; the caller's text need not outlive this call
+    Start(job); // a full queue drops it (logged), with the picture
     return true;
 }
 

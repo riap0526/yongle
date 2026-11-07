@@ -11,6 +11,7 @@
 #include "core/settings/settings.h"
 #include "core/ui/hotkey.h"
 #include "core/ui/panel.h"
+#include "core/ui/settings_view.h"
 
 #include <windowsx.h>
 
@@ -621,12 +622,46 @@ bool IsReportHotkey(UINT m, WPARAM w)
            IsHotkey(m, w, cfg->report_key_vk, cfg->report_key_mods);
 }
 
+// A game layer's keys (AddActionKey).
+core::display::ActionKey *g_actionKeys[8] = {};
+int g_actionKeyCount = 0;
+
+core::display::ActionKey *ActionKeyFor(UINT m, WPARAM w)
+{
+    const core_config *cfg = core_config_get();
+    for (int i = 0; i < g_actionKeyCount; ++i) {
+        core::display::ActionKey *k = g_actionKeys[i];
+        const unsigned vk = k->vk, mods = k->mods;
+        if (vk == 0 || (vk == cfg->panel_key_vk && mods == cfg->panel_key_mods) ||
+            (vk == cfg->screenshot_key_vk && mods == cfg->screenshot_key_mods) ||
+            (vk == cfg->report_key_vk && mods == cfg->report_key_mods)) {
+            continue;
+        }
+        if (IsHotkey(m, w, vk, mods)) {
+            return k;
+        }
+    }
+    return nullptr;
+}
+
 // Our panel (core/ui/panel.h): its hotkey (ui.panel_key, default Insert) opens and closes it; while it is open the
 // game window's input goes to the panel instead (mouse coordinates in real client pixels). The screenshot hotkey
 // (debug.screenshot_key, default F11) is handled here too, open or not. Returns true when the message is kept from
 // the game.
 bool PanelMessage(UINT m, WPARAM w, LPARAM l)
 {
+    if (core::ui::IsOpen() && core::ui::CapturingKey() && IsKeyMessage(m)) {
+        core::ui::QueueMessage(m, w, l); // the panel waits for a new key: every key goes to it (also Esc)
+        return true;
+    }
+    if (core::display::ActionKey *k = ActionKeyFor(m, w)) {
+        if (!(l & 0x40000000)) { // not an auto-repeat
+            k->fire();
+        }
+        g_hotkeyUp = w;
+        g_hotkeyChar = true;
+        return true;
+    }
     if (IsPanelHotkey(m, w)) {
         if (!(l & 0x40000000)) { // not an auto-repeat
             TogglePanel();
@@ -1212,6 +1247,13 @@ void SetMouseFilter(MouseFilter filter)
 void SetKeyFilter(KeyFilter filter)
 {
     g_keyFilter = filter;
+}
+
+void AddActionKey(ActionKey *key)
+{
+    if (key && g_actionKeyCount < static_cast<int>(sizeof(g_actionKeys) / sizeof(g_actionKeys[0]))) {
+        g_actionKeys[g_actionKeyCount++] = key;
+    }
 }
 
 void SetFocusHandler(FocusHandler handler)

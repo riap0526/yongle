@@ -119,4 +119,12 @@ void FormatHotkey(const Hotkey &key, char *out, size_t size)
                   key.mods & kModAlt ? "Alt+" : "", name);
 }
 
+bool IsHotkeyKey(unsigned vk)
+{
+    char text[32];
+    FormatHotkey(Hotkey{vk, 0}, text, sizeof(text));
+    Hotkey back{0, 0};
+    return text[0] != '?' && ParseHotkey(text, text + std::strlen(text), &back) && back.vk == vk;
+}
+
 } // namespace core::ui

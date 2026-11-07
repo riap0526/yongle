@@ -62,8 +62,11 @@ add_library(ddraw SHARED
     src/core/display/moved_rect.cpp
     src/core/display/scaled_rect.cpp
     src/core/display/city_zoom.cpp
+    src/core/display/city_strips.cpp
     src/core/display/common_sizes.cpp
     src/core/capture/screenshot.cpp
+    src/core/capture/big_picture.cpp
+    src/core/capture/png_stream.cpp
     src/core/diag/guard.cpp
     src/core/diag/report.cpp
     src/core/diag/perf.cpp
@@ -98,6 +101,7 @@ add_library(ddraw SHARED
     src/games/emperor/sound.cpp
     src/games/emperor/intro.cpp
     src/games/emperor/zoom.cpp
+    src/games/emperor/city_picture.cpp
     src/games/emperor/ambient_rate.cpp
 )
 # Augustus code (AGPL-3.0): third_party/augustus/README.md. Compiled as part of the DLL.
@@ -260,10 +264,19 @@ target_link_libraries(test_present_mode PRIVATE dxguid user32 gdi32)
 
 # Offline test of the screenshot writer: the queue limit and the processor time per picture (O1, 2026-10-30).
 add_executable(test_screenshot proxy/ddraw/test_screenshot.cpp src/core/capture/screenshot.cpp src/core/platform/files.cpp
+    src/core/capture/big_picture.cpp src/core/capture/png_stream.cpp
     src/core/diag/environment.cpp src/core/log.cpp src/core/platform/affinity.cpp src/core/diag/guard.cpp)
 target_include_directories(test_screenshot PRIVATE src)
 target_link_options(test_screenshot PRIVATE -static)
 target_link_libraries(test_screenshot PRIVATE png_encode SDL3::SDL3-static)
+
+# Offline test of the city picture's parts (docs/archive/city_export.md): the strips, the PNG written a row at a
+# time (read back with SDL).
+add_executable(test_city_picture proxy/ddraw/test_city_picture.cpp src/core/display/city_strips.cpp
+    src/core/capture/big_picture.cpp src/core/capture/png_stream.cpp src/core/log.cpp)
+target_include_directories(test_city_picture PRIVATE src)
+target_link_options(test_city_picture PRIVATE -static)
+target_link_libraries(test_city_picture PRIVATE png_encode SDL3::SDL3-static)
 
 # Offline test of the log's size limit at start-up (O5a, 2026-10-30).
 add_executable(test_log proxy/ddraw/test_log.cpp src/core/log.cpp)
@@ -287,6 +300,8 @@ add_executable(test_restore proxy/ddraw/test_restore.cpp
     src/games/emperor/ui_fixes.cpp src/games/emperor/china_map.cpp src/games/emperor/display_options.cpp
     src/games/emperor/sound.cpp src/games/emperor/ambient_rate.cpp src/games/emperor/intro.cpp
     src/games/emperor/zoom.cpp src/core/display/city_zoom.cpp
+    src/games/emperor/city_picture.cpp src/core/display/city_strips.cpp src/core/capture/big_picture.cpp
+    src/core/capture/png_stream.cpp
     src/core/scroll/smooth_scroll.cpp src/core/diag/guard.cpp src/core/diag/report.cpp src/core/diag/perf.cpp
     src/core/diag/environment.cpp src/core/diag/stall.cpp src/core/platform/affinity.cpp src/core/log.cpp
     src/core/diag/present_mode.cpp src/core/diag/present_mode_tracker.cpp src/core/diag/screen_programs.cpp
@@ -297,7 +312,7 @@ add_executable(test_restore proxy/ddraw/test_restore.cpp
 target_include_directories(test_restore PRIVATE src ${CMAKE_CURRENT_BINARY_DIR}/generated)
 target_compile_options(test_restore PRIVATE -fno-exceptions)
 target_link_options(test_restore PRIVATE -static)
-target_link_libraries(test_restore PRIVATE minhook augustus_core imgui winmm)
+target_link_libraries(test_restore PRIVATE minhook augustus_core imgui png_encode SDL3::SDL3-static winmm)
 
 # Offline test of core/assets/sg3 on the player's own image pack (compared with tools/verify/sg3_hash.py).
 add_executable(test_sg3 proxy/ddraw/test_sg3.cpp src/core/assets/sg3.cpp src/core/log.cpp)

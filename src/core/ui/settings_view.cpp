@@ -6,6 +6,7 @@
 #include "core/log.h"
 #include "core/platform/files.h"
 #include "core/settings/settings.h"
+#include "core/ui/hotkey.h"
 
 #include <imgui.h>
 
@@ -26,7 +27,7 @@ namespace cs = core::settings;
 using cs::Effect;
 using cs::Type;
 
-constexpr int kMax = 48;
+constexpr int kMax = 64;
 constexpr DWORD kConfirmMs = 15000;
 constexpr DWORD kGraceMs = 1500; // frames after the answer, so a revert is drawn too
 
@@ -119,6 +120,51 @@ void Commit(int i)
     }
     g_dirty[i] = false;
     cs::Request(i, g_draft[i], true);
+}
+
+// A key setting's "Change" (city picture, docs/archive/city_export.md section 5.3): the next key pressed with
+// the modifiers held is the new value. g_capture: the item waiting (-1 none); read by the game thread (the window
+// subclass then gives every key to the panel). The note under the item: its last result.
+std::atomic<int> g_capture{-1};
+int g_noteItem = -1;
+char g_note[200] = "";
+bool g_noteWarn = false;
+GameKeyNote g_gameKeyNote = nullptr;
+
+void Note(int i, bool warn, const char *text)
+{
+    g_noteItem = i;
+    g_noteWarn = warn;
+    std::snprintf(g_note, sizeof(g_note), "%s", text);
+}
+
+void HotkeyWidget(int i, const cs::Item &it)
+{
+    if (g_capture.load() == i) {
+        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), "Press the new key or combination (Esc cancels)");
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Cancel")) {
+            g_capture = -1;
+        }
+    }
+    else {
+        ImGui::Text("%s", g_draft[i]);
+        if (it.editable) {
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Change")) {
+                g_capture = i;
+                Note(-1, false, "");
+            }
+        }
+    }
+    if (g_noteItem == i && g_note[0]) {
+        if (g_noteWarn) {
+            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), "%s", g_note);
+        }
+        else {
+            ImGui::TextDisabled("%s", g_note);
+        }
+    }
 }
 
 const char *EffectTag(const cs::Item &it)
@@ -404,9 +450,7 @@ void DrawItem(int i, float scale, int resolution, int displayScale)
         ResolutionWidget(i, width);
         break;
     case Type::Hotkey:
-        ImGui::Text("%s", g_draft[i]);
-        ImGui::SameLine();
-        ImGui::TextDisabled("(set it in emperor_engine.ini; changing it here comes later)");
+        HotkeyWidget(i, it);
         break;
     }
     if (!it.editable) {
@@ -577,7 +621,87 @@ bool WantsGameFrames()
 
 void PanelClosed()
 {
+    g_capture = -1;
     Revert("panel closed without an answer");
+}
+
+// The key that ended the last wait for a key, until it is released: the new value reaches the configuration on the
+// game thread a moment later, and a key poll in between would see the key go down anew (city picture's first test:
+// the report key changed to Ctrl+F12 also made a report).
+std::atomic<unsigned> g_settleVk{0};
+
+bool CapturingKey()
+{
+    if (g_capture.load() >= 0) {
+        return true;
+    }
+    const unsigned vk = g_settleVk.load();
+    if (vk != 0) {
+        if (GetAsyncKeyState(static_cast<int>(vk)) & 0x8000) {
+            return true;
+        }
+        g_settleVk = 0;
+    }
+    return false;
+}
+
+void CaptureKey(unsigned vk, bool ctrl, bool shift, bool alt)
+{
+    const int i = g_capture.load();
+    if (i < 0 || i >= cs::Count()) {
+        return;
+    }
+    if (vk == VK_ESCAPE) {
+        g_settleVk = vk;
+        g_capture = -1;
+        Note(i, false, "Not changed.");
+        return;
+    }
+    if (vk == VK_SHIFT || vk == VK_CONTROL || vk == VK_MENU || (vk >= VK_LSHIFT && vk <= VK_RMENU) ||
+        vk == VK_LWIN || vk == VK_RWIN || vk == VK_CAPITAL || vk == VK_NUMLOCK) {
+        return; // a modifier alone: wait for the key
+    }
+    if (!IsHotkeyKey(vk)) {
+        Note(i, true, "That key cannot be used here; try another one.");
+        return;
+    }
+    const Hotkey key{vk, (ctrl ? kModCtrl : 0u) | (shift ? kModShift : 0u) | (alt ? kModAlt : 0u)};
+    char text[cs::kValueSize];
+    FormatHotkey(key, text, sizeof(text));
+    for (int j = 0; j < cs::Count(); ++j) {
+        if (j == i || cs::Get(j).type != Type::Hotkey) {
+            continue;
+        }
+        char other[cs::kValueSize];
+        cs::Value(j, other, sizeof(other));
+        if (_stricmp(other, text) == 0) {
+            char why[200];
+            std::snprintf(why, sizeof(why), "%s is already the key for \"%s\"; try another one.", text,
+                          cs::Get(j).label);
+            Note(i, true, why);
+            return;
+        }
+    }
+    g_settleVk = vk;
+    g_capture = -1;
+    std::snprintf(g_draft[i], cs::kValueSize, "%s", text);
+    g_dirty[i] = true;
+    Commit(i);
+    core_log("panel: %s.%s set to %s with a key press", cs::Get(i).section, cs::Get(i).key, text);
+    const char *game = g_gameKeyNote ? g_gameKeyNote(key.vk, key.mods) : nullptr;
+    if (game) {
+        char why[200];
+        std::snprintf(why, sizeof(why), "Saved. %s", game);
+        Note(i, true, why);
+    }
+    else {
+        Note(i, false, "Saved.");
+    }
+}
+
+void SetGameKeyNote(GameKeyNote fn)
+{
+    g_gameKeyNote = fn;
 }
 
 } // namespace core::ui

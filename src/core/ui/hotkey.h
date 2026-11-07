@@ -25,4 +25,7 @@ bool ParseHotkey(const char *b, const char *e, Hotkey *out);
 // The hotkey in the canonical spelling ("Ctrl+F12", "Insert") for the log and the panel.
 void FormatHotkey(const Hotkey &key, char *out, size_t size);
 
+// True when vk can be a hotkey's key (one of the keys above; not a modifier, not Escape).
+bool IsHotkeyKey(unsigned vk);
+
 } // namespace core::ui

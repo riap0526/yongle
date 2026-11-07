@@ -32,6 +32,10 @@ void BufferSize(int *w, int *h);
 // The current map's range (columns x half rows; 0 or less before a map), for the rate log.
 void MapRange(int *cols, int *rows);
 
+// The limits view_clamp works with now (city picture, docs/archive/city_export.md): view x from left to
+// right - columns, view y from top to bottom - half rows (bottom: the map's bottom less the margin the game keeps
+// below the screen, resolution_ui_r5.md section 9.1); mapRows: the map's range in half rows.
+void ViewLimits(int *left, int *right, int *top, int *bottom, int *mapRows);
 // Seeing more: averaged shrinking (else nearest).
 bool AverageShrink();
 

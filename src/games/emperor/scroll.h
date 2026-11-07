@@ -3,6 +3,7 @@
 
 #include <cstddef>
 
+#include "core/diag/guard.h"
 #include "games/emperor/site.h"
 
 namespace emperor::scroll {
@@ -51,6 +52,17 @@ bool OnCity(int x, int y);
 // rectangle on it (right and bottom exclusive). Game thread; the callback runs its own guard.
 using CityDrawn = void (*)(const BYTE *back, int pitch, int left, int top, int right, int bottom);
 void SetCityDrawn(CityDrawn fn);
+
+// City picture (docs/archive/city_export.md): called at the end of every city_render (after the city was drawn
+// and shown as usual, before the interface), with the drawing's direction argument. Game thread; the callback runs
+// its own guard. One callback.
+using AfterCity = void (*)(int orientation);
+void SetAfterCity(AfterCity fn);
+// City picture: our hooks treat the next drawings as drawings into a buffer of right x bottom pixels at 100%, without
+// the pixel remainder (no conversion of the positions they make); the changes go into r (the caller undoes it after
+// the drawings, also when they are abandoned). Then DrawCityForPicture draws with the game's own city_render.
+void PictureDrawing(core::diag::Restore &r, int right, int bottom);
+void DrawCityForPicture(int vx, int vy, int orientation);
 
 // For the offline tests (proxy/ddraw/test_restore.cpp): the detours by site, and the pixel remainder.
 const Detour *Detours(int *count);

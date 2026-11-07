@@ -14,6 +14,7 @@
 #include "core/log.h"
 #include "core/platform/affinity.h"
 #include "core/ui/panel.h"
+#include "core/ui/settings_view.h"
 
 #include <SDL3/SDL.h>
 #include <d3d9.h>
@@ -283,6 +284,8 @@ int g_bgFrameU = 0, g_bgFrameV = 0; // the frame layer's size in units
 SRWLOCK g_captionLock = SRWLOCK_INIT;
 char g_caption[512] = "";      // under g_captionLock
 int g_captionY = 0;
+char g_notice[256] = "";       // SetNotice, under g_captionLock
+DWORD g_noticeUntil = 0;
 
 SRWLOCK g_captureLock = SRWLOCK_INIT;
 std::atomic<bool> g_captureWanted{false};
@@ -1107,6 +1110,22 @@ void DrawFrame(const void *pixels, int pitch, int w, int h, const RECT &dst, SIZ
             g_captureWanted = false;
         }
     }
+    { // SetNotice: after the screen read-back, so it is never in a screenshot
+        char notice[256];
+        AcquireSRWLockShared(&g_captionLock);
+        const bool showing = g_notice[0] && static_cast<LONG>(g_noticeUntil - GetTickCount()) > 0;
+        std::memcpy(notice, g_notice, sizeof(notice));
+        ReleaseSRWLockShared(&g_captionLock);
+        if (showing) {
+            const SDL_FRect area = framed ? SDL_FRect{static_cast<float>(l.picX), static_cast<float>(l.picY),
+                                                      static_cast<float>(l.picW), static_cast<float>(l.picH)}
+                                          : SDL_FRect{static_cast<float>(dst.left), static_cast<float>(dst.top),
+                                                      static_cast<float>(dst.right - dst.left),
+                                                      static_cast<float>(dst.bottom - dst.top)};
+            const float k = area.h / (framed ? ph : h); // game pixels to output pixels
+            DrawCaption(CaptionDraw{notice, area.x, area.y + 56 * k, area.w, 24 * k, 14 * k, true, ow, oh});
+        }
+    }
     if (core::ui::IsOpen()) { // our panel on top, at the window's real resolution
         int size[2] = {ow, oh};
         if (!core::diag::Guarded(g_panelFeature, [](void *p) { auto *s = static_cast<int *>(p); core::ui::Render(g_renderer, s[0], s[1]); }, size)) {
@@ -1204,7 +1223,8 @@ bool g_threaded = false;
 bool KeyPressed(unsigned vk, unsigned keyMods, bool &wasDown)
 {
     const core_config *cfg = core_config_get();
-    if (vk == 0 || (vk == cfg->panel_key_vk && keyMods == cfg->panel_key_mods)) {
+    if (vk == 0 || (vk == cfg->panel_key_vk && keyMods == cfg->panel_key_mods) || core::ui::CapturingKey()) {
+        wasDown = true; // a key pressed for the panel does not count once the panel stops waiting for one
         return false;
     }
     auto held = [](int k) { return (GetAsyncKeyState(k) & 0x8000) != 0; };
@@ -1629,6 +1649,14 @@ void SetCaption(const char *utf8, int frameY)
     AcquireSRWLockExclusive(&g_captionLock);
     std::snprintf(g_caption, sizeof(g_caption), "%s", utf8 ? utf8 : "");
     g_captionY = frameY;
+    ReleaseSRWLockExclusive(&g_captionLock);
+}
+
+void SetNotice(const char *utf8, unsigned ms)
+{
+    AcquireSRWLockExclusive(&g_captionLock);
+    std::snprintf(g_notice, sizeof(g_notice), "%s", utf8 ? utf8 : "");
+    g_noticeUntil = GetTickCount() + ms;
     ReleaseSRWLockExclusive(&g_captionLock);
 }
 

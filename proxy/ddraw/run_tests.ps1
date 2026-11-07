@@ -18,6 +18,8 @@
 #   test_common_sizes core/display/common_sizes: the panel's common sizes for a screen (no DLL)
 #   test_city_zoom core/display/city_zoom and ShrinkRgb565 (R5): the zoom limit per map and screen, shrinking
 #               (no DLL)
+#   test_city_picture the city picture's strips and its PNG written a row at a time, read back (no DLL; writes and
+#               deletes test_city_picture_*.png)
 #   test_framing core/display/framing: the framed full-screen picture geometry (no DLL)
 #   test_ambient games/emperor/ambient_rate: the ambient sounds' N for a rate per second, R -> original -> R (no DLL)
 #   test_surface_memory core/ddraw/surface_memory: spare rows with a canary below each emulated surface, guard
@@ -80,6 +82,7 @@ Run 'test_scroll' 'emulated' @()
 Run 'test_logical' 'emulated' @()
 Run 'test_common_sizes' 'emulated' @()
 Run 'test_city_zoom' 'emulated' @()
+Run 'test_city_picture' 'emulated' @()
 Run 'test_framing' 'emulated' @()
 Run 'test_ambient' 'emulated' @()
 Run 'test_moved_rect' 'emulated' @()

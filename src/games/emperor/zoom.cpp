@@ -361,6 +361,15 @@ void MapRange(int *cols, int *rows)
     *rows = MapRows();
 }
 
+void ViewLimits(int *left, int *right, int *top, int *bottom, int *mapRows)
+{
+    *left = *kMapColMin;
+    *right = *kMapColMax;
+    *top = *kMapRowMin;
+    *bottom = *kMapRowMin + ClampRows();
+    *mapRows = MapRows();
+}
+
 bool AverageShrink()
 {
     return g_average;

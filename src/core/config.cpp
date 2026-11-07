@@ -207,20 +207,20 @@ void RegisterCoreItems()
                             "Size of this panel in percent. Auto: the output height divided by 1080 (1440p: 133%).",
                             Type::Int, "auto", Effect::Live, true, true, 100, 300, 10, "auto", nullptr, nullptr, 0, "%"});
     g_panelKey = Add(Item{"ui", "panel_key", "Panel key",
-                          "Opens and closes this panel. Change it in emperor_engine.ini for now (e.g. F12, "
-                          "Ctrl+F12); changing it here comes later.",
-                          Type::Hotkey, "Insert", Effect::Restart, true, false, 0, 0, 0, nullptr, nullptr, nullptr,
-                          0});
+                          "Opens and closes this panel. Change: press the new key, alone or with Ctrl, Shift or Alt "
+                          "(e.g. Ctrl+F12).",
+                          Type::Hotkey, "Insert", Effect::Live, true, true, 0, 0, 0, nullptr, nullptr, nullptr, 0});
     g_shotKey = Add(Item{"debug", "screenshot_key", "Screenshot key",
                          "Saves the game's own picture (its logical resolution, without this panel) as a PNG in "
                          "shots\\ in Yongle's folder (shown at the bottom of this panel); the file name has the screen "
-                         "number, the resolution and the time. Change it in emperor_engine.ini.",
-                         Type::Hotkey, "F11", Effect::Restart, true, false, 0, 0, 0, nullptr, nullptr, nullptr, 0});
+                         "number, the resolution and the time. Change: press the new key, alone or with Ctrl, Shift "
+                         "or Alt.",
+                         Type::Hotkey, "F11", Effect::Live, true, true, 0, 0, 0, nullptr, nullptr, nullptr, 0});
     g_reportKey = Add(Item{"debug", "report_key", "Report key",
                            "When something odd is on the screen (e.g. flashing blocks): marks the log, saves the "
                            "picture shown and the screen (report<n>_... in shots\\) and the game's statistics. "
-                           "Change it in emperor_engine.ini.",
-                           Type::Hotkey, "F12", Effect::Restart, true, false, 0, 0, 0, nullptr, nullptr, nullptr, 0});
+                           "Change: press the new key, alone or with Ctrl, Shift or Alt.",
+                           Type::Hotkey, "F12", Effect::Live, true, true, 0, 0, 0, nullptr, nullptr, nullptr, 0});
     g_perfOverlay = Add(Item{"debug", "perf_overlay", "Performance overlay",
                              "FPS, a graph of the time per main-loop pass and where the time goes (the game's "
                              "simulation and drawing, our copies, the output), in the top left corner while playing.",

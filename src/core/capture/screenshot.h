@@ -18,6 +18,8 @@
 
 #include <cstddef>
 
+#include "core/capture/big_picture.h"
+
 struct SDL_Surface;
 
 namespace core::capture {
@@ -42,6 +44,11 @@ bool SaveOne(const void *pixels, int pitch, int w, int h, const char *label, con
 // screens' background). wait: written on the calling thread before returning (when the process is about to end, which
 // would cut a worker short).
 bool SaveAs(const void *pixels, int pitch, int w, int h, const char *fileName, bool wait = false);
+
+// Any thread: queues a large picture (core/capture/big_picture.h; ownership passes here, also on failure) to be
+// written as shots\<kind>_<w>x<h>_<time>.png by the writer thread, a row at a time; o.done is called there with the
+// result. False when it was not even queued (done has been called then).
+bool SaveBig(BigPicture *pic, const BigOptions &o);
 
 // Game thread, when the game ends (not from DllMain: the loader lock is held there): waits until the pictures queued
 // so far are written, at most timeoutMs.

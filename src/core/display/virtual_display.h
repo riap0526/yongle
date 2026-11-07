@@ -55,6 +55,18 @@ bool Windowed();
 // stays, moved back into the work area if needed) and is saved. Nothing when not windowed.
 void SetWindowClient(int w, int h);
 
+// A key of a game layer's own (e.g. its city picture key): when it is pressed with exactly its modifiers, fire runs
+// on the game thread (the game window's message); the press, its release and its character are kept from the game
+// (so F10 never reaches Windows' menu handling), also while our panel is open. Not while the panel waits for a new
+// key, and not when it is the same as our panel key, screenshot key or report key (those come first). vk and mods are
+// read at each key press: the owner changes them when its setting changes (vk 0: none). Up to 8 keys.
+struct ActionKey {
+    volatile unsigned vk;
+    volatile unsigned mods;
+    void (*fire)();
+};
+void AddActionKey(ActionKey *key);
+
 // A filter for the key messages (WM_KEYDOWN, WM_SYSKEYDOWN) of the game window, called on the game thread before
 // the game sees them; returning true swallows the message. One filter (a game layer's hotkeys); nullptr removes it.
 using KeyFilter = bool (*)(UINT message, WPARAM wparam, LPARAM lparam);

@@ -112,6 +112,11 @@ void SetBackground(int screenW, int screenH, int pictureW, int pictureH, bool na
 // bottom edge when framed; otherwise centred at frameY (frame pixels) of the scaled frame.
 void SetCaption(const char *utf8, int frameY);
 
+// Any thread: a short message (UTF-8) on a dark strip near the top of the picture for ms milliseconds, e.g. "City
+// picture saved: ..."; drawn after the screen is read back for a screenshot, so it is never in one. A new message
+// replaces the one shown.
+void SetNotice(const char *utf8, unsigned ms);
+
 // Any thread: the next frame drawn is read back from the screen (before our panel is drawn) and saved by
 // core/capture as <stem>_screen_<w>x<h>_<time>.png. stem and time are the capture's.
 void RequestScreenCapture(const char *stem, const char *time);

@@ -13,6 +13,7 @@
 //   test_restore.exe            runs every scenario and prints one line each
 //   test_restore.exe <name>     one scenario (exit code 0 = passed)
 #include "core/assets/sg3.h"
+#include "core/capture/big_picture.h"
 #include "core/ddraw/surface_memory.h"
 #include "core/diag/guard.h"
 #include "core/display/city_zoom.h"
@@ -63,6 +64,8 @@ using MouseFilter = bool (*)(UINT, WPARAM, int, int);
 void SetMouseFilter(MouseFilter) {}
 bool Windowed() { return false; }
 void SetWindowClient(int, int) {}
+struct ActionKey;
+void AddActionKey(ActionKey *) {}
 } // namespace core::display
 
 namespace core::output {
@@ -72,6 +75,7 @@ void TakeCounts(long *a, long *b) { *a = *b = 0; }
 int RefreshHz() { return 60; }
 void MeasureFromNow() {}
 void TakeIntervals(char *out, std::size_t) { out[0] = 0; }
+void SetNotice(const char *, unsigned) {}
 } // namespace core::output
 
 namespace core::ui {
@@ -82,6 +86,8 @@ void SetTitle(const char *) {}
 using Section = void (*)();
 void AddSection(const char *, Section) {}
 void PerfWidget() {}
+using GameKeyNote = const char *(*)(unsigned, unsigned);
+void SetGameKeyNote(GameKeyNote) {}
 } // namespace core::ui
 
 namespace core::capture {
@@ -89,6 +95,11 @@ using TagProvider = void (*)(char *, size_t);
 void SetTagProvider(TagProvider) {}
 bool SaveOne(const void *, int, int, int, const char *, const char *) { return true; }
 int Flush(unsigned long) { return 0; }
+bool SaveBig(BigPicture *pic, const BigOptions &) // the city picture's file (not under test here)
+{
+    delete pic;
+    return true;
+}
 } // namespace core::capture
 
 extern "C" unsigned core_timer_resolution_us(void) { return 1000; }

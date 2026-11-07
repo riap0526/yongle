@@ -107,6 +107,10 @@ void Feed(const Event &e)
         return;
     case WM_KEYDOWN: case WM_SYSKEYDOWN: case WM_KEYUP: case WM_SYSKEYUP: {
         bool down = e.message == WM_KEYDOWN || e.message == WM_SYSKEYDOWN;
+        if (down && CapturingKey()) { // a key setting waits for its new key: not for ImGui
+            CaptureKey(static_cast<unsigned>(e.wparam), e.ctrl, e.shift, e.alt);
+            return;
+        }
         io.AddKeyEvent(ImGuiMod_Ctrl, e.ctrl);
         io.AddKeyEvent(ImGuiMod_Shift, e.shift);
         io.AddKeyEvent(ImGuiMod_Alt, e.alt);
