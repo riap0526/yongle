@@ -28,4 +28,7 @@ const char *ChoiceHelp(const Text &t, const char *spell); // "" when none
 // The red first line of the tooltips of a setting marked "*".
 extern const char *const kRestartTip;
 
+// The game's Options menu (in the city) and the main menu's button that open the window (options_entry).
+extern const char *const kMenuGeneral, *const kMenuVideo, *const kMenuAudio, *const kMainMenuOptions;
+
 } // namespace emperor::options_text

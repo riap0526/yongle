@@ -161,7 +161,7 @@ const Text kTexts[] = {
      kAmbient, N(kAmbient), false, "Ambient sounds: how often"},
 
     {"sound", "master_volume", "The volume of all the music and sounds together. The four volumes below are set "
-                               "within it.",
+                               "within it. The checkbox switches them all off and on.",
      nullptr, 0},
 
     // The game's own options (kept in Emperor.inf, as the game's Options menu sets them).
@@ -186,6 +186,10 @@ const Text kTexts[] = {
 } // namespace
 
 const char *const kRestartTip = "Takes effect after the game is restarted.";
+const char *const kMenuGeneral = "General Settings";
+const char *const kMenuVideo = "Video";
+const char *const kMenuAudio = "Audio";
+const char *const kMainMenuOptions = "Options";
 
 const Text *Find(const char *section, const char *key)
 {

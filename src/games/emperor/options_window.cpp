@@ -7,7 +7,6 @@
 #include "core/log.h"
 #include "core/options/window.h"
 #include "core/settings/settings.h"
-#include "core/ui/hotkey.h"
 #include "games/emperor/options_original.h"
 #include "games/emperor/options_text.h"
 #include "games/emperor/site.h"
@@ -390,6 +389,23 @@ void Add(std::vector<co::Row> &rows, const char *section, const char *key)
     rows.push_back(std::move(r));
 }
 
+// The last row (a slider) gets the on / off setting section.key as its checkbox: a check-slider row (the master
+// volume and its switch, as the game's four sound rows).
+void Toggle(std::vector<co::Row> &rows, const char *section, const char *key)
+{
+    int i = cs::Find(section, key);
+    if (i < 0 || rows.empty() || rows.back().kind != co::Kind::Slider || cs::Get(i).type != cs::Type::Bool) {
+        return;
+    }
+    const cs::Item &it = cs::Get(i);
+    g_settings.push_back(Setting{i, {}, 0, 1, nullptr});
+    Setting &s = g_settings.back();
+    co::Row &r = rows.back();
+    r.kind = co::Kind::CheckSlider;
+    r.toggle = {&SettingGet, &SettingSet, &s};
+    r.defaultToggle = Parse(s, it.defaultValue);
+}
+
 // The last row shown only while the row `key` (same page) has `value`: for items whose condition the registry does
 // not hold (the panel places display.scale beside the resolution by hand, core/ui/settings_view.cpp).
 void ShownIf(std::vector<co::Row> &rows, const char *key, const char *value)
@@ -466,7 +482,7 @@ std::vector<co::Page> BuildPages()
             general.categories.push_back(std::move(c));
         }
     }
-    co::Page display{"Display", {}};
+    co::Page display{"Video", {}};
     {
         co::Category c{"Screen", {}};
         Add(c.rows, "display", "window");
@@ -501,8 +517,9 @@ std::vector<co::Page> BuildPages()
         Add(c.rows, "display", "china_map_background");
         display.categories.push_back(std::move(c));
     }
-    co::Page sound{"Sound", {{"", {}}}};
+    co::Page sound{"Audio", {{"", {}}}};
     Add(sound.categories[0].rows, "sound", "master_volume"); // ours, over the game's four
+    Toggle(sound.categories[0].rows, "sound", "master_sound");
     oo::SoundRows(sound.categories[0].rows);
     if (!sound.categories[0].rows.empty()) {
         Header(sound.categories[0].rows, "More");
@@ -534,25 +551,21 @@ void Close(const char *why)
     core_log("options window: closed (%s)", why);
 }
 
-void OpenNow(void *)
+struct Where {
+    int page, category;
+};
+
+void OpenNow(void *p)
 {
+    const Where &w = *static_cast<const Where *>(p);
     g_window.SetPages(BuildPages());
     g_window.SetRestartTip(ot::kRestartTip);
-    g_window.Open(0, 0);
+    g_window.Open(w.page, w.category);
     g_open = true;
-    core_log("options window: opened");
+    core_log("options window: opened (page %d, category %d)", w.page, w.category);
 }
 
-void Open()
-{
-    if (g_open || !core::diag::Enabled(g_feature)) {
-        return;
-    }
-    if (!core::diag::Guarded(g_feature, &OpenNow, nullptr)) {
-        g_open = false;
-        core_log("options window: not available after an error (the game's own options stay)");
-    }
-}
+bool g_attached = false;
 
 struct Message {
     UINT m;
@@ -616,11 +629,29 @@ void DrawNow(void *)
     *kRedraw = 1; // the next frame draws the screen under the window again (tooltips, hover frames)
 }
 
-// Temporary entry for the first test build (S2b): Ctrl+O. S2d puts the window in the game's Options menu and the
-// main menu instead.
-core::display::ActionKey g_openKey{'O', core::ui::kModCtrl, [] { Open(); }};
-
 } // namespace
+
+bool Available()
+{
+    return g_attached && core::diag::Enabled(g_feature);
+}
+
+bool Open(int page, int category)
+{
+    if (!Available()) {
+        return false;
+    }
+    if (g_open) {
+        return true;
+    }
+    Where w{page, category};
+    if (!core::diag::Guarded(g_feature, &OpenNow, &w)) {
+        g_open = false;
+        core_log("options window: not available after an error (the game's own options stay)");
+        return false;
+    }
+    return true;
+}
 
 bool IsOpen()
 {
@@ -651,8 +682,8 @@ bool Attach()
     }
 
     core::display::SetModalInput(&kInput);
-    core::display::AddActionKey(&g_openKey);
-    core_log("options window: available (Ctrl+O while testing)");
+    g_attached = true;
+    core_log("options window: available (the game's Options menu and the main menu open it)");
     return true;
 }
 

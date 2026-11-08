@@ -6,6 +6,12 @@ namespace emperor::options_window {
 
 bool Attach();   // after resolution's hooks (image_draw); false: not available (the game's own options stay)
 bool IsOpen();   // game thread: the game is paused and draws frames only (games/emperor/emperor.cpp)
+bool Available(); // attached and not switched off after an error
+// Game thread: opens the window at a page and category (0-based). false: not available (the caller falls back to
+// the game's own dialog).
+bool Open(int page, int category);
+// The pages and categories the menus open (BuildPages' order).
+constexpr int kPageGeneral = 0, kPageVideo = 1, kPageAudio = 2;
 // Game thread, before the game's frame is presented: draws the window over it. caller: the game address screen_present
 // returns to (nothing is drawn on the WM_PAINT frames of a display change).
 void OnPresent(unsigned long caller);
