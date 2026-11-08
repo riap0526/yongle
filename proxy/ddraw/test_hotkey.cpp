@@ -72,6 +72,7 @@ int main()
     list("Insert,", 0, "");
     list(", F1", 0, "");
     list("Insert, Esc", 0, "");
+    list("Mouse4, Ctrl+Mouse5", 2, "Mouse4, Ctrl+Mouse5");
     std::printf("RESULT: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
     return g_failures ? 1 : 0;
 }

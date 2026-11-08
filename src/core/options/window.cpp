@@ -234,6 +234,9 @@ bool Window::HasList() const
 
 bool Window::Shown(const Row &r) const
 {
+    if (r.kind == Kind::Columns && look_.columnsAbove) {
+        return false; // drawn above the list (Draw)
+    }
     if (r.shownIfId.empty()) {
         return true;
     }
@@ -935,7 +938,7 @@ void Window::Rows(Painter &p)
             break;
         }
         case Kind::Header: {
-            if (look_.plainHeaders) {
+            if (look_.plainHeaders) { // no lines (a line between sections was too crowded: K3's test)
                 p.Text(label, left, y + 4, Font::Gold);
                 break;
             }
@@ -1119,6 +1122,20 @@ void Window::Draw(Painter &p)
     }
     p.Inset(ContentX(), kContentY, ContentW(), kContentH);
     Rows(p);
+    if (look_.columnsAbove) { // the key titles above the list, over the two key boxes (always in sight)
+        for (const Row &r : Current().rows) {
+            if (r.kind != Kind::Columns) {
+                continue;
+            }
+            const int right = Right();
+            const char *titles[2] = {r.rightLabel.c_str(), r.rightLabel2.c_str()};
+            for (int col = 0; col < 2; ++col) {
+                const int sx = right - (2 - col) * kKeyW - (col == 0 ? kKeyGap : 0);
+                p.Text(titles[col], sx + (kKeyW - p.TextWidth(titles[col], Font::Gold)) / 2, kContentY - 20, Font::Gold);
+            }
+            break;
+        }
+    }
     if (!note_.empty() && HasKeyRows()) { // the last wait for a key: under the rows
         p.Text(note_.c_str(), Left(), kContentY + kContentH - 16 - kNoteH + 4, noteError_ ? Font::Disabled : Font::Gold);
     }

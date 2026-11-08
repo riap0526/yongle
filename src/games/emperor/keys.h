@@ -31,6 +31,9 @@ bool Attach();
 bool Held(unsigned vk);
 // The key (with its modifiers) opens the options window (it closes it again too).
 bool IsOptionsKey(unsigned vk, unsigned mods);
+// The game's pause banner ("Game paused ('P' key continues)", EmperorText.eng group 13, string 2) with the player's
+// pause keys (one, two, or none); nullptr before the settings are registered.
+const char *PauseText();
 
 int ActionCount();
 const ActionInfo &Action(int i);

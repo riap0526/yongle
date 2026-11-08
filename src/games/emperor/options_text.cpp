@@ -243,7 +243,11 @@ const char *const kMenuMinimapScreenshot = "Save minimap screenshot"; // 165
 // The Hotkeys window's sections (games/emperor/keys::Section); the actions' names are their settings' labels.
 const char *const kKeySections[] = {"Arrow keys",   "Global hotkeys", "City hotkeys", "Building menus",
                                     "Overlays",     "Bookmarks",      "Army groups"};
-const char *const kOverlayName = "%s overlay"; // the overlay's name from the game's texts
+const char *const kOverlayName = "%s overlay";
+// The game's pause banner with the player's keys (the game's own words: "Game paused ('P' key continues)").
+const char *const kPausedOneKey = "Game paused ('%s' key continues)";
+const char *const kPausedTwoKeys = "Game paused ('%s' or '%s' key continues)";
+const char *const kPausedNoKey = "Game paused"; // the overlay's name from the game's texts
 
 const char *const kKeep = "Keep";
 const char *const kRevert = "Revert";

@@ -2,6 +2,7 @@
 
 #include "core/log.h"
 #include "games/emperor/city_picture.h"
+#include "games/emperor/keys.h"
 #include "games/emperor/options_text.h"
 #include "games/emperor/options_window.h"
 #include "games/emperor/site.h"
@@ -50,6 +51,9 @@ constexpr int kMainMenuGroup = 30, kTextWebsite = 4; // the main menu's "Visit W
 // The File menu: group 1 (19 texts); ours use numbers it does not have. They go after Save game (text 4).
 constexpr int kFileGroup = 1, kTextSaveGame = 4, kTextCityShot = 40, kTextMinimapShot = 41;
 bool g_optionsOn = false, g_fileOn = false; // which of our menus are in
+// The pause banner: group 13, string 2 "Game paused ('P' key continues)" (FUN_005b6b50 0x5b6ee9 -> 0x535f50 ->
+// lang_text_draw_centered 0x528890 -> lang_set_current_text -> lang_get_string).
+constexpr int kPauseGroup = 13, kTextPaused = 2;
 
 // The game's dialogs, the fall-back when our window is not available: Speed, Display, Sound options; Autosave.
 const DWORD kSpeedDialog = 0x402440, kDisplayDialog = 0x401ea0, kSoundDialog = 0x402030, kAutosaveToggle = 0x449460;
@@ -152,6 +156,12 @@ const DWORD kItemsSingle = 0x81e2a0, kItemsOther = 0x81e2f0;
 
 const char *__cdecl Lang_detour(int group, int index)
 {
+    if (group == kPauseGroup && index == kTextPaused) { // the pause banner: the player's pause keys
+        const char *t = emperor::keys::PauseText();
+        if (t) {
+            return t;
+        }
+    }
     if (g_fileOn && group == kFileGroup && (index == kTextCityShot || index == kTextMinimapShot)) {
         return index == kTextCityShot ? ot::kMenuCityScreenshot : ot::kMenuMinimapScreenshot;
     }

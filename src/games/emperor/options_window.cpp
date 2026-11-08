@@ -655,7 +655,7 @@ std::vector<co::Page> BuildKeyPages()
     co::Category c{"", {}};
     co::Row columns;
     columns.kind = co::Kind::Columns;
-    columns.label = ot::kColumnAction;
+    columns.label = ""; // no "Action" (the titles are above the list)
     columns.rightLabel = ot::kColumnKey;
     columns.rightLabel2 = ot::kColumnAlternative;
     c.rows.push_back(std::move(columns));
@@ -772,6 +772,7 @@ void Prepare(co::Window &w, bool keys)
         look.title = ot::kHotkeysTitle;
         look.hotkeysButton = look.applyButton = false;
         look.plainHeaders = true; // Augustus's hotkey list: the section titles in gold at the left
+        look.columnsAbove = true; // ... and "Hotkey" / "Alternative" above the list
     }
     w.SetLook(look);
     co::Texts t;

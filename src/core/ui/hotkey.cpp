@@ -21,7 +21,7 @@ const Name kNames[] = {
     {"Up", 0x26},             {"Down", 0x28},           {"Left", 0x25},           {"Right", 0x27},
     {"LeftBracket", 0xDB},    {"RightBracket", 0xDD},   {"Semicolon", 0xBA},      {"Minus", 0xBD},
     {"Equals", 0xBB},         {"Comma", 0xBC},          {"Period", 0xBE},         {"Slash", 0xBF},
-    {"Backslash", 0xDC},      {"Quote", 0xDE},
+    {"Backslash", 0xDC},      {"Quote", 0xDE},           {"Mouse4", 0x05},          {"Mouse5", 0x06},
     {"Ins", 0x2D},            {"Del", 0x2E},            {"PgUp", 0x21},           {"PgDn", 0x22},
     {"`", 0xC0},
 };
@@ -181,7 +181,8 @@ void FormatHotkeyShown(const Hotkey &key, char *out, size_t size)
         unsigned vk;
         const char *shown;
     } kShown[] = {{0xDB, "Left bracket"}, {0xDD, "Right bracket"}, {0xBA, ";"}, {0xBD, "-"}, {0xBB, "="},
-                  {0xBC, ","}, {0xBE, "."}, {0xBF, "/"}, {0xDC, "\\"}, {0xDE, "'"}, {0xC0, "Backquote"}};
+                  {0xBC, ","}, {0xBE, "."}, {0xBF, "/"}, {0xDC, "\\"}, {0xDE, "'"}, {0xC0, "Backquote"},
+                  {0x05, "Mouse 4"}, {0x06, "Mouse 5"}};
     for (const auto &k : kShown) {
         if (k.vk == key.vk) {
             std::snprintf(out, size, "%s%s%s%s", key.mods & kModCtrl ? "Ctrl+" : "", key.mods & kModShift ? "Shift+" : "",

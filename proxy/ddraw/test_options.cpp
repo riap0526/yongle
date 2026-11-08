@@ -635,6 +635,22 @@ int main()
               "right click on the alternative: removed, the first key kept");
         Check(!kw.RightClick(Cx(title), Cy(title)), "right click elsewhere: not taken");
         kw.Cancel();
+
+        // The column titles above the list (always in sight), no "Action"; a line between two sections.
+        look.columnsAbove = true;
+        kw.SetLook(look);
+        co::Row c2 = b;
+        c2.label = "Third";
+        kw.SetPages({{"Hotkeys", {{"", {cols, Header("Global hotkeys"), a, b, Header("More"), c2}}}}});
+        kw.Open(0, 0);
+        q = Draw(kw);
+        const Op *hk = q.FindText("Hotkey"), *more = q.FindText("More");
+        int lines2 = 0;
+        for (const Op &o : q.ops) lines2 += o.op == "line";
+        Check(hk && hk->y < co::Window::kContentY && q.FindText("Alternative") && !q.FindText("Action"),
+              "column titles above the list, no Action");
+        Check(more && lines2 == 0, "no lines: not between the sections, no columns line");
+        kw.Cancel();
     }
 
     // Hover: the frame around the button under the mouse.

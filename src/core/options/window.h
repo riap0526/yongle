@@ -118,7 +118,8 @@ struct Look {
     std::string title = "Yongle options";
     bool hotkeysButton = true;
     bool applyButton = true;
-    bool plainHeaders = false; // section titles in gold at the left, without lines (Augustus's hotkey list)
+    bool plainHeaders = false; // section titles in gold at the left, no lines (Augustus's hotkey list)
+    bool columnsAbove = false; // the Columns row's key titles above the list, always in sight (Augustus's); no label
 };
 
 // The texts of a wait for a key and of "keep this setting?" (the game layer gives them, so they sit with its other

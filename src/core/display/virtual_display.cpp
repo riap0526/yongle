@@ -1005,6 +1005,13 @@ LRESULT CALLBACK SubclassProc(HWND hwnd, UINT m, WPARAM w, LPARAM l)
         core::settings::RunPending();
         return 0;
     }
+    if (hwnd == g_hwnd && (m == WM_XBUTTONDOWN || m == WM_XBUTTONDBLCLK || m == WM_XBUTTONUP)) {
+        // The mouse's side buttons as keys (Mouse4, Mouse5): our keys, the panel and the bindings take them as any key.
+        // The game itself has no use for them (game_wndproc does not handle WM_XBUTTON*).
+        const WPARAM vk = HIWORD(w) == XBUTTON2 ? VK_XBUTTON2 : VK_XBUTTON1;
+        SubclassProc(hwnd, m == WM_XBUTTONUP ? WM_KEYUP : WM_KEYDOWN, vk, 1);
+        return TRUE; // processed (WM_XBUTTON* want TRUE)
+    }
     if (hwnd == g_hwnd) {
         const bool ours = g_ownMessages > 0 && (m == WM_DISPLAYCHANGE || m == WM_SIZE);
         if (!ours && !(m == WM_SIZE && g_inSizeMove)) {

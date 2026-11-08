@@ -7,9 +7,11 @@
 #include "core/log.h"
 #include "core/settings/settings.h"
 #include "core/ui/hotkey.h"
+#include "games/emperor/options_text.h"
 #include "games/emperor/options_window.h"
 #include "games/emperor/site.h"
 
+#include <cstdio>
 #include <cstring>
 
 namespace emperor::keys {
@@ -393,6 +395,30 @@ void RegisterSettings()
         g_index[a] = core::settings::Register(d.item);
         core::settings::OnChange(g_index[a], &Apply);
     }
+}
+
+const char *PauseText()
+{
+    static char text[128];
+    for (int a = 0; a < kCount; ++a) {
+        if (std::strcmp(kDefs[a].info.key, "pause") != 0) {
+            continue;
+        }
+        char k1[40] = "", k2[40] = "";
+        if (g_keys[a][0].vk != 0) core::ui::FormatHotkeyShown(g_keys[a][0], k1, sizeof(k1));
+        if (g_keys[a][1].vk != 0) core::ui::FormatHotkeyShown(g_keys[a][1], k2, sizeof(k2));
+        if (!k1[0] && !k2[0]) {
+            return emperor::options_text::kPausedNoKey;
+        }
+        if (k1[0] && k2[0]) {
+            std::snprintf(text, sizeof(text), emperor::options_text::kPausedTwoKeys, k1, k2);
+        }
+        else {
+            std::snprintf(text, sizeof(text), emperor::options_text::kPausedOneKey, k1[0] ? k1 : k2);
+        }
+        return text;
+    }
+    return nullptr;
 }
 
 bool IsOptionsKey(unsigned vk, unsigned mods)

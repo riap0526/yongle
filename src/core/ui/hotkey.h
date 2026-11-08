@@ -5,7 +5,8 @@
 // matter, spaces around '+' are allowed. Keys: F1..F24, Insert (Ins), Delete (Del), Home, End, PageUp (PgUp),
 // PageDown (PgDn), Pause, ScrollLock, Tab, Space, Backquote (`), A..Z, 0..9, Numpad0..Numpad9, NumpadAdd,
 // NumpadSubtract, NumpadMultiply, NumpadDivide, NumpadDecimal, Up, Down, Left, Right, LeftBracket, RightBracket,
-// Semicolon, Minus, Equals, Comma, Period, Slash, Backslash, Quote. Escape is not allowed (it always closes the panel).
+// Semicolon, Minus, Equals, Comma, Period, Slash, Backslash, Quote, Mouse4, Mouse5 (the mouse's side buttons). Escape
+// is not allowed (it always closes the panel).
 // A hotkey matches a key press only with exactly its modifiers (Insert does not match Ctrl+Insert).
 // Nothing here knows a game; which keys a game itself uses is documented per game.
 #pragma once
