@@ -964,10 +964,15 @@ std::vector<std::string> Window::Wrap(Painter &p, const std::string &text, int m
     std::string cur;
     size_t i = 0;
     while (i < text.size()) {
-        size_t j = text.find(' ', i);
+        size_t j = text.find_first_of(" \n", i);
         std::string word = text.substr(i, j == std::string::npos ? std::string::npos : j - i);
+        const bool breakAfter = j != std::string::npos && text[j] == '\n';
         i = j == std::string::npos ? text.size() : j + 1;
         if (word.empty()) {
+            if (breakAfter && !cur.empty()) {
+                lines.push_back(cur);
+                cur.clear();
+            }
             continue;
         }
         std::string t = cur.empty() ? word : cur + " " + word;
@@ -976,6 +981,10 @@ std::vector<std::string> Window::Wrap(Painter &p, const std::string &text, int m
             cur = word;
         } else {
             cur = t;
+        }
+        if (breakAfter) {
+            lines.push_back(cur);
+            cur.clear();
         }
     }
     if (!cur.empty()) {
@@ -993,9 +1002,15 @@ void Window::Tooltip(Painter &p)
     if (text.empty()) {
         return;
     }
-    // A restart row: the red line first, then the description.
+    // A restart row, or a value that takes effect after a restart: the red line first, then the description.
     std::vector<std::string> red;
-    if (Current().rows[tip_.index].restart && !restartTip_.empty()) {
+    const Row &r = Current().rows[tip_.index];
+    bool restart = r.restart;
+    if (tip_.hit == Hit::ChoiceValue) {
+        const int v = DraftOf(tip_.index).value;
+        restart = restart || (v >= 0 && v < static_cast<int>(r.choiceRestart.size()) && r.choiceRestart[v]);
+    }
+    if (restart && !restartTip_.empty()) {
         red = Wrap(p, restartTip_, kTipRedW, Font::Disabled); // one line where it fits (the larger font)
     }
     std::vector<std::string> lines = Wrap(p, text, kTipW, Font::Small);

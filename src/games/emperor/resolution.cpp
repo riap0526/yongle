@@ -1276,7 +1276,7 @@ bool WindowKey(UINT message, WPARAM key, LPARAM l)
         const bool to = !core::display::Windowed();
         core_log("resolution: %s -> %s (the game does not see the key)", f5 ? "F5" : "Alt+Enter",
                  to ? "windowed" : "fullscreen");
-        core::settings::Request(core::settings::Find("display", "window"), to ? "windowed" : "fullscreen", true);
+        core::settings::Request(core::settings::Find("video", "window"), to ? "windowed" : "fullscreen", true);
     }
     return true;
 }

@@ -279,7 +279,7 @@ void RegisterSettings()
     using core::settings::Item;
     using core::settings::Type;
     int i = core::settings::Register(Item{
-        "sound", "background_sound", "When switched away",
+        "audio", "background_sound", "When switched away",
         "What happens to the music and the sounds when the game loses the focus (Alt+Tab, another window, "
         "minimized). pause (default): they wait and go on where they were when you come back. original: the game "
         "stops them all, and another song starts when you come back.",
@@ -289,7 +289,7 @@ void RegisterSettings()
         return true;
     });
     i = core::settings::Register(Item{
-        "sound", "ambient_sounds", "Ambient sounds",
+        "audio", "ambient_sounds", "Ambient sounds",
         "How often the city plays a random ambient sound (birds, water, workshops). A number: about so many per "
         "second whatever the resolution (a little less when the same sound is still playing); 0.5 (default) is "
         "about what the game gave on the computers of its time. original: once in about 300 main-loop passes, as "

@@ -15,7 +15,7 @@ Yongle shows the game's menu pictures (the main menu and its sub-menus, briefing
 
 ## Settings
 
-The menu frame is the setting `[display] menu_screens` in `emperor_engine.ini` (also in the settings panel, Insert):
+The menu frame is the setting `[video] menu_screens` in `emperor_engine.ini` (also in Options > Video):
 
 | Value | Around the menus |
 |---|---|
@@ -25,6 +25,6 @@ The menu frame is the setting `[display] menu_screens` in `emperor_engine.ini` (
 | `scaled_black` | the whole 1024×768 picture scaled to fit, black bars at the sides (called `black` before 0.1.3) |
 | `original` | the whole 1024×768 picture at its own size, centered, black around (as the game itself on a wide screen) |
 
-How much the picture is blurred and darkened: `background_blur` (0 to 8, default 2; 0 is not blurred) and `background_brightness` (30 to 100 percent, default 65), also in the `[display]` section and the settings panel.
+How much the picture is blurred and darkened: `background_blur` (0 to 8, default 2; 0 is not blurred) and `background_brightness` (30 to 100 percent, default 65), also in the `[video]` section and in Options > Video.
 
 Please only use pictures you have the right to use.

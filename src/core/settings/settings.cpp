@@ -216,6 +216,93 @@ void RenameValue(const char *section, const char *key, const char *oldValue, con
     }
 }
 
+struct Moved {
+    const char *oldSection;
+    const char *oldKey; // nullptr: the whole section (MoveSection)
+    const char *newSection;
+    const char *newKey;
+};
+Moved g_moved[16];
+int g_movedCount = 0;
+
+void MoveKey(const char *oldSection, const char *oldKey, const char *newSection, const char *newKey)
+{
+    if (g_movedCount < static_cast<int>(sizeof(g_moved) / sizeof(g_moved[0]))) {
+        g_moved[g_movedCount++] = Moved{oldSection, oldKey, newSection, newKey};
+    }
+}
+
+void MoveSection(const char *oldSection, const char *newSection)
+{
+    if (g_movedCount < static_cast<int>(sizeof(g_moved) / sizeof(g_moved[0]))) {
+        g_moved[g_movedCount++] = Moved{oldSection, nullptr, newSection, nullptr};
+    }
+}
+
+Renamed g_movedRenamed[8];
+int g_movedRenamedCount = 0;
+
+void RenameMovedValue(const char *newSection, const char *newKey, const char *oldValue, const char *newValue)
+{
+    if (g_movedRenamedCount < static_cast<int>(sizeof(g_movedRenamed) / sizeof(g_movedRenamed[0]))) {
+        g_movedRenamed[g_movedRenamedCount++] = Renamed{newSection, newKey, oldValue, newValue};
+    }
+}
+
+namespace {
+
+// Where the line [section] key moved to (MoveKey first, then MoveSection when the new section has that setting), or
+// false.
+bool MovedTo(const std::string &section, const std::string &key, const char **newSection, const char **newKey)
+{
+    for (int pass = 0; pass < 2; ++pass) {
+        for (int k = 0; k < g_movedCount; ++k) {
+            const Moved &m = g_moved[k];
+            if ((pass == 0) != (m.oldKey != nullptr) || _stricmp(section.c_str(), m.oldSection) != 0) {
+                continue;
+            }
+            if (m.oldKey && _stricmp(key.c_str(), m.oldKey) == 0) {
+                *newSection = m.newSection;
+                *newKey = m.newKey;
+                return true;
+            }
+            if (!m.oldKey && Find(m.newSection, key.c_str()) >= 0) {
+                *newSection = m.newSection;
+                *newKey = g_items[Find(m.newSection, key.c_str())].item.key;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+// value with the setting's renamed spellings applied (RenameValue).
+const char *RenamedValue(const char *section, const char *key, const char *value)
+{
+    for (int k = 0; k < g_renamedCount; ++k) {
+        const Renamed &r = g_renamed[k];
+        if (_stricmp(section, r.section) == 0 && _stricmp(key, r.key) == 0 && _stricmp(value, r.oldValue) == 0) {
+            return r.newValue;
+        }
+    }
+    return value;
+}
+
+// value as a moved line gives it: the setting's renamed spellings, then the renames only for moved lines.
+const char *MovedValue(const char *section, const char *key, const char *value)
+{
+    value = RenamedValue(section, key, value);
+    for (int k = 0; k < g_movedRenamedCount; ++k) {
+        const Renamed &r = g_movedRenamed[k];
+        if (_stricmp(section, r.section) == 0 && _stricmp(key, r.key) == 0 && _stricmp(value, r.oldValue) == 0) {
+            return r.newValue;
+        }
+    }
+    return value;
+}
+
+} // namespace
+
 int Register(const Item &item)
 {
     if (g_count >= kMaxItems) {
@@ -339,12 +426,47 @@ void Load(const wchar_t *path)
     ReadIni(text, &lines, &invalid);
     std::vector<IniKey> retired;   // lines to remove from the file
     std::vector<IniChange> carried; // their values carried over to current settings
-    for (const IniLine &l : lines) {
+    auto findRetired = [](const IniLine &l) -> const Retired * {
         const Retired *r = nullptr;
         for (int k = 0; k < g_retiredCount; ++k) {
             if (_stricmp(l.section.c_str(), g_retired[k].section) == 0 && _stricmp(l.key.c_str(), g_retired[k].key) == 0) {
                 r = &g_retired[k];
             }
+        }
+        return r;
+    };
+    // The file sets [section] key itself: with that line, or with a line that moved there (MoveKey, MoveSection).
+    auto setsItself = [&lines, &findRetired](const char *section, const char *key, bool movedToo) {
+        for (const IniLine &o : lines) {
+            if (_stricmp(o.section.c_str(), section) == 0 && _stricmp(o.key.c_str(), key) == 0) {
+                return true;
+            }
+            const char *ns, *nk;
+            if (movedToo && !findRetired(o) && MovedTo(o.section, o.key, &ns, &nk) && _stricmp(ns, section) == 0 &&
+                _stricmp(nk, key) == 0) {
+                return true;
+            }
+        }
+        return false;
+    };
+    int movedLines = 0;
+    for (const IniLine &l : lines) {
+        const Retired *r = findRetired(l);
+        const char *newSection, *newKey;
+        if (!r && MovedTo(l.section, l.key, &newSection, &newKey)) {
+            retired.push_back(IniKey{l.section, l.key});
+            ++movedLines;
+            const int i = Find(newSection, newKey);
+            char norm[kValueSize];
+            const bool taken = !setsItself(newSection, newKey, false) &&
+                               Normalize(i, MovedValue(newSection, newKey, l.value.c_str()), norm, sizeof(norm));
+            if (taken) {
+                carried.push_back(IniChange{newSection, newKey, norm});
+            }
+            core_log("config: line %d: [%s] %s = %s is now [%s] %s: moved in the file%s", l.line, l.section.c_str(),
+                     l.key.c_str(), l.value.c_str(), newSection, newKey,
+                     taken ? "" : " (not taken: the file sets the new one, or the value is not valid)");
+            continue;
         }
         if (!r) {
             continue;
@@ -353,10 +475,7 @@ void Load(const wchar_t *path)
         Migration m[4];
         const int n = r->migrate ? r->migrate(l.value.c_str(), m, 4) : 0;
         for (int k = 0; k < n && k < 4; ++k) {
-            bool inFile = false;
-            for (const IniLine &o : lines) {
-                inFile = inFile || (_stricmp(o.section.c_str(), m[k].section) == 0 && _stricmp(o.key.c_str(), m[k].key) == 0);
-            }
+            const bool inFile = setsItself(m[k].section, m[k].key, true);
             const int i = Find(m[k].section, m[k].key);
             char norm[kValueSize];
             if (!inFile && i >= 0 && Normalize(i, m[k].value, norm, sizeof(norm))) {
@@ -402,8 +521,8 @@ void Load(const wchar_t *path)
     for (const IniChange &c : carried) {
         const int i = Find(c.section.c_str(), c.key.c_str());
         Copy(g_items[i].value, kValueSize, c.value.c_str());
-        core_log("config: [%s] %s = %s (carried over from a removed setting)", c.section.c_str(), c.key.c_str(),
-                 c.value.c_str());
+        core_log("config: [%s] %s = %s (carried over from a removed or moved setting)", c.section.c_str(),
+                 c.key.c_str(), c.value.c_str());
     }
     std::string updated = text;
     if (!retired.empty() || !renamed.empty()) {
@@ -441,8 +560,8 @@ void Load(const wchar_t *path)
         DWORD error = 0;
         if (WriteFileAtomic(bak, text, &error) && WriteFileAtomic(path, updated, &error)) {
             if (!retired.empty() || !renamed.empty()) {
-                core_log("config: removed %d line(s) of settings that no longer exist, renamed %d value(s)",
-                         static_cast<int>(retired.size()), static_cast<int>(renamed.size()));
+                core_log("config: removed %d line(s) of settings that no longer exist, moved %d, renamed %d value(s)",
+                         static_cast<int>(retired.size()) - movedLines, movedLines, static_cast<int>(renamed.size()));
             }
             if (fill) {
                 core_log("config: emperor_engine.ini rewritten from this version's template: %d value(s) kept, %d "

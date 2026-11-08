@@ -48,6 +48,16 @@ std::atomic<DWORD> g_framesUntil{0};
 std::atomic<bool> g_framesPending{false};
 bool g_askDefaults = false;
 
+// Items another window of ours lists (the game's options window; SetListedElsewhere): left out of the panel unless
+// "Show all settings" is ticked (this time only; not saved).
+std::atomic<bool> g_listed[kMax];
+bool g_showAll = false;
+
+bool Shown(int i)
+{
+    return i >= 0 && i < kMax && cs::Get(i).inPanel && (g_showAll || !g_listed[i].load());
+}
+
 void Revert(const char *why)
 {
     AcquireSRWLockExclusive(&g_lock);
@@ -371,9 +381,9 @@ void RelayoutPreview(int resolution, int scale)
 
 const char *SectionTitle(const char *section)
 {
-    if (_stricmp(section, "display") == 0) return "Display";
+    if (_stricmp(section, "video") == 0) return "Video";
     if (_stricmp(section, "gameplay") == 0) return "Gameplay";
-    if (_stricmp(section, "sound") == 0) return "Sound";
+    if (_stricmp(section, "audio") == 0) return "Audio";
     if (_stricmp(section, "timing") == 0) return "Timing";
     if (_stricmp(section, "ui") == 0) return "Panel";
     if (_stricmp(section, "debug") == 0) return "Testing";
@@ -428,13 +438,21 @@ void DrawItem(int i, float scale, int resolution, int displayScale)
         break;
     }
     case Type::Choice: {
-        int cur = 0;
-        for (int k = 0; k < it.choiceCount; ++k) {
-            if (std::strcmp(g_draft[i], it.choices[k]) == 0) cur = k;
+        // The choices offered (cs::ChoiceListed), and the current one even when it is not (set in the file).
+        const char *labels[32];
+        int index[32], n = 0, cur = 0;
+        for (int k = 0; k < it.choiceCount && n < 32; ++k) {
+            const bool now = std::strcmp(g_draft[i], it.choices[k]) == 0;
+            if (!cs::ChoiceListed(it, k) && !now) {
+                continue;
+            }
+            if (now) cur = n;
+            labels[n] = it.choiceLabels ? it.choiceLabels[k] : it.choices[k];
+            index[n++] = k;
         }
         ImGui::SetNextItemWidth(width);
-        if (ImGui::Combo("##choice", &cur, it.choiceLabels ? it.choiceLabels : it.choices, it.choiceCount)) {
-            std::snprintf(g_draft[i], cs::kValueSize, "%s", it.choices[cur]);
+        if (ImGui::Combo("##choice", &cur, labels, n)) {
+            std::snprintf(g_draft[i], cs::kValueSize, "%s", it.choices[index[cur]]);
             g_dirty[i] = true;
             Commit(i);
         }
@@ -473,9 +491,9 @@ void DrawItem(int i, float scale, int resolution, int displayScale)
 void RestoreDefaults()
 {
     bool relayout = false;
-    for (int i = 0; i < cs::Count(); ++i) {
+    for (int i = 0; i < cs::Count() && i < kMax; ++i) {
         const cs::Item &it = cs::Get(i);
-        if (!it.inPanel || !it.editable) {
+        if (!Shown(i) || !it.editable) {
             continue;
         }
         char now[cs::kValueSize];
@@ -535,7 +553,7 @@ void ConfirmWindow(float scale)
 void DrawSettings(float scale)
 {
     const int n = cs::Count() < kMax ? cs::Count() : kMax;
-    int resolution = cs::Find("display", "resolution"), displayScale = cs::Find("display", "scale");
+    int resolution = cs::Find("video", "resolution"), displayScale = cs::Find("video", "scale");
     for (int i = 0; i < n; ++i) {
         if (!g_dirty[i]) {
             cs::Value(i, g_draft[i], cs::kValueSize);
@@ -545,6 +563,18 @@ void DrawSettings(float scale)
     bool pending = g_confirm.pending;
     ReleaseSRWLockShared(&g_lock);
     ImGui::BeginDisabled(pending);
+    bool anyListed = false;
+    for (int i = 0; i < n; ++i) {
+        anyListed = anyListed || g_listed[i].load();
+    }
+    if (anyListed) {
+        ImGui::Checkbox("Show all settings", &g_showAll);
+        if (!g_showAll) {
+            ImGui::SameLine();
+            ImGui::TextDisabled("(the others are in the game's Options)");
+        }
+        ImGui::Separator();
+    }
     // Sections in the order of their first item.
     const char *done[16];
     int doneCount = 0;
@@ -560,13 +590,13 @@ void DrawSettings(float scale)
         done[doneCount++] = section;
         bool any = false;
         for (int j = i; j < n; ++j) {
-            any = any || (cs::Get(j).inPanel && _stricmp(cs::Get(j).section, section) == 0);
+            any = any || (Shown(j) && _stricmp(cs::Get(j).section, section) == 0);
         }
         if (!any || !ImGui::CollapsingHeader(SectionTitle(section), ImGuiTreeNodeFlags_DefaultOpen)) {
             continue;
         }
         for (int j = i; j < n; ++j) {
-            if (cs::Get(j).inPanel && _stricmp(cs::Get(j).section, section) == 0) {
+            if (Shown(j) && _stricmp(cs::Get(j).section, section) == 0) {
                 if (j == displayScale && !ScaleShown(resolution)) {
                     continue;
                 }
@@ -698,6 +728,18 @@ void CaptureKey(unsigned vk, bool ctrl, bool shift, bool alt)
     }
     else {
         Note(i, false, "Saved.");
+    }
+}
+
+void SetListedElsewhere(const int *indices, int count)
+{
+    for (int i = 0; i < kMax; ++i) {
+        g_listed[i].store(false);
+    }
+    for (int k = 0; k < count; ++k) {
+        if (indices[k] >= 0 && indices[k] < kMax) {
+            g_listed[indices[k]].store(true);
+        }
     }
 }
 

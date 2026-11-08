@@ -6,7 +6,8 @@
 // - "Re-layout" items (resolution, display scale) are applied, then the panel asks whether to keep them: Keep saves
 //   them; Revert, closing the panel or 15 seconds without an answer restore the previous values (as Windows does
 //   for a new display resolution). Meanwhile the game draws frames (WantsGameFrames) so the result can be seen.
-// - Items that need a restart say so once changed. "Restore defaults" sets every item that the panel can change.
+// - Items that need a restart say so once changed. "Restore defaults" sets every item shown that the panel can change.
+// - Items another window lists (SetListedElsewhere) are shown only with "Show all settings".
 // Output thread (ImGui), except WantsGameFrames and PanelClosed.
 #pragma once
 
@@ -34,6 +35,11 @@ void CaptureKey(unsigned vk, bool ctrl, bool shift, bool alt);
 using GameKeyNote = const char *(*)(unsigned vk, unsigned mods);
 void SetGameKeyNote(GameKeyNote fn);
 GameKeyNote GetGameKeyNote(); // nullptr when none was set
+
+// From the game layer at start-up: the items (core/settings indices) that another window of ours lists for players
+// (the game's options window). The panel leaves them out unless its "Show all settings" is ticked, so it shows the
+// testing items and what is left out of that list on purpose (settings to change when something goes wrong).
+void SetListedElsewhere(const int *indices, int count);
 
 // Another window of ours waits for a key (the options window's Hotkeys, games/emperor): CapturingKey() is true then
 // too, so the window subclass gives it every key and our key polls leave them alone. settleVk: the key that ended the

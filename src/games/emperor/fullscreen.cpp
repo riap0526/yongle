@@ -904,8 +904,8 @@ int MigrateFullscreenPictures(const char *old, core::settings::Migration *out, i
     if (_stricmp(old, "black") != 0 || max < 2) {
         return 0;
     }
-    out[0] = core::settings::Migration{"display", "loading_screen", "scaled_black"};
-    out[1] = core::settings::Migration{"display", "menu_screens", "scaled_black"};
+    out[0] = core::settings::Migration{"video", "loading_screen", "scaled_black"};
+    out[1] = core::settings::Migration{"video", "menu_screens", "scaled_black"};
     return 2;
 }
 
@@ -916,11 +916,11 @@ void RegisterSettings()
     using core::settings::Type;
     core::settings::Retire("display", "fullscreen_pictures", &MigrateFullscreenPictures);
     for (const char *key : {"loading_screen", "menu_screens"}) {
-        core::settings::RenameValue("display", key, "framed", "scaled");
-        core::settings::RenameValue("display", key, "black", "scaled_black");
+        core::settings::RenameValue("video", key, "framed", "scaled");
+        core::settings::RenameValue("video", key, "black", "scaled_black");
     }
     int i = core::settings::Register(Item{
-        "display", "loading_screen", "Loading screens",
+        "video", "loading_screen", "Loading screens",
         "The pictures shown while a game loads. native: their own size, centered, black around; scaled: as large as "
         "fits, in a fret border on parchment; scaled_black: the whole 1024x768 frame scaled to fit, black bars; original: "
         "the whole 1024x768 frame at its own size, centered, black around (as the game itself on a wide screen).",
@@ -933,7 +933,7 @@ void RegisterSettings()
         return true;
     });
     i = core::settings::Register(Item{
-        "display", "menu_screens", "Menu screens",
+        "video", "menu_screens", "Menu screens",
         "Main menu, emperor and campaign choice, briefings, high scores, victory and defeat (the game's 1024x768 "
         "pictures). native_city: their own size in a fret border, your city blurred around them (menu_background.png "
         "or .bmp in Yongle's folder or the game folder if you put one there, otherwise the city you saw last); native: their own size on "
@@ -951,7 +951,7 @@ void RegisterSettings()
     // O2b (docs/archive/optimization.md): the menus' city background's blur and brightness (native_city). Made again on a
     // worker thread.
     i = core::settings::Register(Item{
-        "display", "background_blur", "City background: blur",
+        "video", "background_blur", "City background: blur",
         "How much the picture of your city behind the menus (Menu screens = native_city) is blurred, in screen "
         "pixels. 0: not blurred.",
         Type::Int, "2", Effect::Live, true, true, 0, 8, 1, nullptr, nullptr, nullptr, 0});
@@ -964,7 +964,7 @@ void RegisterSettings()
         return true;
     });
     i = core::settings::Register(Item{
-        "display", "background_brightness", "City background: brightness",
+        "video", "background_brightness", "City background: brightness",
         "How bright the picture of your city behind the menus is, in percent of the city itself. 100 with blur 0: the "
         "city as it is.",
         Type::Int, "65", Effect::Live, true, true, 30, 100, 5, nullptr, nullptr, nullptr, 0, "%"});

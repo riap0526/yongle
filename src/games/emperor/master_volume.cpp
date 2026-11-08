@@ -193,7 +193,7 @@ void RegisterSettings()
     using core::settings::Item;
     using core::settings::Type;
     int i = core::settings::Register(Item{
-        "sound", "master_volume", "Master volume",
+        "audio", "master_volume", "Master volume",
         "The volume of all the game's music and sounds together; the game's own volumes (music, speech, general "
         "and ambient sounds) are set within it.",
         Type::Int, "100", Effect::Live, true, true, 0, 100, 5, nullptr, nullptr, nullptr, 0, "%"});
@@ -203,7 +203,7 @@ void RegisterSettings()
         return true;
     });
     i = core::settings::Register(Item{
-        "sound", "master_sound", "Master volume: on",
+        "audio", "master_sound", "Master volume: on",
         "off: no music and no sounds at all, whatever the volumes (the game's own switches and volumes keep their "
         "values).",
         Type::Bool, "on", Effect::Live, true, true, 0, 0, 0, nullptr, nullptr, nullptr, 0});

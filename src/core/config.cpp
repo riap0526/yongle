@@ -48,7 +48,7 @@ int MigrateRenderer(const char *old, core::settings::Migration *out, int max)
     if (_stricmp(old, "direct3d") != 0 || max < 1) {
         return 0;
     }
-    out[0] = core::settings::Migration{"display", "renderer", "direct3d"};
+    out[0] = core::settings::Migration{"video", "renderer", "direct3d"};
     return 1;
 }
 const char *const kWindow[] = {"fullscreen", "windowed"};
@@ -137,12 +137,12 @@ int Add(const Item &item)
 void RegisterCoreItems()
 {
     // section, key, label, help, type, default, effect, inPanel, editable, min, max, step, autoWord, choices...
-    g_backend = Add(Item{"display", "backend", "DirectDraw", "emulated: our own DirectDraw (no display mode changes, "
+    g_backend = Add(Item{"video", "backend", "DirectDraw", "emulated: our own DirectDraw (no display mode changes, "
                          "scaled with SDL3); system: the real Windows DirectDraw behind the logging wrapper.",
                          Type::Choice, "emulated", Effect::Restart, false, false, 0, 0, 0, nullptr, kBackend,
                          kBackendLabels, 2});
     // O3 (docs/archive/optimization.md): switched at once, in the panel and in Display options.
-    g_scaling = Add(Item{"display", "scaling", "Scaling",
+    g_scaling = Add(Item{"video", "scaling", "Scaling",
                          "How the picture is enlarged when the game's pixels are not the screen's: a display scale "
                          "other than 100%, 1024x768, scaled menus, a window. sharp_bilinear (default): sharp, each "
                          "pixel's edge blended over one screen pixel; nearest: plain pixels, some a screen pixel wider "
@@ -150,46 +150,49 @@ void RegisterCoreItems()
                          "pixel of the screen: the three look the same.",
                          Type::Choice, "sharp_bilinear", Effect::Live, true, true, 0, 0, 0, nullptr, kScaling,
                          kScalingLabels, 3});
-    g_present = Add(Item{"display", "present", "Frame output",
+    g_present = Add(Item{"video", "present", "Frame output",
                          "How often frames reach the screen. display: every screen refresh; cap60: at most 60 per "
-                         "second; original: the game's own ~20 per second. The game's timing is the same in all "
-                         "three. display and cap60 switch at once; original needs a restart, and this panel is not "
-                         "available with it.",
+                         "second. The game's timing is the same with both. (original, the game's own ~20 per second, "
+                         "is only for troubleshooting and only in emperor_engine.ini: this panel and the options "
+                         "window are not available with it.)",
                          Type::Choice, "display", Effect::Live, true, true, 0, 0, 0, nullptr, kPresent, kPresentLabels,
-                         3});
-    g_resolution = Add(Item{"display", "resolution", "Resolution",
+                         3, nullptr, nullptr, nullptr, nullptr, 1u << 0}); // original: not offered (2026-11-08)
+    // A file of an older version with original (it could be chosen in the panel and the options window until
+    // 2026-11-08) gets display, so the options window can be used; original set in [video] later stays.
+    core::settings::RenameMovedValue("video", "present", "original", "display");
+    g_resolution = Add(Item{"video", "resolution", "Resolution",
                             "The size the game draws, scaled to the screen. Scaled (default): the screen's native "
                             "resolution divided by the display scale -- at 100 % every pixel of the game is one pixel "
                             "of the screen, the sharpest picture. 1024x768 is the game's own size. Menus and other "
                             "full-screen pictures stay at 1024x768. Windowed, a fixed size becomes the window's size.",
                             Type::Resolution, "scaled", Effect::Relayout, true, true, 0, 0, 0, nullptr, nullptr,
                             nullptr, 0});
-    g_scale = Add(Item{"display", "scale", "Display scale",
+    g_scale = Add(Item{"video", "scale", "Display scale",
                        "For Resolution = Scaled. 100 % (default): the sharpest picture, everything at its own size "
                        "(small on a large, high-resolution screen). A larger scale makes everything bigger but "
                        "softer, because the picture is enlarged. Auto: 1080 pixels high on a taller screen (2560x1440: "
                        "1920x1080, 133 %; 4K: 1920x1080), the screen's own size otherwise. Always limited so that the "
                        "result stays at least 1024x768.",
                        Type::Int, "100", Effect::Relayout, true, true, 100, 250, 5, "auto", nullptr, nullptr, 0, "%"});
-    g_window = Add(Item{"display", "window", "Window",
+    g_window = Add(Item{"video", "window", "Window",
                         "fullscreen: the game covers its monitor, without a border; windowed: a window you can move "
                         "and size (the game is laid out again for its size when you let go). F5 switches.",
                         Type::Choice, "fullscreen", Effect::Live, true, true, 0, 0, 0, nullptr, kWindow, kWindowLabels,
                         2});
-    g_windowW = Add(Item{"display", "window_width", "Window width",
+    g_windowW = Add(Item{"video", "window_width", "Window width",
                          "The windowed client width in pixels (auto: three quarters of the monitor). Kept when you "
                          "size the window.",
                          Type::Int, "auto", Effect::Live, false, true, 1024, 16384, 1, "auto", nullptr, nullptr, 0});
-    g_windowH = Add(Item{"display", "window_height", "Window height", "The windowed client height in pixels.",
+    g_windowH = Add(Item{"video", "window_height", "Window height", "The windowed client height in pixels.",
                          Type::Int, "auto", Effect::Live, false, true, 768, 16384, 1, "auto", nullptr, nullptr, 0});
-    g_windowX = Add(Item{"display", "window_x", "Window position x",
+    g_windowX = Add(Item{"video", "window_x", "Window position x",
                          "The window's left edge (center: centered on its monitor). Kept when you move the window.",
                          Type::Int, "center", Effect::Live, false, true, -32000, 32000, 1, "center", nullptr, nullptr,
                          0});
-    g_windowY = Add(Item{"display", "window_y", "Window position y", "The window's top edge (center: centered).",
+    g_windowY = Add(Item{"video", "window_y", "Window position y", "The window's top edge (center: centered).",
                          Type::Int, "center", Effect::Live, false, true, -32000, 32000, 1, "center", nullptr, nullptr,
                          0});
-    g_windowLock = Add(Item{"display", "window_lock_cursor", "Window: keep the cursor inside",
+    g_windowLock = Add(Item{"video", "window_lock_cursor", "Window: keep the cursor inside",
                             "Windowed: the cursor cannot leave the window while it is the active one (released when "
                             "you switch to another program, minimize it or go fullscreen). The window's border cannot "
                             "be reached then: switch this off, or use F5, to move or size it.",
@@ -206,17 +209,17 @@ void RegisterCoreItems()
     g_panelScale = Add(Item{"ui", "panel_scale", "Panel size",
                             "Size of this panel in percent. Auto: the output height divided by 1080 (1440p: 133%).",
                             Type::Int, "auto", Effect::Live, true, true, 100, 300, 10, "auto", nullptr, nullptr, 0, "%"});
-    g_panelKey = Add(Item{"ui", "panel_key", "Panel key",
+    g_panelKey = Add(Item{"ui", "panel_key", "Debug panel: key",
                           "Opens and closes this panel. Change: press the new key, alone or with Ctrl, Shift or Alt "
                           "(e.g. Ctrl+F12).",
                           Type::Hotkey, "Insert", Effect::Live, true, true, 0, 0, 0, nullptr, nullptr, nullptr, 0});
-    g_shotKey = Add(Item{"debug", "screenshot_key", "Screenshot key",
+    g_shotKey = Add(Item{"debug", "screenshot_key", "Screenshot: key",
                          "Saves the game's own picture (its logical resolution, without this panel) as a PNG in "
                          "shots\\ in Yongle's folder (shown at the bottom of this panel); the file name has the screen "
                          "number, the resolution and the time. Change: press the new key, alone or with Ctrl, Shift "
                          "or Alt.",
                          Type::Hotkey, "F11", Effect::Live, true, true, 0, 0, 0, nullptr, nullptr, nullptr, 0});
-    g_reportKey = Add(Item{"debug", "report_key", "Report key",
+    g_reportKey = Add(Item{"debug", "report_key", "Report screenshot: key",
                            "When something odd is on the screen (e.g. flashing blocks): marks the log, saves the "
                            "picture shown and the screen (report<n>_... in shots\\) and the game's statistics. "
                            "Change: press the new key, alone or with Ctrl, Shift or Alt.",
@@ -229,7 +232,11 @@ void RegisterCoreItems()
     // since the B plan (docs/archive/affinity.md section 7.5): the stops with Steam's FPS counter came from the driver's threads
     // waiting on the game's processor.
     core::settings::Retire("debug", "renderer", &MigrateRenderer);
-    g_renderer = Add(Item{"display", "renderer", "Renderer",
+    // 2026-11-08: the sections take the names of the options window's pages. Keys that moved elsewhere are moved by
+    // their owners (core::settings::MoveKey).
+    core::settings::MoveSection("display", "video");
+    core::settings::MoveSection("sound", "audio");
+    g_renderer = Add(Item{"video", "renderer", "Renderer",
                           "What puts the picture on the screen. auto (default): Direct3D 11, or Direct3D 9 if Direct3D "
                           "11 cannot start. direct3d: Direct3D 9 (Direct3D 11 if it cannot start). direct3d11: "
                           "Direct3D 11. Takes effect after a restart.",

@@ -707,14 +707,14 @@ extern "C" void emperor_attach(void)
         core::settings::OnChange(core::settings::Find("gameplay", "smooth_scroll"), &ApplySmooth);
     }
     if (resolution) {
-        core::settings::OnChange(core::settings::Find("display", "resolution"), &ApplyResolution);
-        core::settings::OnChange(core::settings::Find("display", "scale"), &ApplyResolution);
+        core::settings::OnChange(core::settings::Find("video", "resolution"), &ApplyResolution);
+        core::settings::OnChange(core::settings::Find("video", "scale"), &ApplyResolution);
     }
     core::capture::SetTagProvider(&ShotTag);
     core::ddraw::SetStateDescriber(&DescribeForCanary);
     // The present mode log's lines carry game_screen (read on the drawing thread; one byte, reads only).
     core::diag::present_mode::SetScreenProvider([] { return static_cast<int>(static_cast<unsigned char>(*kGameScreen)); });
-    core::ui::SetTitle("Yongle " YONGLE_VERSION);
+    core::ui::SetTitle("Yongle " YONGLE_VERSION " debug panel");
     core::ui::AddSection("Game", &InfoSection);
     core::ui::AddSection("Performance", &core::ui::PerfWidget);
 }

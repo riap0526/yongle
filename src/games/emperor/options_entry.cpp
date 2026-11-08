@@ -8,7 +8,7 @@
 #include <algorithm>
 #include <cstring>
 
-// Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e): docs/resolution_ui/original_settings.md §12.2, §12.4 and
+// Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e): docs/archive/resolution_ui_original_settings.md §12.2, §12.4 and
 // §14.7 (tools/recon/menu_tables.py, Ghidra, capstone, 2026-11-08); calling conventions: docs/symbols.md.
 namespace emperor::options_entry {
 namespace {

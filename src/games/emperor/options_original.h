@@ -1,4 +1,4 @@
-// The game's own options in the options window (docs/resolution_ui/original_settings.md §12.1, §14 S2c): game and
+// The game's own options in the options window (docs/archive/resolution_ui_original_settings.md §12.1, §14 S2c): game and
 // scroll speed, autosave, the message kinds, and the four sound switches and volumes. The values stay where the game
 // keeps them (the Emperor.inf block, written back by the game at exit), so the game without our DLL reads the same;
 // a change is carried out as the game's own options dialogs do it.

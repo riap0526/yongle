@@ -131,7 +131,7 @@ Session g_session;
 
 int Item(const char *key)
 {
-    return core::settings::Find("display", key);
+    return core::settings::Find("video", key);
 }
 
 void Value(const char *key, char *out)

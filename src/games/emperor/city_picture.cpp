@@ -217,7 +217,7 @@ void Request(Kind kind)
         return;
     }
     if (core::ui::IsOpen()) { // the game is paused: the city is not drawn until the panel closes
-        Notice("Close the settings panel first.");
+        Notice("Close the debug panel first.");
         return;
     }
     if (!CityScreen()) {
@@ -561,16 +561,17 @@ const char *GameKeyNote(unsigned vk, unsigned mods)
     if (mods == (kModCtrl | kModAlt) && vk == 'C') {
         return "The game also uses this key; it no longer reaches the game.";
     }
-    if (vk == VK_INSERT && mods == 0) { // the game's only use: insert / overwrite in a text box (P1 section 12.5)
-        return "In the game this key only switches between inserting and overwriting while you type a name; that "
-               "no longer works with it.";
+    if ((vk == VK_INSERT || vk == VK_DELETE) && mods == 0) {
+        // Only for typing in the game (Insert: insert / overwrite, P1 section 12.5; Delete: deleting, and closing the
+        // editor's number pad, screen 0x0e, game_wndproc -> 0x5eec50): hardly ever used, so nothing to tell.
+        return nullptr;
     }
     if (vk == 0x71 || vk == 0x74 || vk == 0x75 || vk == 'R') {
         return "The game also reacts to this key itself.";
     }
     if ((mods & (kModCtrl | kModAlt)) == 0) {
         const bool used = (vk >= 'A' && vk <= 'Z') || (vk >= '0' && vk <= '9') || (vk >= 0x70 && vk <= 0x78) ||
-                          vk == VK_SPACE || vk == VK_TAB || vk == VK_INSERT || vk == VK_DELETE || vk == VK_HOME ||
+                          vk == VK_SPACE || vk == VK_TAB || vk == VK_HOME ||
                           vk == VK_END || vk == VK_PRIOR || vk == VK_NEXT || vk == VK_NUMPAD2;
         if (used) {
             return "The game also uses this key; it no longer reaches the game.";
@@ -587,22 +588,24 @@ void RegisterSettings()
     using core::settings::Item;
     using core::settings::Type;
     int i = core::settings::Register(Item{
-        "ui", "city_picture_key", "City picture: key",
+        "ui", "city_picture_key", "Full city screenshot: key",
         "Saves the whole city as one picture (PNG) in shots\\ in Yongle's folder, at the game's own size and without "
         "the interface; the game stops for a moment while it is drawn. Change: press the new key, alone or with Ctrl, "
         "Shift or Alt.",
         Type::Hotkey, "F10", Effect::Live, true, true, 0, 0, 0, nullptr, nullptr, nullptr, 0});
     core::settings::OnChange(i, &ApplyCityKey);
     i = core::settings::Register(Item{
-        "ui", "minimap_picture_key", "Minimap picture: key",
+        "ui", "minimap_picture_key", "Minimap screenshot: key",
         "Saves the minimap of the whole map as a picture (PNG) in shots\\ in Yongle's folder. Change: press the new "
         "key, alone or with Ctrl, Shift or Alt.",
         Type::Hotkey, "Shift+F10", Effect::Live, true, true, 0, 0, 0, nullptr, nullptr, nullptr, 0});
     core::settings::OnChange(i, &ApplyMinimapKey);
     // Only in test builds (the maps are desert outside the playable range, so there was nothing to choose).
     core::settings::Retire("ui", "city_picture_background", nullptr);
-    i = core::settings::Register(Item{"ui", "minimap_picture_scale", "Minimap picture: size",
-                                      "How many times larger than the minimap in the game.", Type::Choice, "2",
+    i = core::settings::Register(Item{"ui", "minimap_picture_scale", "Minimap screenshot: size",
+                                      "How large the minimap screenshot saved with its key is, in times the minimap "
+                                      "in the game (not the minimap beside the city).",
+                                      Type::Choice, "2",
                                       Effect::Live, true, true, 0, 0, 0, nullptr, kScale, kScaleLabels, 3});
     core::settings::OnChange(i, &ApplyScale);
     i = core::settings::Register(Item{

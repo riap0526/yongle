@@ -270,7 +270,7 @@ void RegisterSettings()
     using core::settings::Item;
     using core::settings::Type;
     int i = core::settings::Register(Item{
-        "display", "city_zoom", "Starting city zoom (%)",
+        "video", "city_zoom", "Starting city zoom (%)",
         "The city's zoom when the game starts: 100 as the game draws it, more to see more of the city, less to see "
         "it larger. From 50 to 150, and at most what the map allows. While playing, zoom with the mouse wheel over "
         "the city; the middle mouse button goes back to 100.",
@@ -278,7 +278,7 @@ void RegisterSettings()
         nullptr, nullptr, 0, "%", &LimitNow});
     core::settings::OnChange(i, &ApplyZoom);
     i = core::settings::Register(Item{
-        "display", "city_zoom_shrink", "City zoom: shrinking",
+        "video", "city_zoom_shrink", "City zoom: shrinking",
         "When more than 100% is seen: how the city is made smaller on the screen.",
         Type::Choice, "average", Effect::Live, true, true, 0, 0, 0, nullptr, kShrink, kShrinkLabels, 2});
     core::settings::OnChange(i, &ApplyShrink);

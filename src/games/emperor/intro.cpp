@@ -54,11 +54,13 @@ void RegisterSettings()
     using core::settings::Item;
     using core::settings::Type;
     const int i = core::settings::Register(Item{
-        "display", "intro_movie", "Intro movie",
+        "ui", "intro_movie", "Intro movie",
         "Whether the game plays its intro movie at start-up. Takes effect the next time the game starts. Yongle "
         "does not change the game's own Emperor.ini: if PlayIntroMovie=no is set there, the movie is skipped "
         "either way.",
         Type::Choice, "play", Effect::Restart, true, true, 0, 0, 0, nullptr, kChoices, kLabels, 2});
+    // 2026-11-08: from [display] (now [video]) to [ui], beside the other settings of the options window's General page.
+    core::settings::MoveKey("display", "intro_movie", "ui", "intro_movie");
     core::settings::OnChange(i, [](int, const char *v, bool initial) {
         if (initial) {
             g_skip = std::strcmp(v, "skip") == 0;

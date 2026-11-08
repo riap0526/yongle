@@ -94,10 +94,12 @@ PanelFn o_SpyPanel, o_CityPanel;
 core::diag::Feature g_feature{"China map layout (games/emperor/china_map)"};
 const int kPhase = core::diag::perf::Register("China map layer (ours)", core::diag::perf::Thread::Game);
 
+// kOriginal (the game's own drawing, top left) is no longer a choice (2026-11-08: hardly anyone would pick it; a file
+// that has it gets native); it stays for the offline tests and as the way through when the layout is off.
 enum Mode { kScaled, kNative, kOriginal };
 const char *const kModes[] = {"scaled", "native", "original"};
-const char *const kModeLabels[] = {"scaled (larger than its own size)", "native (its own size, centered)",
-                                   "original (as the game draws it)"};
+const char *const kModeLabels[] = {"scaled (larger than its own size)", "native (its own size, centered)"};
+constexpr int kModeChoices = 2;
 int g_mode = kNative; // R2d.1: the picture's own size by default (playtest 2026-10-25)
 int g_scalePercent = 0; // O2c: display.china_map_scale for scaled, 0 = fit (as large as the map area allows)
 int g_fitPercent = 0;   // the fit of the map last shown, in percent (0: none shown yet)
@@ -524,7 +526,7 @@ void __fastcall CityPanel_detour(void *self, void *, int x, int y, int w, int h)
 bool ApplyMode(int, const char *v, bool initial)
 {
     g_mode = kNative;
-    for (int i = 0; i < 3; ++i) {
+    for (int i = 0; i < kModeChoices; ++i) {
         if (std::strcmp(v, kModes[i]) == 0) {
             g_mode = i;
         }
@@ -573,25 +575,31 @@ void RegisterSettings()
     using core::settings::Item;
     using core::settings::Type;
     int i = core::settings::Register(Item{
-        "display", "china_map", "China map",
-        "The map of China at resolutions larger than the map. scaled: larger than its own size (China map: scale), in "
-        "a fret border, over the background (China map: background); native: the picture's own size, centered, the "
-        "same background; original: as the game draws it (top left, the rest of the screen not redrawn).",
-        Type::Choice, "native", Effect::Live, true, true, 0, 0, 0, nullptr, kModes, kModeLabels, 3});
+        "video", "empire_map", "Empire map",
+        "The empire map at resolutions larger than the map. scaled: larger than its own size (Empire map: scale), in "
+        "a fret border, over the background (Empire map: background); native: the picture's own size, centered, the "
+        "same background.",
+        Type::Choice, "native", Effect::Live, true, true, 0, 0, 0, nullptr, kModes, kModeLabels, kModeChoices});
     core::settings::OnChange(i, &ApplyMode);
+    // 2026-11-08: [display] china_map* became [video] empire_map* (the campaign editor's name for the map), and
+    // original is no longer a choice.
+    core::settings::MoveKey("display", "china_map", "video", "empire_map");
+    core::settings::MoveKey("display", "china_map_scale", "video", "empire_map_scale");
+    core::settings::MoveKey("display", "china_map_background", "video", "empire_map_background");
+    core::settings::RenameValue("video", "empire_map", "original", "native");
     // O2c: whole-number scales (R2c) gave only 100% below 4K; a scale of one's own covers it (2026-11-01).
     core::settings::Retire("display", "china_map_integer", nullptr);
     i = core::settings::Register(Item{
-        "display", "china_map_scale", "China map: scale",
-        "For China map = scaled: how large, in percent of the map's own size. Auto: as large as the map area allows "
+        "video", "empire_map_scale", "Empire map: scale",
+        "For Empire map = scaled: how large, in percent of the map's own size. Auto: as large as the map area allows "
         "(fit). The slider ends at what fits for the map last shown at this resolution; a larger value in "
         "emperor_engine.ini is shown as large as fits.",
         Type::Int, "fit", Effect::Live, true, true, 100, 400, 5, "fit", nullptr, nullptr, 0, "%", &FitPercent,
-        "china_map", "scaled"});
+        "empire_map", "scaled"});
     core::settings::OnChange(i, &ApplyScale);
     i = core::settings::Register(Item{
-        "display", "china_map_background", "China map: background",
-        "What is around the map (China map = scaled or native). map: the same map, blurred and darkened; city: your "
+        "video", "empire_map_background", "Empire map: background",
+        "What is around the map (Empire map = scaled or native). map: the same map, blurred and darkened; city: your "
         "city as it was when you opened the map, as it is (the map like a window over it); it stands still while "
         "the map is shown.",
         Type::Choice, "map", Effect::Live, true, true, 0, 0, 0, nullptr, kBackgrounds, kBackgroundLabels, 2});
@@ -618,7 +626,7 @@ bool Attach()
     Install(kCityPanel, &CityPanel_detour, o_CityPanel);
     char scale[16];
     std::snprintf(scale, sizeof(scale), g_scalePercent ? "%d%%" : "fit", g_scalePercent);
-    core_log("china_map: installed (display.china_map %s, scale %s, background %s)", kModes[g_mode], scale,
+    core_log("china_map: installed (video.empire_map %s,scale %s, background %s)", kModes[g_mode], scale,
              kBackgrounds[g_background]);
     return true;
 }

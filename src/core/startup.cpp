@@ -66,8 +66,8 @@ bool ApplyScaling(int, const char *v, bool initial)
 void AttachCoreSettings()
 {
     core::settings::OnChange(core::settings::Find("timing", "high_resolution_timer"), &ApplyTimer);
-    core::settings::OnChange(core::settings::Find("display", "present"), &ApplyPresent);
-    core::settings::OnChange(core::settings::Find("display", "scaling"), &ApplyScaling);
+    core::settings::OnChange(core::settings::Find("video", "present"), &ApplyPresent);
+    core::settings::OnChange(core::settings::Find("video", "scaling"), &ApplyScaling);
 }
 
 // The deferred start-up work (core_startup_attach): run once, by the exe's entry point or the first DirectDrawCreate.

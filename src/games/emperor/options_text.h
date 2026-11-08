@@ -1,4 +1,4 @@
-// The options window's texts for players (docs/resolution_ui/original_settings.md §14.3): for each setting a short
+// The options window's texts for players (docs/archive/resolution_ui_original_settings.md §14.3): for each setting a short
 // description (the tooltip of its name) and, for choices, one description per choice (the tooltip of the value).
 // The registry's own help (core/settings) stays as it is for the panel and the settings file; these are shorter,
 // because each choice is explained only when it is the one shown. American English; checked for internal notes by
@@ -9,7 +9,9 @@ namespace emperor::options_text {
 
 struct ChoiceText {
     const char *spell; // the ini spelling; "*": any other value (e.g. a resolution's sizes)
-    const char *help;
+    const char *help;  // '\n' starts a new line
+    const char *shown = nullptr; // the value's name in the window (nullptr: made from the spelling, "Sharp bilinear")
+    bool restart = false;        // this value takes effect after a restart (red first line in its tooltip)
 };
 
 struct Text {
@@ -23,7 +25,7 @@ struct Text {
 };
 
 const Text *Find(const char *section, const char *key);
-const char *ChoiceHelp(const Text &t, const char *spell); // "" when none
+const ChoiceText *Choice(const Text &t, const char *spell); // its own entry, else "*", else nullptr
 
 // The red first line of the tooltips of a setting marked "*".
 extern const char *const kRestartTip;

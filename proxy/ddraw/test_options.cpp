@@ -551,6 +551,51 @@ int main()
     p = Draw(w);
     Check(p.Count("frame") == 1, "frame around the button under the mouse");
 
+    // One value that takes effect after a restart (the row itself does not): the red line only on that value's
+    // tooltip, no "*" after the name; '\n' in a tooltip starts a new line.
+    {
+        g_values[2] = 0;
+        co::Row present;
+        present.kind = co::Kind::Choice;
+        present.label = "Frame output";
+        present.value = V(2);
+        present.choices = {"Display", "Original"};
+        present.help = "First line.\nSecond line.";
+        present.choiceHelp = {"Every refresh.", "The game's own."};
+        present.choiceRestart = {false, true};
+        co::Window v;
+        v.SetPages({{"Video", {{"Screen", {present}}}}});
+        v.SetRestartTip("Restart first.");
+        v.Open(0, 0);
+        FakePainter q = Draw(v);
+        Check(!q.FindText("*"), "a value that needs a restart: no * after the name");
+        const Op *name = q.FindText("Frame output"), *val = q.FindText("Display");
+        v.MouseMove(Cx(val), Cy(val));
+        v.Tick(30000);
+        v.Tick(30000 + co::Window::kTipDelayMs);
+        q = Draw(v);
+        Check(v.TipShown() && q.FindText("Every refresh.") && !q.FindText("Restart first."),
+              "the other value: its tooltip without the red line");
+        const Op *more = nullptr;
+        for (const Op &o : q.ops) {
+            if (o.op == "arrow" && o.extra / 10 == static_cast<int>(co::Arrow::Right) && !more) more = &o;
+        }
+        Click(v, Cx(more), Cy(more));
+        v.MouseMove(Cx(val), Cy(val));
+        v.Tick(31000);
+        v.Tick(31000 + co::Window::kTipDelayMs);
+        q = Draw(v);
+        const Op *red = q.FindText("Restart first."), *own = q.FindText("The game's own.");
+        Check(v.TipShown() && red && own && red->y < own->y, "that value: the red line first, then its description");
+        v.MouseMove(Cx(name), Cy(name));
+        v.Tick(32000);
+        v.Tick(32000 + co::Window::kTipDelayMs);
+        q = Draw(v);
+        const Op *l1 = q.FindText("First line."), *l2 = q.FindText("Second line.");
+        Check(v.TipShown() && l1 && l2 && l2->y > l1->y && !q.FindText("Restart first."),
+              "the name: no red line; a line break in the tooltip");
+    }
+
     std::printf("%s\n", g_failures ? "SOME TESTS FAILED" : "all tests passed");
     return g_failures ? 1 : 0;
 }

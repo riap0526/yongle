@@ -57,7 +57,7 @@ $log = Join-Path $dir 'ddraw_proxy.log'
 $results = @()
 
 function Run($name, $backend, [string[]]$testArgs, $present = 'display', $extra = '') {
-    Set-Content -Path $ini -Value "[display]`r`nbackend = $backend`r`npresent = $present`r`n$extra" -Encoding ascii
+    Set-Content -Path $ini -Value "[video]`r`nbackend = $backend`r`npresent = $present`r`n$extra" -Encoding ascii
     Push-Location $dir
     try {
         $out = & ".\$name.exe" @testArgs

@@ -9,7 +9,7 @@ It depends on whether Windows lets a standard user (not an administrator) write 
 - **Yes** (most installs outside Program Files, e.g. `D:\Games\Emperor`): in the **game folder**, next to `ddraw.dll`. This includes games installed by GOG Galaxy in its default folder, `C:\Program Files (x86)\GOG Galaxy\Games` or `C:\Program Files\GOG Galaxy\Games`: GOG Galaxy lets standard users write there, even though it is under Program Files.
 - **No** (e.g. a game copied or installed elsewhere under `C:\Program Files (x86)`): in **`Documents\My Games\Yongle`** (your Documents folder, wherever Windows keeps it). If Yongle cannot write there either, for example because Windows Security's *Controlled folder access* blocks `Emperor.exe`, they are in `%LOCALAPPDATA%\Yongle` instead.
 
-The answer is the same whether or not the game runs as administrator, so there is always one set of files. The settings panel (Insert) shows the folder at the bottom, with an **Open folder** button; the log's `files:` lines say why it was chosen.
+The answer is the same whether or not the game runs as administrator, so there is always one set of files. The debug panel (Insert) shows the folder at the bottom, with an **Open folder** button; the log's `files:` lines say why it was chosen.
 
 The files:
 
@@ -36,7 +36,7 @@ At the first start Yongle copies your settings to `Documents\My Games\Yongle`: t
 
 ## How do I skip the intro movie?
 
-Set **Intro movie** to `skip` in the settings panel (Insert; in the Display section), or `intro_movie = skip` in the `[display]` section of `emperor_engine.ini`. It takes effect the next time the game starts. Yongle does not change the game's own `Emperor.ini`: without Yongle the game does what that file says, and if it already has `PlayIntroMovie=no` in its `[Config]` section, the movie is skipped either way.
+Set **Intro movie** to `skip` in Options > General Settings, or `intro_movie = skip` in the `[ui]` section of `emperor_engine.ini`. It takes effect the next time the game starts. Yongle does not change the game's own `Emperor.ini`: without Yongle the game does what that file says, and if it already has `PlayIntroMovie=no` in its `[Config]` section, the movie is skipped either way.
 
 ## Why Direct3D 11 by default?
 
@@ -49,4 +49,4 @@ Direct3D 9 stays available, and Yongle switches to it automatically if Direct3D 
 
 ## How do I switch the renderer?
 
-Yongle uses Direct3D 11 by default (`renderer = auto`; Direct3D 9 only if Direct3D 11 cannot start). If you see stutters or a picture that looks wrong, try Direct3D 9: set `renderer = direct3d` in the `[display]` section of `emperor_engine.ini` and restart the game. `renderer = direct3d11` forces Direct3D 11. If Direct3D 9 helps, please report it with the log (see [Reporting problems](../README.md#reporting-problems)).
+Yongle uses Direct3D 11 by default (`renderer = auto`; Direct3D 9 only if Direct3D 11 cannot start). If you see stutters or a picture that looks wrong, try Direct3D 9: set `renderer = direct3d` in the `[video]` section of `emperor_engine.ini` and restart the game. `renderer = direct3d11` forces Direct3D 11. If Direct3D 9 helps, please report it with the log (see [Reporting problems](../README.md#reporting-problems)).

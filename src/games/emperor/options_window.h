@@ -1,4 +1,4 @@
-// The options window in the game (docs/resolution_ui/original_settings.md §14): core/options' window drawn with the
+// The options window in the game (docs/archive/resolution_ui_original_settings.md §14): core/options' window drawn with the
 // game's own drawing functions and art, over the game's last frame, while the game is paused.
 #pragma once
 

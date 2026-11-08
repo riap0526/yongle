@@ -1,4 +1,4 @@
-// [sound] master_volume (docs/resolution_ui/original_settings.md §14.6): one volume over all of the game's sounds and
+// [sound] master_volume (docs/archive/resolution_ui_original_settings.md §14.6): one volume over all of the game's sounds and
 // music, as Augustus has. Not a setting of the game: the game's own volumes (Emperor.inf) stay as the player set
 // them; ours scales what the game hands to Miles (mss32.dll) when it sets a sound's volume, and gives the game back
 // the volume it asked for when it reads one (its music fades read the volume and step it).

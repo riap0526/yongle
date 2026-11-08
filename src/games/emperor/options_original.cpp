@@ -9,7 +9,7 @@
 #include <cstdint>
 #include <string>
 
-// Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e): docs/resolution_ui/original_settings.md §12.1 and §14
+// Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e): docs/archive/resolution_ui_original_settings.md §12.1 and §14
 // (S2c); calling conventions: docs/symbols.md.
 namespace emperor::options_original {
 namespace {
@@ -309,7 +309,8 @@ void MessageRows(std::vector<co::Row> &rows)
         r.label = Lang(kTextMessageKinds, i);
         for (int k = 0; k < 3; ++k) {
             r.choices.push_back(Lang(kTextMessageModes, 2 - k));
-            r.choiceHelp.push_back(t ? ot::ChoiceHelp(*t, spells[k]) : "");
+            const ot::ChoiceText *c = t ? ot::Choice(*t, spells[k]) : nullptr;
+            r.choiceHelp.push_back(c ? c->help : "");
         }
         r.value = V(kMessage, i);
         r.defaultValue = 2 - std::clamp<int>(Byte(kMessageDefaults + i), 0, 2);

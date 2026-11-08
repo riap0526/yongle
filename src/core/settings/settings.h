@@ -52,7 +52,15 @@ struct Item {
                                 // file still takes up to max), or nullptr: max
     const char *shownIfKey = nullptr;   // the panel shows the item only while this item of the same section ...
     const char *shownIfValue = nullptr; // ... has this value (e.g. a scale only for "scaled")
+    unsigned unlisted = 0; // Choice: bit k set = choices[k] is valid in the file but not offered in the panel or the
+                           // options window (e.g. present = original, for troubleshooting only)
 };
+
+// Choice: whether choices[k] is offered in the panel and the options window.
+inline bool ChoiceListed(const Item &item, int k)
+{
+    return k < 0 || k >= 32 || (item.unlisted & (1u << k)) == 0;
+}
 
 constexpr size_t kValueSize = 40;
 
@@ -79,6 +87,18 @@ void Retire(const char *section, const char *key, Migrate migrate);
 // writes the new one into the file in its place (after keeping the file as it was in emperor_engine.ini.bak), so the
 // file, the panel and the log all use the current name.
 void RenameValue(const char *section, const char *key, const char *oldValue, const char *newValue);
+
+// A setting that moved to another section or key (start-up, before Load). Load takes the old line's value for the
+// new setting (with the new setting's renamed values, see RenameValue) unless the file also sets the new one, and
+// rewrites the file with the new line in place of the old one (after keeping the file as it was in
+// emperor_engine.ini.bak). MoveSection moves every line of a section whose key is a setting of the new section;
+// MoveKey is checked first, Retire before both.
+void MoveKey(const char *oldSection, const char *oldKey, const char *newSection, const char *newKey);
+void MoveSection(const char *oldSection, const char *newSection);
+// A value changed only when its line is moved (an upgrade from a file of an older version), not when the file
+// sets the new setting to it itself: e.g. present = original from [display] becomes display, while [video]
+// present = original written later stays (for troubleshooting).
+void RenameMovedValue(const char *newSection, const char *newKey, const char *oldValue, const char *newValue);
 
 // The text of the settings file this version ships (start-up, before Load; the game layer embeds it). Load then
 // rewrites an existing file whose text differs from it filled with the file's values (core/settings/ini_text.h

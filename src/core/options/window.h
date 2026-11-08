@@ -1,4 +1,4 @@
-// The options window (docs/resolution_ui/original_settings.md §13, §14): one window in the game's own style that
+// The options window (docs/archive/resolution_ui_original_settings.md §13, §14): one window in the game's own style that
 // takes the place of the original Options menu. Pages (tabs) hold categories (the list on the left; a page with a
 // single unnamed category has no list), categories hold rows. Changes are drafts until Apply or OK; Cancel drops
 // them. Everything is laid out in window coordinates (640 x 480, the size of the game's dialogs) and drawn through
@@ -76,7 +76,7 @@ struct Row {
     Kind kind = Kind::Header;
     std::string id;    // for shownIf (may be empty)
     std::string label; // UTF-8
-    std::string help;  // the tooltip ("" none)
+    std::string help;  // the tooltip ("" none; '\n' starts a new line)
     Value value;
     Value toggle;      // CheckSlider: the checkbox
     int defaultValue = 0, defaultToggle = 0;
@@ -86,7 +86,9 @@ struct Row {
     std::string autoLabel = "Auto";
     std::string unit;                      // Slider: after the number ("%")
     std::vector<std::string> choices;      // Choice: shown values
-    std::vector<std::string> choiceHelp;   // Choice: the tooltip of each value ("" or missing: none)
+    std::vector<std::string> choiceHelp;   // Choice: the tooltip of each value ("" or missing: none; '\n' breaks)
+    std::vector<bool> choiceRestart;       // Choice: values that take effect after a restart (their tooltip starts
+                                           // with the red line; missing: none)
     std::string shownIfId;                 // shown only while the row with this id (same page) ...
     int shownIfValue = 0;                  // ... has this draft value
     bool restart = false;                  // takes effect after a restart: a red "*" after the label

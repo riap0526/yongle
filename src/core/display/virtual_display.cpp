@@ -547,7 +547,7 @@ void Settle(bool save)
     } items[] = {{"window_width", c.right}, {"window_height", c.bottom}, {"window_x", w.left}, {"window_y", w.top}};
     for (const auto &it : items) {
         std::snprintf(v, sizeof(v), "%ld", it.value);
-        core::settings::Request(core::settings::Find("display", it.key), v, true);
+        core::settings::Request(core::settings::Find("video", it.key), v, true);
     }
     core_log("display: window at (%ld,%ld), client %ldx%ld (saved)", w.left, w.top, c.right, c.bottom);
 }
@@ -1111,13 +1111,13 @@ bool Attach(HWND hwnd, core_scaling scaling, core_present_mode present)
         }
         g_hwnd = hwnd;
         g_windowed = core_config_get()->windowed != 0;
-        core::settings::OnChange(core::settings::Find("display", "window"), [](int, const char *v, bool initial) {
+        core::settings::OnChange(core::settings::Find("video", "window"), [](int, const char *v, bool initial) {
             if (!initial) {
                 SetWindowed(std::strcmp(v, "windowed") == 0);
             }
             return true;
         });
-        core::settings::OnChange(core::settings::Find("display", "window_lock_cursor"), [](int, const char *, bool) {
+        core::settings::OnChange(core::settings::Find("video", "window_lock_cursor"), [](int, const char *, bool) {
             UpdateClip();
             return true;
         });

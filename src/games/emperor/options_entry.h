@@ -1,4 +1,4 @@
-// The ways into the options window (docs/resolution_ui/original_settings.md §12.2, §12.4, §14.7, S2d): the game's
+// The ways into the options window (docs/archive/resolution_ui_original_settings.md §12.2, §12.4, §14.7, S2d): the game's
 // Options menu in the city becomes General Settings / Video / Audio (each opens the window at that page) and the
 // game's own Autosave switch; the main menu's "Visit Website" becomes "Options".
 #pragma once

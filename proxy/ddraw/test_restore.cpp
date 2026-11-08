@@ -92,6 +92,7 @@ using GameKeyNote = const char *(*)(unsigned, unsigned);
 void SetGameKeyNote(GameKeyNote) {}
 GameKeyNote GetGameKeyNote() { return nullptr; }
 void SetOtherCapture(bool, unsigned) {}
+void SetListedElsewhere(const int *, int) {}
 } // namespace core::ui
 
 namespace core::capture {

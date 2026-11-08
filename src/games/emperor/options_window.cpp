@@ -22,7 +22,7 @@
 #include <string>
 #include <vector>
 
-// Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e): docs/resolution_ui/original_settings.md §12.3, §13.2,
+// Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e): docs/archive/resolution_ui_original_settings.md §12.3, §13.2,
 // §13.5; calling conventions: docs/symbols.md.
 namespace emperor::options_window {
 namespace {
@@ -351,11 +351,20 @@ void ResolutionChoices(Setting &s)
     }
 }
 
+// A dry run of BuildPages / BuildKeyPages (at Attach): Add and Toggle only collect the settings the windows list, for
+// the debug panel (core::ui::SetListedElsewhere); nothing of the game is read.
+bool g_dry = false;
+std::vector<int> g_listedRows;
+
 // A row for section.key, appended to rows; nothing when the setting does not exist.
 void Add(std::vector<co::Row> &rows, const char *section, const char *key)
 {
     int i = cs::Find(section, key);
     if (i < 0) {
+        return;
+    }
+    if (g_dry) {
+        g_listedRows.push_back(i);
         return;
     }
     const cs::Item &it = cs::Get(i);
@@ -380,12 +389,17 @@ void Add(std::vector<co::Row> &rows, const char *section, const char *key)
         r.hasAuto = it.autoWord != nullptr;
         r.unit = it.unit ? it.unit : "";
         break;
-    case cs::Type::Choice:
+    case cs::Type::Choice: {
         r.kind = co::Kind::Choice;
+        char now[cs::kValueSize];
+        cs::Value(i, now, sizeof(now));
         for (int k = 0; k < it.choiceCount; ++k) {
-            s.spell.push_back(it.choices[k]);
+            if (cs::ChoiceListed(it, k) || std::strcmp(now, it.choices[k]) == 0) { // the current one even if not offered
+                s.spell.push_back(it.choices[k]);
+            }
         }
         break;
+    }
     case cs::Type::Resolution:
         r.kind = co::Kind::Choice;
         ResolutionChoices(s);
@@ -393,8 +407,11 @@ void Add(std::vector<co::Row> &rows, const char *section, const char *key)
     case cs::Type::Hotkey: r.kind = co::Kind::Key; break; // the Hotkeys window
     }
     for (const auto &v : s.spell) {
-        r.choices.push_back(Shown(v));
-        r.choiceHelp.push_back(text ? ot::ChoiceHelp(*text, v.c_str()) : "");
+        const ot::ChoiceText *c = text ? ot::Choice(*text, v.c_str()) : nullptr;
+        const bool own = c && std::strcmp(c->spell, "*") != 0; // a name of its own only for its own entry
+        r.choices.push_back(own && c->shown ? std::string(c->shown) : Shown(v));
+        r.choiceHelp.push_back(c ? c->help : "");
+        r.choiceRestart.push_back(own && c->restart);
     }
     r.defaultValue = Parse(s, it.defaultValue);
     if (it.shownIfKey) {
@@ -410,6 +427,10 @@ void Add(std::vector<co::Row> &rows, const char *section, const char *key)
 void Toggle(std::vector<co::Row> &rows, const char *section, const char *key)
 {
     int i = cs::Find(section, key);
+    if (g_dry && i >= 0) {
+        g_listedRows.push_back(i);
+        return;
+    }
     if (i < 0 || rows.empty() || rows.back().kind != co::Kind::Slider || cs::Get(i).type != cs::Type::Bool) {
         return;
     }
@@ -468,15 +489,14 @@ std::vector<co::Page> BuildPages()
     co::Page general{"General", {}};
     {
         co::Category c{"General", {}};
-        Add(c.rows, "display", "intro_movie");
+        Add(c.rows, "ui", "intro_movie");
         Add(c.rows, "ui", "info_window");
         Add(c.rows, "ui", "minimap_picture_scale");
-        Add(c.rows, "timing", "high_resolution_timer");
         general.categories.push_back(std::move(c));
     }
     {
         co::Category c{"Speed", {}};
-        oo::SpeedRows(c.rows);
+        if (!g_dry) oo::SpeedRows(c.rows);
         Add(c.rows, "gameplay", "keep_speed");
         Add(c.rows, "gameplay", "full_speed");
         Header(c.rows, "Scrolling");
@@ -486,14 +506,14 @@ std::vector<co::Page> BuildPages()
     }
     {
         co::Category c{"Autosave", {}};
-        oo::AutosaveRows(c.rows);
+        if (!g_dry) oo::AutosaveRows(c.rows);
         if (!c.rows.empty()) {
             general.categories.push_back(std::move(c));
         }
     }
     {
         co::Category c{ot::kCategoryMessages, {}};
-        oo::MessageRows(c.rows);
+        if (!g_dry) oo::MessageRows(c.rows);
         if (!c.rows.empty()) {
             general.categories.push_back(std::move(c));
         }
@@ -501,47 +521,47 @@ std::vector<co::Page> BuildPages()
     co::Page display{"Video", {}};
     {
         co::Category c{"Screen", {}};
-        Add(c.rows, "display", "window");
-        Add(c.rows, "display", "resolution");
-        Add(c.rows, "display", "scale");
+        Add(c.rows, "video", "window");
+        Add(c.rows, "video", "resolution");
+        Add(c.rows, "video", "scale");
         ShownIf(c.rows, "resolution", "scaled");
-        Add(c.rows, "display", "scaling");
-        Add(c.rows, "display", "present");
-        Add(c.rows, "display", "renderer");
-        Add(c.rows, "display", "window_lock_cursor");
+        Add(c.rows, "video", "scaling");
+        Add(c.rows, "video", "present");
+        Add(c.rows, "video", "renderer");
+        Add(c.rows, "video", "window_lock_cursor");
         display.categories.push_back(std::move(c));
     }
     {
         co::Category c{"City", {}};
-        Add(c.rows, "display", "city_zoom");
-        Add(c.rows, "display", "city_zoom_shrink");
+        Add(c.rows, "video", "city_zoom");
+        Add(c.rows, "video", "city_zoom_shrink");
         display.categories.push_back(std::move(c));
     }
     {
         co::Category c{"Menus and loading", {}};
-        Add(c.rows, "display", "loading_screen");
-        Add(c.rows, "display", "menu_screens");
+        Add(c.rows, "video", "loading_screen");
+        Add(c.rows, "video", "menu_screens");
         Header(c.rows, "City background");
-        Add(c.rows, "display", "background_blur");
-        Add(c.rows, "display", "background_brightness");
+        Add(c.rows, "video", "background_blur");
+        Add(c.rows, "video", "background_brightness");
         display.categories.push_back(std::move(c));
     }
     {
-        co::Category c{"China map", {}};
-        Add(c.rows, "display", "china_map");
-        Add(c.rows, "display", "china_map_scale");
-        Add(c.rows, "display", "china_map_background");
+        co::Category c{"Empire map", {}};
+        Add(c.rows, "video", "empire_map");
+        Add(c.rows, "video", "empire_map_scale");
+        Add(c.rows, "video", "empire_map_background");
         display.categories.push_back(std::move(c));
     }
     co::Page sound{"Audio", {{"", {}}}};
-    Add(sound.categories[0].rows, "sound", "master_volume"); // ours, over the game's four
-    Toggle(sound.categories[0].rows, "sound", "master_sound");
-    oo::SoundRows(sound.categories[0].rows);
+    Add(sound.categories[0].rows, "audio", "master_volume"); // ours, over the game's four
+    Toggle(sound.categories[0].rows, "audio", "master_sound");
+    if (!g_dry) oo::SoundRows(sound.categories[0].rows);
     if (!sound.categories[0].rows.empty()) {
         Header(sound.categories[0].rows, "More");
     }
-    Add(sound.categories[0].rows, "sound", "ambient_sounds");
-    Add(sound.categories[0].rows, "sound", "background_sound");
+    Add(sound.categories[0].rows, "audio", "ambient_sounds");
+    Add(sound.categories[0].rows, "audio", "background_sound");
     std::vector<co::Page> pages{std::move(general), std::move(display), std::move(sound)};
     for (auto &p : pages) {
         Resolve(p);
@@ -876,6 +896,30 @@ bool Attach()
     core::display::SetModalInput(&kInput);
     g_attached = true;
     core_log("options window: available (the game's Options menu and the main menu open it)");
+
+    // The debug panel leaves out what these windows list, except the settings to change there when something goes
+    // wrong (the screen; the panel's own key) (2026-11-08).
+    static const char *const kEmergency[][2] = {{"video", "resolution"}, {"video", "scale"},   {"video", "window"},
+                                                 {"video", "renderer"},   {"video", "scaling"}, {"ui", "panel_key"}};
+    g_dry = true;
+    g_listedRows.clear();
+    BuildPages();
+    BuildKeyPages();
+    g_dry = false;
+    g_settings.clear();
+    std::vector<int> hide;
+    for (int i : g_listedRows) {
+        bool keep = false;
+        for (const auto &e : kEmergency) {
+            keep = keep || i == cs::Find(e[0], e[1]);
+        }
+        if (!keep) {
+            hide.push_back(i);
+        }
+    }
+    core::ui::SetListedElsewhere(hide.data(), static_cast<int>(hide.size()));
+    core_log("options window: the debug panel leaves out %d setting(s) listed here (\"Show all settings\" shows them)",
+             static_cast<int>(hide.size()));
     return true;
 }
 

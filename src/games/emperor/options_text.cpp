@@ -8,6 +8,9 @@ namespace {
 #define CHOICES(name, ...) const ChoiceText name[] = {__VA_ARGS__}
 #define N(a) static_cast<int>(sizeof(a) / sizeof((a)[0]))
 
+// Choice names that fit the options window's value box (144 px in the gold font, measured with
+// tools/mockups/textwidth.py: "Scaled with black bars" is 151, so "Scaled + black bars", 130).
+
 CHOICES(kIntro,
         {"play", "The game's intro movie plays when the game starts."},
         {"skip", "The game starts at the main menu."});
@@ -15,20 +18,20 @@ CHOICES(kIntro,
 CHOICES(kInfoWindow,
         {"original", "Above or below the building, moved with the middle of the city area, as the game does it."},
         {"centered", "In the middle of the city area."},
-        {"cursor", "Beside the cursor, never past the edges of the screen."});
+        {"cursor", "Beside the cursor, never past the edges of the screen.", "Beside the cursor"});
 
 CHOICES(kFullSpeed,
-        {"capped", "Always the same pace, a step above 90%: 90% runs 45 steps a second, 100% runs 62."},
+        {"capped", "Always the same pace, a step above 90%: 90% runs 45 steps a second, 100% runs 62.", "Even"},
         {"original", "The game's own 100%: as fast as your computer can draw. In a small city that is many times "
                      "faster than 90%; in a large city on a big screen only a little faster."});
 
 CHOICES(kWindow,
-        {"fullscreen", "The game covers its monitor, without a border."},
-        {"windowed", "A window you can move and size. The game is laid out again for its size when you let go."});
+        {"fullscreen", "The game covers its monitor, without a border.", "Full screen"},
+        {"windowed", "A window you can move and size. The game is laid out again for its size when you let go.",
+         "Window"});
 
 CHOICES(kResolution,
-        {"scaled", "The screen's own resolution divided by the display scale. At 100% every pixel of the game is one "
-                   "pixel of the screen: the sharpest picture."},
+        {"scaled", "The screen's own resolution divided by the display scale."},
         {"1024x768", "The game's own size, enlarged to the screen."},
         {"*", "The game is drawn at this size and enlarged to the screen. In a window, this is the window's size."});
 
@@ -39,14 +42,15 @@ CHOICES(kScaling,
 
 CHOICES(kPresent,
         {"display", "A frame at every refresh of the screen."},
-        {"cap60", "At most 60 frames a second."},
-        {"original", "The game's own, about 20 frames a second. Takes effect after a restart, and this window is not "
-                     "available then: the game's own options are used."});
+        {"cap60", "At most 60 frames a second.", "60 per second"},
+        {"original", "The game's own, about 20 frames a second. This window is not available then: the game's own "
+                     "options are used.",
+         nullptr, true});
 
 CHOICES(kRenderer,
         {"auto", "Direct3D 11, or Direct3D 9 if Direct3D 11 cannot start."},
-        {"direct3d", "Direct3D 9, or Direct3D 11 if Direct3D 9 cannot start."},
-        {"direct3d11", "Direct3D 11."});
+        {"direct3d", "", "Direct3D 9"},
+        {"direct3d11", "", "Direct3D 11"});
 
 CHOICES(kShrink,
         {"average", "Each pixel on the screen is the average of the city's pixels it covers: smooth."},
@@ -56,31 +60,32 @@ CHOICES(kShrink,
 CHOICES(kLoading,
         {"native", "At their own size, centered, black around them."},
         {"scaled", "As large as fits, in a fret border on parchment."},
-        {"scaled_black", "The whole 1024 x 768 picture enlarged to fit, with black bars."},
+        {"scaled_black", "The whole 1024 x 768 picture enlarged to fit, with black bars.", "Scaled + black bars"},
         {"original", "The whole 1024 x 768 picture at its own size, centered, black around it, as the game shows it on "
                      "a wide screen."});
 
 CHOICES(kMenus,
         {"native_city", "At their own size in a fret border, with your city blurred around them. A picture of your "
-                        "own named menu_background.png or .bmp in the game folder is used instead of the city."},
+                        "own named menu_background.png or .bmp in the game folder is used instead of the city.",
+         "Native + city"},
         {"native", "At their own size on parchment."},
         {"scaled", "As large as fits, on parchment."},
-        {"scaled_black", "The whole 1024 x 768 picture enlarged to fit, with black bars."},
+        {"scaled_black", "The whole 1024 x 768 picture enlarged to fit, with black bars.", "Scaled + black bars"},
         {"original", "The whole 1024 x 768 picture at its own size, centered, black around it, as the game shows it on "
                      "a wide screen."});
 
-CHOICES(kChinaMap,
+CHOICES(kEmpireMap,
         {"scaled", "Larger than its own size (see the scale below), in a fret border, over the background below."},
-        {"native", "At its own size, centered, over the background below."},
-        {"original", "As the game draws it: in the top left corner, the rest of the screen left as it was."});
+        {"native", "At its own size, centered, over the background below."});
 
-CHOICES(kChinaMapBackground,
-        {"map", "The same map, blurred and darkened."},
+CHOICES(kEmpireMapBackground,
+        {"map", "The same map, blurred and darkened.", "Blurred map"},
         {"city", "Your city as it was when you opened the map, standing still, as if the map were a window over it."});
 
 CHOICES(kBackgroundSound,
         {"pause", "The music and the sounds wait, and go on where they were when you come back."},
-        {"original", "The game stops them all, and another song starts when you come back."});
+        {"original", "As the game itself does it: it stops them all, and another song starts when you come back.",
+         "Stop"});
 
 CHOICES(kAmbient,
         {"original", "Once in about 300 passes of the game's main loop, as the game does it: so it depends on the "
@@ -96,16 +101,17 @@ CHOICES(kMessageModes,
         {"condensed", "A shorter message, in fewer and plainer words."},
         {"off", "No message of this kind."});
 
+CHOICES(kMinimapScale, {"1", "", "1x"}, {"2", "", "2x"}, {"4", "", "4x"});
+
 const Text kTexts[] = {
-    {"display", "intro_movie", "Whether the game plays its intro movie when it starts. If PlayIntroMovie=no is set in "
-                               "the game's Emperor.ini, the movie is skipped either way.",
+    {"ui", "intro_movie", "Whether the game plays its intro movie when it starts. If PlayIntroMovie=no is set in "
+                          "the game's Emperor.ini, the movie is skipped either way.",
      kIntro, N(kIntro), true},
     {"ui", "info_window", "Where the window opens when you right-click a building. Applies to the next window you open.",
      kInfoWindow, N(kInfoWindow)},
-    {"ui", "minimap_picture_scale", "The size of the minimap picture, in times the minimap in the game.", nullptr, 0},
-    {"timing", "high_resolution_timer", "The game's timers tick every millisecond on every computer (otherwise every "
-                                        "15.6 ms, unless another program asks for more). Keeps the game's pace even.",
-     nullptr, 0},
+    {"ui", "minimap_picture_scale", "How large the minimap screenshot saved with its key is (see Hotkeys), in times "
+                                    "the minimap in the game. It does not change the minimap beside the city.",
+     kMinimapScale, N(kMinimapScale), false, "Minimap screenshot: size"},
     {"gameplay", "keep_speed", "When a frame takes long (a large city, a high resolution), the game's steps it missed "
                                "are made up in the next frame, so the game runs at its set speed. Off: the game's own "
                                "pace, slower when frames are slow.",
@@ -117,65 +123,66 @@ const Text kTexts[] = {
     {"gameplay", "smooth_scroll", "The city scrolls pixel by pixel, at the game's own average speed, easing in and "
                                   "out. Off: the game's steps of whole tiles.",
      nullptr, 0},
-    {"display", "window", "Full screen or a window. F5 switches between them.", kWindow, N(kWindow)},
-    {"display", "resolution", "The size the game is drawn at. Menus and other full-screen pictures stay at "
+    {"video", "window", "Full screen or a window. F5 switches between them.", kWindow, N(kWindow)},
+    {"video", "resolution", "The size the game is drawn at. Menus and other full-screen pictures stay at "
                               "1024 x 768.",
      kResolution, N(kResolution)},
-    {"display", "scale", "How large everything is. 100%: the sharpest picture, everything at its own size (small on a "
-                         "large, high-resolution screen). Larger is bigger but softer. Auto: 1080 pixels high on a "
-                         "taller screen. Never less than 1024 x 768.",
+    {"video", "scale", "How large everything is. Larger is bigger but softer.\nAuto: 1080 pixels high on a taller "
+                       "screen. Never less than 1024 x 768.",
      nullptr, 0},
-    {"display", "scaling", "How the picture is enlarged when the game's pixels are not the screen's: a display scale "
+    {"video", "scaling", "How the picture is enlarged when the game's pixels are not the screen's: a display scale "
                            "above 100%, 1024 x 768, the menus, a window. In full screen at 100% all three look the "
                            "same.",
      kScaling, N(kScaling)},
-    {"display", "present", "How often frames reach the screen. The game's own timing is the same with all three.",
+    {"video", "present", "How often frames reach the screen. The game's own timing is the same with all three.",
      kPresent, N(kPresent)},
-    {"display", "window_lock_cursor", "In a window: the cursor cannot leave the window while you play in it. Switch "
+    {"video", "window_lock_cursor", "In a window: the cursor cannot leave the window while you play in it. Switch "
                                       "this off, or press F5, to move or size the window.",
      nullptr, 0},
-    {"display", "renderer", "What puts the picture on the screen.", kRenderer, N(kRenderer)},
-    {"display", "city_zoom", "The city's zoom when the game starts. Above 100 you see more of the city, below 100 "
+    {"video", "renderer", "What puts the picture on the screen.", kRenderer, N(kRenderer)},
+    {"video", "city_zoom", "The city's zoom when the game starts. Above 100 you see more of the city, below 100 "
                              "it is larger. While playing, zoom with the mouse wheel over the city; the middle mouse "
                              "button goes back to 100.",
      nullptr, 0},
-    {"display", "city_zoom_shrink", "Above 100% zoom: how the city is made smaller on the screen.", kShrink,
+    {"video", "city_zoom_shrink", "Above 100% zoom: how the city is made smaller on the screen.", kShrink,
      N(kShrink)},
-    {"display", "loading_screen", "The pictures shown while a game loads.", kLoading, N(kLoading)},
-    {"display", "menu_screens", "The main menu, the choice of emperor and campaign, briefings, high scores, victory "
+    {"video", "loading_screen", "The pictures shown while a game loads.", kLoading, N(kLoading)},
+    {"video", "menu_screens", "The main menu, the choice of emperor and campaign, briefings, high scores, victory "
                                 "and defeat.",
      kMenus, N(kMenus)},
-    {"display", "background_blur", "How much the picture of your city behind the menus is blurred. 0: not at all.",
+    {"video", "background_blur", "How much the picture of your city behind the menus is blurred. 0: not at all.",
      nullptr, 0},
-    {"display", "background_brightness", "How bright the picture of your city behind the menus is. 100 with no "
+    {"video", "background_brightness", "How bright the picture of your city behind the menus is. 100 with no "
                                          "blur: the city as it is.",
      nullptr, 0},
-    {"display", "china_map", "How the map of China is shown on a screen larger than the map.", kChinaMap,
-     N(kChinaMap)},
-    {"display", "china_map_scale", "How large the map is, in percent of its own size. Auto: as large as fits.",
+    {"video", "empire_map", "How the empire map is shown on a screen larger than the map.", kEmpireMap,
+     N(kEmpireMap)},
+    {"video", "empire_map_scale", "How large the map is, in percent of its own size. Auto: as large as fits.",
      nullptr, 0},
-    {"display", "china_map_background", "What is around the map.", kChinaMapBackground, N(kChinaMapBackground)},
-    {"sound", "background_sound", "What happens to the music and the sounds when you switch to another program.",
+    {"video", "empire_map_background", "What is around the map.", kEmpireMapBackground, N(kEmpireMapBackground)},
+    {"audio", "background_sound", "What happens to the music and the sounds when you switch to another program.",
      kBackgroundSound, N(kBackgroundSound)},
-    {"sound", "ambient_sounds", "How often the city plays a random sound of its life: birds, water, workshops.",
+    {"audio", "ambient_sounds", "How often the city plays a random sound of its life: birds, water, workshops.",
      kAmbient, N(kAmbient), false, "Ambient sounds: how often"},
 
-    {"sound", "master_volume", "The volume of all the music and sounds together. The four volumes below are set "
+    {"audio", "master_volume", "The volume of all the music and sounds together. The four volumes below are set "
                                "within it. The checkbox switches them all off and on.",
      nullptr, 0},
 
     // The Hotkeys window.
-    {"ui", "panel_key", "Opens and closes Yongle's settings panel.", nullptr, 0, false, "Settings panel"},
+    {"ui", "panel_key", "Opens and closes Yongle's panel for testing and finding problems. Most settings are in "
+                        "Options.",
+     nullptr, 0, false, "Debug panel"},
     {"debug", "screenshot_key", "Saves the game's picture as a PNG file in the shots folder in Yongle's folder.",
-     nullptr, 0, false, "Screenshot"},
+     nullptr, 0, false, "Save screenshot"},
     {"debug", "report_key", "When something odd is on the screen: marks the log and saves the picture shown, for a "
                             "problem report.",
-     nullptr, 0, false, "Problem report"},
+     nullptr, 0, false, "Save report screenshot"},
     {"ui", "city_picture_key", "Saves the whole city as one picture in the shots folder; the game stops for a moment "
                                "while it is drawn.",
-     nullptr, 0, false, "City picture"},
+     nullptr, 0, false, "Save full city screenshot"},
     {"ui", "minimap_picture_key", "Saves the minimap of the whole map as a picture in the shots folder.", nullptr, 0,
-     false, "Minimap picture"},
+     false, "Save minimap screenshot"},
 
     // The game's own options (kept in Emperor.inf, as the game's Options menu sets them).
     {"game", "game_speed", "How fast the game runs.", nullptr, 0, false, "Game speed"},
@@ -228,15 +235,15 @@ const Text *Find(const char *section, const char *key)
     return nullptr;
 }
 
-const char *ChoiceHelp(const Text &t, const char *spell)
+const ChoiceText *Choice(const Text &t, const char *spell)
 {
-    const char *other = "";
+    const ChoiceText *other = nullptr;
     for (int k = 0; k < t.choiceCount; ++k) {
         if (std::strcmp(t.choices[k].spell, spell) == 0) {
-            return t.choices[k].help;
+            return &t.choices[k];
         }
         if (std::strcmp(t.choices[k].spell, "*") == 0) {
-            other = t.choices[k].help;
+            other = &t.choices[k];
         }
     }
     return other;

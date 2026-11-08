@@ -88,7 +88,7 @@ int main()
     wcscpy(g_path + n, L"emperor_engine.ini");
 
     const std::string original = "; my settings\r\n"
-                                 "[display]\r\n"
+                                 "[video]\r\n"
                                  "present = display\r\n"
                                  "scale = 125   ; I like this one\r\n"
                                  "resolution = scaled\r\n"
@@ -107,7 +107,7 @@ int main()
           "loaded: typed values (present, scale, resolution)");
     Check(cfg->panel_key_vk == 0x2D && cfg->panel_scale_percent == 0 && cfg->high_resolution_timer,
           "defaults for keys not in the file (panel_key Insert, panel_scale auto)");
-    Check(cfg->renderer == 0 && Value("display", "renderer") == "auto", "renderer: auto by default (O1)");
+    Check(cfg->renderer == 0 && Value("video", "renderer") == "auto", "renderer: auto by default (O1)");
 
     int smooth = cs::Find("gameplay", "smooth_scroll");
     cs::OnChange(smooth, &OnSmooth);
@@ -121,13 +121,13 @@ int main()
     Check(GetFileAttributesW((std::wstring(g_path) + L".tmp").c_str()) == INVALID_FILE_ATTRIBUTES,
           "no temporary file left behind");
 
-    cs::Request(cs::Find("display", "scale"), "133", true); // not a step of 5
-    cs::Request(cs::Find("display", "present"), "fast", true);
+    cs::Request(cs::Find("video", "scale"), "133", true); // not a step of 5
+    cs::Request(cs::Find("video", "present"), "fast", true);
     cs::RunPending();
-    Check(Value("display", "scale") == "125" && Value("display", "present") == "display" && ReadAll() == want,
+    Check(Value("video", "scale") == "125" && Value("video", "present") == "display" && ReadAll() == want,
           "invalid values dropped, file unchanged");
 
-    cs::Request(cs::Find("display", "scale"), "150", true);
+    cs::Request(cs::Find("video", "scale"), "150", true);
     cs::RunPending();
     want.replace(want.find("scale = 125   ;"), 15, "scale = 150   ;");
     Check(ReadAll() == want && cfg->scale_percent == 150, "inline comment after a changed value kept");
@@ -138,10 +138,10 @@ int main()
     want += "\r\n[ui]\r\npanel_scale = 120\r\n";
     Check(ReadAll() == want && cfg->panel_scale_percent == 120, "key of a missing section: section added at the end");
 
-    int backend = cs::Find("display", "backend");
+    int backend = cs::Find("video", "backend");
     cs::Request(backend, "system", true);
     cs::RunPending();
-    Check(cs::RestartPending(backend) && cfg->backend == CORE_BACKEND_EMULATED && Value("display", "backend") == "system",
+    Check(cs::RestartPending(backend) && cfg->backend == CORE_BACKEND_EMULATED && Value("video", "backend") == "system",
           "Restart item: saved and pending; the running value stays in effect");
     cs::Request(backend, "emulated", true);
     cs::RunPending();
@@ -158,9 +158,9 @@ int main()
     // defaults saved the unconfirmed resolution together with present.)
     {
         std::string before = ReadAll();
-        int res = cs::Find("display", "resolution");
+        int res = cs::Find("video", "resolution");
         cs::Request(res, "1920x1080", false);
-        cs::Request(cs::Find("display", "present"), "cap60", true);
+        cs::Request(cs::Find("video", "present"), "cap60", true);
         cs::RunPending();
         std::string mid = ReadAll();
         Check(mid.find("resolution = scaled") != std::string::npos && mid.find("present = cap60") != std::string::npos &&
@@ -174,7 +174,7 @@ int main()
         cs::RunPending();
         Check(ReadAll().find("resolution = 2560x1440") != std::string::npos, "keep: the confirmed value is saved");
         cs::Request(res, "scaled", true);
-        cs::Request(cs::Find("display", "present"), "display", true);
+        cs::Request(cs::Find("video", "present"), "display", true);
         cs::RunPending();
         Check(ReadAll() == before, "back to the earlier values: same file as before");
     }
@@ -245,6 +245,72 @@ int main()
         Check(Value("test", "look") == "scaled_black" &&
                   GetFileAttributesW(bakPath.c_str()) == INVALID_FILE_ATTRIBUTES,
               "renamed value: nothing to do the next time");
+    }
+
+    // Moved settings (2026-11-08: [display] -> [video], [sound] -> [audio], china_map -> empire_map): the old lines'
+    // values taken for the new settings (with the new setting's renamed values), the old lines replaced in the file; a
+    // new line already in the file wins over an old one; old unknown keys stay where they were.
+    {
+        static const char *const modes[] = {"scaled", "native"};
+        cs::Register(cs::Item{"newsec", "width", "Width", "", cs::Type::Int, "10", cs::Effect::Live, false, false, 0, 100,
+                              1, nullptr, nullptr, nullptr, 0});
+        cs::Register(cs::Item{"newsec", "height", "Height", "", cs::Type::Int, "10", cs::Effect::Live, false, false, 0,
+                              100, 1, nullptr, nullptr, nullptr, 0});
+        cs::Register(cs::Item{"newsec", "map", "Map", "", cs::Type::Choice, "native", cs::Effect::Live, false, false, 0,
+                              0, 0, nullptr, modes, nullptr, 2});
+        cs::Register(cs::Item{"other", "intro", "Intro", "", cs::Type::Bool, "on", cs::Effect::Live, false, false, 0, 0,
+                              0, nullptr, nullptr, nullptr, 0});
+        cs::MoveSection("oldsec", "newsec");
+        cs::MoveKey("oldsec", "old_map", "newsec", "map");
+        cs::MoveKey("oldsec", "intro", "other", "intro");
+        cs::RenameValue("newsec", "map", "original", "native");
+        const std::string old = "[oldsec]\r\n"
+                                "width = 42\r\n"
+                                "height = 7\r\n"
+                                "old_map = original\r\n"
+                                "intro = off\r\n"
+                                "mine = 1\r\n"
+                                "\r\n"
+                                "[newsec]\r\n"
+                                "height = 9\r\n";
+        WriteAll(old);
+        cs::Load(g_path);
+        const std::string got = ReadAll();
+        Check(Value("newsec", "width") == "42" && Value("newsec", "height") == "9" && Value("newsec", "map") == "native" &&
+                  Value("other", "intro") == "off",
+              "moved: old values taken, a new line in the file wins, renamed value");
+        Check(got.find("[oldsec]\r\nmine = 1\r\n") != std::string::npos && got.find("width = 42") != std::string::npos &&
+                  got.find("map = native") != std::string::npos && got.find("[other]\r\nintro = off") != std::string::npos &&
+                  got.find("old_map") == std::string::npos && got.find("height = 7") == std::string::npos &&
+                  got.find("height = 9") != std::string::npos,
+              "moved: the file has the new lines, the old ones gone, unknown keys kept");
+        if (got.find("old_map") != std::string::npos || got.find("width = 42") == std::string::npos) {
+            std::printf("  file:\n%s\n", got.c_str());
+        }
+        const std::wstring bakPath = std::wstring(g_path) + L".bak";
+        DeleteFileW(bakPath.c_str());
+        cs::Load(g_path);
+        Check(ReadAll() == got && GetFileAttributesW(bakPath.c_str()) == INVALID_FILE_ATTRIBUTES &&
+                  Value("newsec", "width") == "42",
+              "moved: nothing to do the next time");
+
+        // A value renamed only when its line is moved (present = original from an older file -> display): the same
+        // value written in the new section itself stays.
+        static const char *const looks2[] = {"own", "shown"};
+        cs::Register(cs::Item{"newsec", "look2", "Look 2", "", cs::Type::Choice, "shown", cs::Effect::Live, false, false,
+                              0, 0, 0, nullptr, looks2, nullptr, 2, nullptr, nullptr, nullptr, nullptr, 1u << 0});
+        cs::RenameMovedValue("newsec", "look2", "own", "shown");
+        WriteAll("[oldsec]\r\nlook2 = own\r\n");
+        cs::Load(g_path);
+        Check(Value("newsec", "look2") == "shown" && ReadAll().find("look2 = shown") != std::string::npos,
+              "moved only: an older file's value renamed on the move");
+        WriteAll("[newsec]\r\nlook2 = own\r\n");
+        cs::Load(g_path);
+        Check(Value("newsec", "look2") == "own" && ReadAll() == "[newsec]\r\nlook2 = own\r\n" &&
+                  !cs::ChoiceListed(cs::Get(cs::Find("newsec", "look2")), 0) &&
+                  cs::ChoiceListed(cs::Get(cs::Find("newsec", "look2")), 1),
+              "moved only: set in the new section itself, it stays (a value not offered)");
+        DeleteFileW(bakPath.c_str());
     }
 
     // An older file and this version's template: rewritten once with the template's descriptions, the values kept
