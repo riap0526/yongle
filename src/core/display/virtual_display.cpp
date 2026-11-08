@@ -60,6 +60,8 @@ WindowFromPoint_fn o_WindowFromPoint = WindowFromPoint;
 SetWindowPos_fn o_SetWindowPos = SetWindowPos;
 MoveWindow_fn o_MoveWindow = MoveWindow;
 KeyState_fn o_GetAsyncKeyState = GetAsyncKeyState;
+core::display::KeyTranslator g_keyTranslator = nullptr;     // a game layer's key bindings (SetKeyTranslator)
+core::display::KeyStateFilter g_keyStateFilter = nullptr; // ... and its answers to the game's key polls
 KeyState_fn o_GetKeyState = GetKeyState;
 SetWindowLong_fn o_SetWindowLongA = SetWindowLongA;
 SetCursor_fn o_SetCursor = SetCursor;
@@ -271,6 +273,9 @@ SHORT WINAPI GetAsyncKeyState_detour(int vk)
 {
     if ((core::ui::IsOpen() || ModalActive()) && Acting(__builtin_return_address(0), nullptr)) {
         return 0;
+    }
+    if (g_keyStateFilter && Acting(__builtin_return_address(0), nullptr)) {
+        return g_keyStateFilter(vk, o_GetAsyncKeyState(vk)); // the game's poll, as the bindings answer it
     }
     return o_GetAsyncKeyState(vk);
 }
@@ -1047,6 +1052,10 @@ LRESULT CALLBACK SubclassProc(HWND hwnd, UINT m, WPARAM w, LPARAM l)
     if (hwnd == g_hwnd && ModalMessage(hwnd, m, w, l)) {
         return 0;
     }
+    if ((m == WM_KEYDOWN || m == WM_SYSKEYDOWN || m == WM_CHAR || m == WM_SYSCHAR) && hwnd == g_hwnd && g_keyTranslator &&
+        g_keyTranslator(m, w, l)) {
+        return 0; // the bindings first (F6 is theirs; with them off, the key filter below still keeps F6 from the game)
+    }
     if ((m == WM_KEYDOWN || m == WM_SYSKEYDOWN) && hwnd == g_hwnd && g_keyFilter && g_keyFilter(m, w, l)) {
         g_filteredSysChar = m == WM_SYSKEYDOWN; // its WM_SYSCHAR would make Windows beep (no menu takes it)
         return 0;
@@ -1347,6 +1356,21 @@ SIZE ClientSize()
 void SetMouseFilter(MouseFilter filter)
 {
     g_mouseFilter = filter;
+}
+
+void SetKeyTranslator(KeyTranslator translator)
+{
+    g_keyTranslator = translator;
+}
+
+void SetKeyStateFilter(KeyStateFilter filter)
+{
+    g_keyStateFilter = filter;
+}
+
+LRESULT SendToGame(UINT message, WPARAM wparam, LPARAM lparam)
+{
+    return g_prevProc && g_hwnd ? CallWindowProcA(g_prevProc, g_hwnd, message, wparam, lparam) : 0;
 }
 
 void SetKeyFilter(KeyFilter filter)

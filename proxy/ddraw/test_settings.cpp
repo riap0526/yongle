@@ -262,6 +262,11 @@ int main()
         cs::Request(panelKey, "Insert", true);
         cs::RunPending();
         Check(Value("ui", "panel_key") == "Insert" && cfg->panel_key2_vk == 0, "back to one key: no alternative");
+        cs::Request(panelKey, "", true);
+        cs::RunPending();
+        Check(Value("ui", "panel_key") == "" && cfg->panel_key_vk == 0, "no key at all: empty");
+        cs::Request(panelKey, "Insert", true);
+        cs::RunPending();
     }
 
     // Moved settings (2026-11-08: [display] -> [video], [sound] -> [audio], china_map -> empire_map): the old lines'

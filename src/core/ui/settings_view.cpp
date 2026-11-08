@@ -27,7 +27,7 @@ namespace cs = core::settings;
 using cs::Effect;
 using cs::Type;
 
-constexpr int kMax = 64;
+constexpr int kMax = 256; // as core/settings kMaxItems
 constexpr DWORD kConfirmMs = 15000;
 constexpr DWORD kGraceMs = 1500; // frames after the answer, so a revert is drawn too
 

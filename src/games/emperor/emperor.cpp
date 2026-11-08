@@ -48,6 +48,7 @@
 #include "games/emperor/display_options.h"
 #include "games/emperor/fullscreen.h"
 #include "games/emperor/master_volume.h"
+#include "games/emperor/keys.h"
 #include "games/emperor/notice.h"
 #include "games/emperor/options_entry.h"
 #include "games/emperor/options_original.h"
@@ -255,6 +256,7 @@ int __cdecl LoopStep_detour()
     if (core::ui::IsOpen() || options) {
         if (!g_paused) {
             g_paused = true;
+            emperor::sound::SetQuiet(true); // no new ambient sound meanwhile, as under the game's own dialogs
             LogRates(options ? " (options window opened: game paused)" : " (panel opened: game paused)");
         }
         // While the panel asks whether to keep a new resolution, or while our options window is open (it is drawn
@@ -277,6 +279,7 @@ int __cdecl LoopStep_detour()
     }
     if (g_paused) {
         g_paused = false;
+        emperor::sound::SetQuiet(false);
         core_log("emperor: panel or options window closed: game resumed");
         g_since = GetTickCount();
         g_loops = g_ticks = 0;
@@ -633,6 +636,7 @@ extern "C" void emperor_register_settings(void)
     emperor::intro::RegisterSettings();
     emperor::zoom::RegisterSettings();
     emperor::city_picture::RegisterSettings();
+    emperor::keys::RegisterSettings(); // 0.2.0 item 7: [keys], one setting per action
     // The settings file this version ships: an older file gets its descriptions (CMake embeds the file).
     core::settings::SetTemplate(emperor::kIniTemplate);
 }
@@ -703,6 +707,7 @@ extern "C" void emperor_attach(void)
     emperor::options_original::Attach(); // the game's own options; a new player's starting speeds
     emperor::master_volume::Attach();    // [sound] master_volume
     emperor::options_entry::Attach();    // after the window and options_original: the menus open the window
+    emperor::keys::Attach();             // 0.2.0 item 7: the key bindings (F6 opens the options window)
     emperor::intro::Attach(); // 0.2.0: [display] intro_movie (Emperor.ini is not changed)
     // Settings this layer applies when they change in our panel (core/settings/settings.h).
     if (scroll) {

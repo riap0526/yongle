@@ -17,7 +17,7 @@ namespace core::settings {
 
 namespace {
 
-constexpr int kMaxItems = 48;
+constexpr int kMaxItems = 256; // 48 until 2026-11-08: the 49th and 50th settings were left out without a word
 constexpr DWORD kMaxFileSize = 64 * 1024;
 
 struct Slot {
@@ -306,6 +306,8 @@ const char *MovedValue(const char *section, const char *key, const char *value)
 int Register(const Item &item)
 {
     if (g_count >= kMaxItems) {
+        core_log("settings: no room for [%s] %s (at most %d settings): it is not a setting this time", item.section,
+                 item.key, kMaxItems);
         return -1;
     }
     Slot &s = g_items[g_count];
@@ -390,7 +392,11 @@ bool Normalize(int index, const char *text, char *out, size_t size)
         std::snprintf(out, size, "%dx%d", w, h);
         return true;
     }
-    case Type::Hotkey: { // one key, or two: "Insert, Ctrl+F12" (the second the alternative)
+    case Type::Hotkey: { // one key, or two: "Insert, Ctrl+F12" (the second the alternative); empty: no key
+        if (t.empty()) {
+            Copy(out, size, "");
+            return true;
+        }
         core::ui::Hotkey keys[core::ui::kMaxKeys];
         const int n = core::ui::ParseHotkeyList(v, v + t.size(), keys);
         if (n == 0) return false;

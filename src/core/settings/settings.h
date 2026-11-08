@@ -23,7 +23,7 @@ enum class Type {
     Int,        // min..max in steps of step, or autoWord (stored as that word)
     Choice,     // one of choices[]
     Resolution, // WxH (each side 320..16384) | scaled
-    Hotkey,     // core/ui/hotkey.h syntax: one key, or two separated by a comma (the second the alternative)
+    Hotkey,     // core/ui/hotkey.h syntax: one key, or two separated by a comma (the second the alternative); empty: none
 };
 
 enum class Effect {

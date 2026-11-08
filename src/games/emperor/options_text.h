@@ -46,6 +46,10 @@ extern const char *const kNoticeCitySaved, *const kNoticeMinimapSaved, *const kN
     *const kNoticeOnlyCity, *const kNoticeUnavailable, *const kNoticeNoMemory, *const kNoticeClosePanel;
 extern const char *const kNoticeZoom; // printf format with the zoom in percent
 
+// The Hotkeys window (games/emperor/keys): a section's title (keys::Section).
+const char *KeySection(int section);
+extern const char *const kOverlayName; // printf format: an overlay's name in the Hotkeys window
+
 // The File menu's items for the screenshots (options_entry).
 extern const char *const kMenuCityScreenshot, *const kMenuMinimapScreenshot;
 

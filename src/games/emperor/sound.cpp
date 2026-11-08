@@ -190,8 +190,13 @@ Counts g_counts{};
 bool g_inAmbient = false;
 DWORD g_since = 0;
 
+bool g_quiet = false; // one of our windows is open (SetQuiet)
+
 void __cdecl Ambient_detour()
 {
+    if (g_quiet) {
+        return; // as under the game's own dialogs: no new ambient sound (the one playing ends by itself)
+    }
     ++g_counts.ambientCalls;
     g_inAmbient = true;
     Original(o_Ambient, kAmbient)();
@@ -309,6 +314,11 @@ void RegisterSettings()
         g_probeLog = std::strcmp(v, "on") == 0;
         return true;
     });
+}
+
+void SetQuiet(bool quiet)
+{
+    g_quiet = quiet;
 }
 
 bool Attach()

@@ -4,7 +4,8 @@
 // Syntax: zero or more modifiers (Ctrl or Control, Shift, Alt), each followed by '+', then one key; case does not
 // matter, spaces around '+' are allowed. Keys: F1..F24, Insert (Ins), Delete (Del), Home, End, PageUp (PgUp),
 // PageDown (PgDn), Pause, ScrollLock, Tab, Space, Backquote (`), A..Z, 0..9, Numpad0..Numpad9, NumpadAdd,
-// NumpadSubtract, NumpadMultiply, NumpadDivide, NumpadDecimal. Escape is not allowed (it always closes the panel).
+// NumpadSubtract, NumpadMultiply, NumpadDivide, NumpadDecimal, Up, Down, Left, Right, LeftBracket, RightBracket,
+// Semicolon, Minus, Equals, Comma, Period, Slash, Backslash, Quote. Escape is not allowed (it always closes the panel).
 // A hotkey matches a key press only with exactly its modifiers (Insert does not match Ctrl+Insert).
 // Nothing here knows a game; which keys a game itself uses is documented per game.
 #pragma once
@@ -33,6 +34,10 @@ constexpr int kMaxKeys = 2;
 int ParseHotkeyList(const char *b, const char *e, Hotkey out[kMaxKeys]);
 // The keys in the canonical spelling, ", " between them.
 void FormatHotkeyList(const Hotkey *keys, int count, char *out, size_t size);
+
+// The hotkey for players (the options window): as FormatHotkey, but the punctuation keys as their characters ("[",
+// ";"); the settings file keeps the words (LeftBracket, Semicolon).
+void FormatHotkeyShown(const Hotkey &key, char *out, size_t size);
 
 // True when vk can be a hotkey's key (one of the keys above; not a modifier, not Escape).
 bool IsHotkeyKey(unsigned vk);

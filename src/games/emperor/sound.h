@@ -22,4 +22,9 @@ bool Attach();
 // ambient sounds' N follows the passes per second, and the 10 s counts are written.
 void OnLoop();
 
+// Game thread: one of our windows (options, Hotkeys) is open: no new random ambient sound starts meanwhile, as under the
+// game's own dialogs (the music goes on, the ambient sound playing ends by itself). Their clicks no longer get lost
+// among them.
+void SetQuiet(bool quiet);
+
 } // namespace emperor::sound

@@ -240,8 +240,19 @@ const char *const kNoticeZoom = "Zoom: %d%%";
 const char *const kMenuCityScreenshot = "Save city screenshot";       // 136 in the menu font
 const char *const kMenuMinimapScreenshot = "Save minimap screenshot"; // 165
 
+// The Hotkeys window's sections (games/emperor/keys::Section); the actions' names are their settings' labels.
+const char *const kKeySections[] = {"Arrow keys",   "Global hotkeys", "City hotkeys", "Building menus",
+                                    "Overlays",     "Bookmarks",      "Army groups"};
+const char *const kOverlayName = "%s overlay"; // the overlay's name from the game's texts
+
 const char *const kKeep = "Keep";
 const char *const kRevert = "Revert";
+
+const char *KeySection(int section)
+{
+    return section >= 0 && section < static_cast<int>(sizeof(kKeySections) / sizeof(kKeySections[0])) ? kKeySections[section]
+                                                                                                    : "";
+}
 
 const Text *Find(const char *section, const char *key)
 {

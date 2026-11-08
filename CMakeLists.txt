@@ -109,6 +109,7 @@ add_library(ddraw SHARED
     src/games/emperor/zoom.cpp
     src/games/emperor/city_picture.cpp
     src/games/emperor/notice.cpp
+    src/games/emperor/keys.cpp
     src/games/emperor/ambient_rate.cpp
 )
 # Augustus code (AGPL-3.0): third_party/augustus/README.md. Compiled as part of the DLL.
@@ -311,7 +312,8 @@ add_executable(test_restore proxy/ddraw/test_restore.cpp
     src/games/emperor/sound.cpp src/games/emperor/master_volume.cpp src/games/emperor/ambient_rate.cpp
     src/games/emperor/intro.cpp
     src/games/emperor/zoom.cpp src/core/display/city_zoom.cpp
-    src/games/emperor/city_picture.cpp src/games/emperor/notice.cpp src/core/display/city_strips.cpp
+    src/games/emperor/city_picture.cpp src/games/emperor/notice.cpp src/games/emperor/keys.cpp
+    src/core/display/city_strips.cpp
     src/core/capture/big_picture.cpp
     src/core/capture/png_stream.cpp
     src/core/scroll/smooth_scroll.cpp src/core/diag/guard.cpp src/core/diag/report.cpp src/core/diag/perf.cpp

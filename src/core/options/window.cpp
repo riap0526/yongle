@@ -283,8 +283,8 @@ std::string Window::KeyText(int code) const
         return "";
     }
     char text[32];
-    core::ui::FormatHotkey(core::ui::Hotkey{static_cast<unsigned>(code) & 0xffff, static_cast<unsigned>(code) >> 16},
-                           text, sizeof(text));
+    core::ui::FormatHotkeyShown(core::ui::Hotkey{static_cast<unsigned>(code) & 0xffff, static_cast<unsigned>(code) >> 16},
+                                text, sizeof(text));
     return text;
 }
 

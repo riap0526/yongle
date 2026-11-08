@@ -10,6 +10,7 @@
 #include "core/ui/hotkey.h"
 #include "core/ui/settings_view.h"
 #include "games/emperor/options_original.h"
+#include "games/emperor/keys.h"
 #include "games/emperor/options_text.h"
 #include "games/emperor/site.h"
 
@@ -297,10 +298,7 @@ void KeyWrite(const Setting &s, int first, int second)
             keys[n++] = core::ui::Hotkey{static_cast<unsigned>(code) & 0xffff, static_cast<unsigned>(code) >> 16};
         }
     }
-    if (n == 0) {
-        return; // no key at all: the setting keeps what it had (the settings file needs at least one)
-    }
-    char v[cs::kValueSize];
+    char v[cs::kValueSize] = ""; // no key at all: the action has none
     core::ui::FormatHotkeyList(keys, n, v, sizeof(v));
     const cs::Item &it = cs::Get(s.index);
     core_log("options window: %s.%s = %s", it.section, it.key, v);
@@ -661,12 +659,39 @@ std::vector<co::Page> BuildKeyPages()
     columns.rightLabel = ot::kColumnKey;
     columns.rightLabel2 = ot::kColumnAlternative;
     c.rows.push_back(std::move(columns));
-    Header(c.rows, ot::kSectionGlobal);
-    Add(c.rows, "ui", "panel_key");
-    Add(c.rows, "debug", "screenshot_key");
-    Add(c.rows, "debug", "report_key");
-    Add(c.rows, "ui", "city_picture_key");
-    Add(c.rows, "ui", "minimap_picture_key");
+    // Augustus's sections, with Emperor's actions (docs/key_bindings.md section 3.2).
+    for (int s = 0; s < emperor::keys::kSectionCount; ++s) {
+        Header(c.rows, ot::KeySection(s));
+        if (s == emperor::keys::kGlobal) { // ours first
+            Add(c.rows, "ui", "panel_key");
+            Add(c.rows, "debug", "screenshot_key");
+            Add(c.rows, "debug", "report_key");
+            Add(c.rows, "ui", "city_picture_key");
+            Add(c.rows, "ui", "minimap_picture_key");
+        }
+        for (int a = 0; a < emperor::keys::ActionCount(); ++a) {
+            const emperor::keys::ActionInfo &info = emperor::keys::Action(a);
+            if (info.section != s) {
+                continue;
+            }
+            const size_t before = c.rows.size();
+            Add(c.rows, "keys", info.key);
+            if (c.rows.size() == before || g_dry) {
+                continue;
+            }
+            if (info.textGroup > 0) { // the overlays: the game's own names, "See Water" as "Water overlay" (Augustus's)
+                std::string name = oo::GameText(info.textGroup, info.textIndex);
+                if (name.compare(0, 4, "See ") == 0) {
+                    name.erase(0, 4);
+                }
+                if (!name.empty()) {
+                    char label[96];
+                    std::snprintf(label, sizeof(label), ot::kOverlayName, name.c_str());
+                    c.rows.back().label = label;
+                }
+            }
+        }
+    }
     return {co::Page{ot::kHotkeysTitle, {std::move(c)}}};
 }
 
@@ -762,7 +787,7 @@ void Prepare(co::Window &w, bool keys)
     t.keep = ot::kKeep;
     t.revert = ot::kRevert;
     w.SetTexts(t);
-    w.SetGameKeyNote(core::ui::GetGameKeyNote());
+    // The game's keys are in the Hotkeys window's list now: a key in use says which action has it (no game key note).
     w.SetReservedKey(&ReservedKey);
     w.SetOnKept(&Kept);
     w.SetRestartTip(ot::kRestartTip);
@@ -849,7 +874,12 @@ void HandleNow(void *p)
         auto held = [](int vk) { return (GetKeyState(vk) & 0x8000) != 0; };
         const unsigned mods = (held(VK_CONTROL) ? core::ui::kModCtrl : 0u) |
                               (held(VK_SHIFT) ? core::ui::kModShift : 0u) | (held(VK_MENU) ? core::ui::kModAlt : 0u);
-        a = w.Key(static_cast<int>(msg.w), mods);
+        if (!w.WaitingForKey() && !w.Confirming() && emperor::keys::IsOptionsKey(static_cast<unsigned>(msg.w), mods)) {
+            a = w.Key(VK_ESCAPE, 0); // the key that opened the window closes it (as Esc: nothing kept)
+        }
+        else {
+            a = w.Key(static_cast<int>(msg.w), mods);
+        }
         break;
     }
     default: break;

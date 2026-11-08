@@ -340,4 +340,9 @@ void SoundRows(std::vector<co::Row> &rows)
     }
 }
 
+std::string GameText(int group, int index)
+{
+    return Lang(group, index);
+}
+
 } // namespace emperor::options_original

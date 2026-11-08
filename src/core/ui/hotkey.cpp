@@ -18,6 +18,10 @@ const Name kNames[] = {
     {"PageUp", 0x21},         {"PageDown", 0x22},       {"Pause", 0x13},          {"ScrollLock", 0x91},
     {"Tab", 0x09},            {"Space", 0x20},          {"Backquote", 0xC0},      {"NumpadAdd", 0x6B},
     {"NumpadSubtract", 0x6D}, {"NumpadMultiply", 0x6A}, {"NumpadDivide", 0x6F},   {"NumpadDecimal", 0x6E},
+    {"Up", 0x26},             {"Down", 0x28},           {"Left", 0x25},           {"Right", 0x27},
+    {"LeftBracket", 0xDB},    {"RightBracket", 0xDD},   {"Semicolon", 0xBA},      {"Minus", 0xBD},
+    {"Equals", 0xBB},         {"Comma", 0xBC},          {"Period", 0xBE},         {"Slash", 0xBF},
+    {"Backslash", 0xDC},      {"Quote", 0xDE},
     {"Ins", 0x2D},            {"Del", 0x2E},            {"PgUp", 0x21},           {"PgDn", 0x22},
     {"`", 0xC0},
 };
@@ -167,6 +171,25 @@ void FormatHotkeyList(const Hotkey *keys, int count, char *out, size_t size)
         }
         used += static_cast<size_t>(w);
     }
+}
+
+void FormatHotkeyShown(const Hotkey &key, char *out, size_t size)
+{
+    // The punctuation keys as their characters on a US keyboard (the settings file spells them as words: ';' starts
+    // a comment there and ',' separates two keys); [ ] and ` as words (the game's fonts have no such characters).
+    static const struct {
+        unsigned vk;
+        const char *shown;
+    } kShown[] = {{0xDB, "Left bracket"}, {0xDD, "Right bracket"}, {0xBA, ";"}, {0xBD, "-"}, {0xBB, "="},
+                  {0xBC, ","}, {0xBE, "."}, {0xBF, "/"}, {0xDC, "\\"}, {0xDE, "'"}, {0xC0, "Backquote"}};
+    for (const auto &k : kShown) {
+        if (k.vk == key.vk) {
+            std::snprintf(out, size, "%s%s%s%s", key.mods & kModCtrl ? "Ctrl+" : "", key.mods & kModShift ? "Shift+" : "",
+                          key.mods & kModAlt ? "Alt+" : "", k.shown);
+            return;
+        }
+    }
+    FormatHotkey(key, out, size);
 }
 
 bool IsHotkeyKey(unsigned vk)

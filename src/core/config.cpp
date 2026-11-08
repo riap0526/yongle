@@ -71,7 +71,7 @@ int Index(const char *const *list, int n, const char *v)
 // cannot be read, which the settings model does not let through).
 void Keys(const char *v, unsigned fallbackVk, unsigned *vk, unsigned *mods, unsigned *vk2, unsigned *mods2)
 {
-    core::ui::Hotkey keys[core::ui::kMaxKeys] = {{fallbackVk, 0}, {0, 0}};
+    core::ui::Hotkey keys[core::ui::kMaxKeys] = {{v[0] ? fallbackVk : 0u, 0}, {0, 0}}; // empty: no key
     core::ui::ParseHotkeyList(v, v + std::strlen(v), keys);
     *vk = keys[0].vk;
     *mods = keys[0].mods;

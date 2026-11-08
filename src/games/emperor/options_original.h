@@ -4,6 +4,8 @@
 // a change is carried out as the game's own options dialogs do it.
 #pragma once
 
+#include <string>
+
 #include <vector>
 
 #include "core/options/window.h"
@@ -24,5 +26,8 @@ void SpeedRows(std::vector<core::options::Row> &rows);
 void AutosaveRows(std::vector<core::options::Row> &rows);
 void MessageRows(std::vector<core::options::Row> &rows);
 void SoundRows(std::vector<core::options::Row> &rows);
+
+// The game's text (EmperorText.eng group, index; lang_get_string 0x5278b0), "" when there is none.
+std::string GameText(int group, int index);
 
 } // namespace emperor::options_original

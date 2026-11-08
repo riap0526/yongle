@@ -73,6 +73,18 @@ void AddActionKey(ActionKey *key);
 using KeyFilter = bool (*)(UINT message, WPARAM wparam, LPARAM lparam);
 void SetKeyFilter(KeyFilter filter);
 
+// A game layer's key bindings: WM_KEYDOWN, WM_SYSKEYDOWN, WM_CHAR and WM_SYSCHAR of the game window, on the game thread,
+// before the key filter and the game; returning true keeps the message from the game (the translator may have
+// sent other messages with SendToGame instead). nullptr removes it.
+using KeyTranslator = bool (*)(UINT message, WPARAM wparam, LPARAM lparam);
+void SetKeyTranslator(KeyTranslator translator);
+// Game thread: a message straight to the game's own window procedure (past our filters).
+LRESULT SendToGame(UINT message, WPARAM wparam, LPARAM lparam);
+// The game's GetAsyncKeyState polls (the exe's calls only; not while our panel or a modal window is open): the
+// filter answers instead, given the real state. nullptr removes it.
+using KeyStateFilter = SHORT (*)(int vk, SHORT real);
+void SetKeyStateFilter(KeyStateFilter filter);
+
 // A filter for the mouse messages of the game window (movement, buttons, the wheel), called on the game thread after
 // our panel and the framed-picture background had them, with the position in the mode's (the game's) coordinates;
 // returning true swallows the message. One filter (a game layer's); nullptr removes it.

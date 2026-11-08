@@ -19,7 +19,9 @@
 #include "core/display/city_zoom.h"
 #include "core/display/logical_size.h"
 #include "core/log.h"
+#include "core/settings/settings.h"
 #include "games/emperor/china_map.h"
+#include "games/emperor/keys.h"
 #include "games/emperor/display_options.h"
 #include "games/emperor/emperor.h"
 #include "games/emperor/fullscreen.h"
@@ -58,6 +60,26 @@ SIZE ModeSize()
 }
 using KeyFilter = bool (*)(UINT, WPARAM, LPARAM);
 void SetKeyFilter(KeyFilter) {}
+using KeyTranslator = bool (*)(UINT, WPARAM, LPARAM);
+void SetKeyTranslator(KeyTranslator) {}
+// What the key bindings sent to the game (scenario k2_keys), with key_ctrl_down at that moment.
+struct Sent {
+    UINT m;
+    WPARAM w;
+    int ctrl;
+};
+Sent g_sent[16];
+int g_sentCount = 0;
+volatile int *g_ctrlForTest = nullptr;
+LRESULT SendToGame(UINT m, WPARAM w, LPARAM)
+{
+    if (g_sentCount < 16) {
+        g_sent[g_sentCount++] = Sent{m, w, g_ctrlForTest ? *g_ctrlForTest : -1};
+    }
+    return 0;
+}
+using KeyStateFilter = SHORT (*)(int, SHORT);
+void SetKeyStateFilter(KeyStateFilter) {}
 using FocusHandler = void (*)();
 void SetFocusHandler(FocusHandler) {}
 using MouseFilter = bool (*)(UINT, WPARAM, int, int);
@@ -1959,6 +1981,63 @@ void R3DisplayOptions()
           "status: a fixed size");
 }
 
+// 0.2.0 item 7 K2 (games/emperor/keys): on a city screen a bound key becomes the game's own key (its character eaten);
+// a game key bound to nothing is kept from the game; a Ctrl action sends key_ctrl_down 1 and puts it back; R's poll
+// says "pressed" once; other screens get the keys as they are, F7 never reaches the game.
+void K2Keys()
+{
+    namespace cs = core::settings;
+    namespace k = emperor::keys;
+    namespace d = core::display;
+    k::RegisterSettings();
+    auto *screen = reinterpret_cast<volatile char *>(0x10de045 + emperor::g_imageShift);
+    auto *ctrl = reinterpret_cast<volatile int *>(0x1156e00 + emperor::g_imageShift);
+    d::g_ctrlForTest = ctrl;
+    *ctrl = 0;
+    *screen = 1;
+    auto bind = [](const char *key, const char *v) {
+        cs::Request(cs::Find("keys", key), v, false);
+        cs::RunPending();
+    };
+    d::g_sentCount = 0;
+    Check(k::TranslateForTest(WM_KEYDOWN, VK_UP, 1) && d::g_sentCount == 1 && d::g_sent[0].m == WM_KEYDOWN &&
+              d::g_sent[0].w == VK_UP && d::g_sent[0].ctrl == 0,
+          "keys: Up (the default) sent to the game as Up");
+    bind("scroll_up", "W");
+    bind("overlay_water", "Comma");
+    d::g_sentCount = 0;
+    Check(k::TranslateForTest(WM_KEYDOWN, 'W', 1) && d::g_sentCount == 1 && d::g_sent[0].w == VK_UP,
+          "keys: W bound to scrolling up: the game gets Up");
+    Check(k::TranslateForTest(WM_CHAR, 'w', 1) && d::g_sentCount == 1, "keys: ... and not the character w");
+    d::g_sentCount = 0;
+    Check(k::TranslateForTest(WM_KEYDOWN, VK_UP, 1) && d::g_sentCount == 0, "keys: Up bound to nothing: kept from the game");
+    Check(k::TranslateForTest(WM_KEYDOWN, VK_OEM_COMMA, 1) && d::g_sentCount == 1 && d::g_sent[0].m == WM_CHAR &&
+              d::g_sent[0].w == 'w',
+          "keys: the water overlay on Comma: the game gets the character w");
+    bind("bookmark_set_1", "Equals");
+    d::g_sentCount = 0;
+    Check(k::TranslateForTest(WM_KEYDOWN, VK_OEM_PLUS, 1) && d::g_sentCount == 1 && d::g_sent[0].w == VK_F1 &&
+              d::g_sent[0].ctrl == 1 && *ctrl == 0,
+          "keys: set bookmark 1 on Equals: F1 with key_ctrl_down 1, put back after");
+    d::g_sentCount = 0;
+    Check(k::TranslateForTest(WM_KEYDOWN, 'R', 1) && d::g_sentCount == 1 && d::g_sent[0].w == 'R' &&
+              k::KeyStateForTest('R', 0) == static_cast<SHORT>(0x8001) && k::KeyStateForTest('R', 0) == 0,
+          "keys: R: the game gets R, and its poll says pressed once");
+    Check(k::KeyStateForTest('Q', static_cast<SHORT>(0x8000)) == static_cast<SHORT>(0x8000), "keys: other polls as they are");
+    d::g_sentCount = 0;
+    Check(k::TranslateForTest(WM_KEYDOWN, VK_SPACE, 1) && d::g_sentCount == 1 && d::g_sent[0].m == WM_CHAR &&
+              d::g_sent[0].w == ' ',
+          "keys: Space (Toggle current overlay) sent as the character space");
+    d::g_sentCount = 0;
+    Check(k::TranslateForTest(WM_KEYDOWN, VK_DOWN, 1) && d::g_sentCount == 1, "keys: Down sent");
+    *screen = 3;
+    d::g_sentCount = 0;
+    Check(!k::TranslateForTest(WM_KEYDOWN, 'W', 1) && !k::TranslateForTest(WM_CHAR, 'w', 1) && d::g_sentCount == 0,
+          "keys: not a city screen: the keys as they are (typing)");
+    Check(k::TranslateForTest(WM_KEYDOWN, VK_F7, 1) && d::g_sentCount == 0, "keys: F7 never reaches the game");
+    d::g_ctrlForTest = nullptr;
+}
+
 struct Scenario {
     const char *name;
     void (*run)();
@@ -1977,6 +2056,7 @@ const Scenario kScenarios[] = {
     {"r2b_unknown_class", &R2bUnknownClass}, {"r2b17_ui_fixes", &R2b17UiFixes},
     {"r2c_china_map", &R2cChinaMap},   {"r3_display_options", &R3DisplayOptions},
     {"o1_falling_behind", &O1FallingBehind}, {"r5c_zoom", &R5cZoom},
+    {"k2_keys", &K2Keys},
 };
 
 } // namespace

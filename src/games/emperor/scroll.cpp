@@ -50,6 +50,7 @@
 #include "core/display/scaled_rect.h"
 #include "core/log.h"
 #include "core/scroll/smooth_scroll.h"
+#include "games/emperor/keys.h"
 #include "games/emperor/site.h"
 #include "games/emperor/zoom.h"
 #include "core/platform/parallel.h"
@@ -431,7 +432,7 @@ struct HeldKey {
             *flag = 0;
             held = true;
         }
-        if (held && !(GetAsyncKeyState(vk) & 0x8000)) {
+        if (held && !emperor::keys::Held(static_cast<unsigned>(vk))) { // a key bound to this direction (W, say)
             held = false;
         }
         return held;
@@ -506,10 +507,11 @@ void ZoomStep()
 void SmoothFrame()
 {
     int x = *kCursorX, y = *kCursorY;
-    bool left = g_left.Poll() || x < 1;
-    bool right = g_right.Poll() || x >= *kDesktopW - 1;
-    bool up = g_up.Poll() || y < 1;
-    bool down = g_down.Poll() || y >= *kDesktopH - 1;
+    const bool keyLeft = g_left.Poll(), keyRight = g_right.Poll(), keyUp = g_up.Poll(), keyDown = g_down.Poll();
+    bool left = keyLeft || x < 1;
+    bool right = keyRight || x >= *kDesktopW - 1;
+    bool up = keyUp || y < 1;
+    bool down = keyDown || y >= *kDesktopH - 1;
     int dirX = (right ? 1 : 0) - (left ? 1 : 0);
     int dirY = (down ? 1 : 0) - (up ? 1 : 0);
     *kViewScrolling = (left || right || up || down) ? 1 : 0; // as scroll_get_direction: the simulation pauses
