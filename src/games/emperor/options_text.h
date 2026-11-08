@@ -19,6 +19,7 @@ struct Text {
     const ChoiceText *choices;   // nullptr: none (the values explain themselves)
     int choiceCount;
     bool noRestartMark = false;  // a restart item that needs no mark (it only ever acts at start-up)
+    const char *label = nullptr; // the row's name (nullptr: the registry's); section "game": the game's own options
 };
 
 const Text *Find(const char *section, const char *key);

@@ -363,14 +363,21 @@ int main()
     Check(w.DraftToggle(2, 0, 0) == 0 && w.Draft(2, 0, 0) == 80, "check-slider: the label toggles the checkbox");
     Check(AllInside(p), "everything inside the window (Sound)");
 
-    // Restore defaults: the current page only; OK applies and closes; Esc cancels.
-    g_values[6] = 30;
+    // Restore defaults: the current category only; OK applies and closes; Esc cancels.
     g_values[0] = 150;
+    g_values[4] = 0;
+    w.Open(0, 1); // General, Speed
+    p = Draw(w);
+    Click(w, Cx(p.FindText("Restore defaults")), Cy(p.FindText("Restore defaults")));
+    Check(w.Draft(0, 1, 0) == 80 && w.Draft(0, 0, 0) == 0, "Restore defaults: this category only");
+    w.Cancel();
+    g_values[4] = 1;
+    g_values[6] = 30;
     w.Open(2, 0);
     p = Draw(w);
     Click(w, Cx(p.FindText("Restore defaults")), Cy(p.FindText("Restore defaults")));
     Check(w.Draft(2, 0, 0) == 80 && w.DraftToggle(2, 0, 0) == 1 && w.Draft(0, 1, 0) == 150,
-          "Restore defaults: this page only");
+          "Restore defaults: a page without categories; other pages kept");
     w.MouseDown(Cx(p.FindText("OK")), Cy(p.FindText("OK")), 0);
     co::Action a = w.MouseUp(Cx(p.FindText("OK")), Cy(p.FindText("OK")));
     Check(a == co::Action::Close && g_values[6] == 80, "OK applies and closes");

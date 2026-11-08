@@ -119,7 +119,7 @@ public:
     bool Dirty() const;   // a draft differs from the value in effect (Apply is enabled)
     void Apply();         // sets the rows whose draft differs
     void Cancel();        // drafts back to the values in effect
-    void RestoreDefaults(); // drafts of the current page to the defaults (Apply / OK still needed)
+    void RestoreDefaults(); // drafts of the current category to the defaults (Apply / OK still needed)
 
     // For tests and the game layer.
     int PageIndex() const { return page_; }

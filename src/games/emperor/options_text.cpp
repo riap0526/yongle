@@ -91,6 +91,11 @@ CHOICES(kAmbient,
         {"0.75", "About three every 4 seconds."},
         {"1.0", "About one every second."});
 
+CHOICES(kMessageModes,
+        {"full", "The whole message, written out in full."},
+        {"condensed", "A shorter message, in fewer and plainer words."},
+        {"off", "No message of this kind."});
+
 const Text kTexts[] = {
     {"display", "intro_movie", "Whether the game plays its intro movie when it starts. If PlayIntroMovie=no is set in "
                                "the game's Emperor.ini, the movie is skipped either way.",
@@ -153,7 +158,26 @@ const Text kTexts[] = {
     {"sound", "background_sound", "What happens to the music and the sounds when you switch to another program.",
      kBackgroundSound, N(kBackgroundSound)},
     {"sound", "ambient_sounds", "How often the city plays a random sound of its life: birds, water, workshops.",
-     kAmbient, N(kAmbient)},
+     kAmbient, N(kAmbient), false, "Ambient sounds: how often"},
+
+    {"sound", "master_volume", "The volume of all the music and sounds together. The four volumes below are set "
+                               "within it.",
+     nullptr, 0},
+
+    // The game's own options (kept in Emperor.inf, as the game's Options menu sets them).
+    {"game", "game_speed", "How fast the game runs.", nullptr, 0, false, "Game speed"},
+    {"game", "scroll_speed", "How fast the view moves when you scroll the city.", nullptr, 0, false, "Scroll speed"},
+    {"game", "autosave", "The game saves your city by itself from time to time, as its own Autosave option does.",
+     nullptr, 0, false, "Autosave"},
+    {"game", "messages", nullptr, kMessageModes, N(kMessageModes)}, // no tooltip on the kinds' names
+    {"game", "music", "The music. The slider sets its volume.", nullptr, 0, false, "Music"},
+    {"game", "speech", "The spoken voices. The slider sets their volume.", nullptr, 0, false, "Speech"},
+    {"game", "sound_effects", "The sounds of the buildings, the people and the buttons. The slider sets their "
+                              "volume.",
+     nullptr, 0, false, "General sounds"},
+    {"game", "ambient_volume", "The city's background sounds: birds, water, workshops. The slider sets their volume; "
+                               "how often they play is set below.",
+     nullptr, 0, false, "Ambient sounds"},
 };
 
 #undef CHOICES

@@ -8,6 +8,7 @@
 #include "core/options/window.h"
 #include "core/settings/settings.h"
 #include "core/ui/hotkey.h"
+#include "games/emperor/options_original.h"
 #include "games/emperor/options_text.h"
 #include "games/emperor/site.h"
 
@@ -28,6 +29,7 @@ namespace {
 namespace co = core::options;
 namespace cs = core::settings;
 namespace ot = emperor::options_text;
+namespace oo = emperor::options_original;
 
 // ---------------------------------------------------------------------------------------------------------------
 // The game's drawing functions
@@ -347,8 +349,8 @@ void Add(std::vector<co::Row> &rows, const char *section, const char *key)
     Setting &s = g_settings.back();
     co::Row r;
     r.id = key;
-    r.label = it.label;
     const ot::Text *text = ot::Find(section, key);
+    r.label = text && text->label ? text->label : it.label;
     r.help = text && text->summary ? text->summary : it.help ? it.help : "";
     r.restart = it.effect == cs::Effect::Restart && !(text && text->noRestartMark);
     r.value = {&SettingGet, &SettingSet, &s};
@@ -442,12 +444,27 @@ std::vector<co::Page> BuildPages()
     }
     {
         co::Category c{"Speed", {}};
+        oo::SpeedRows(c.rows);
         Add(c.rows, "gameplay", "keep_speed");
         Add(c.rows, "gameplay", "full_speed");
         Header(c.rows, "Scrolling");
         Add(c.rows, "gameplay", "simulate_while_scrolling");
         Add(c.rows, "gameplay", "smooth_scroll");
         general.categories.push_back(std::move(c));
+    }
+    {
+        co::Category c{"Autosave", {}};
+        oo::AutosaveRows(c.rows);
+        if (!c.rows.empty()) {
+            general.categories.push_back(std::move(c));
+        }
+    }
+    {
+        co::Category c{"Messages", {}};
+        oo::MessageRows(c.rows);
+        if (!c.rows.empty()) {
+            general.categories.push_back(std::move(c));
+        }
     }
     co::Page display{"Display", {}};
     {
@@ -485,8 +502,13 @@ std::vector<co::Page> BuildPages()
         display.categories.push_back(std::move(c));
     }
     co::Page sound{"Sound", {{"", {}}}};
-    Add(sound.categories[0].rows, "sound", "background_sound");
+    Add(sound.categories[0].rows, "sound", "master_volume"); // ours, over the game's four
+    oo::SoundRows(sound.categories[0].rows);
+    if (!sound.categories[0].rows.empty()) {
+        Header(sound.categories[0].rows, "More");
+    }
     Add(sound.categories[0].rows, "sound", "ambient_sounds");
+    Add(sound.categories[0].rows, "sound", "background_sound");
     std::vector<co::Page> pages{std::move(general), std::move(display), std::move(sound)};
     for (auto &p : pages) {
         Resolve(p);
@@ -627,6 +649,7 @@ bool Attach()
             return false;
         }
     }
+
     core::display::SetModalInput(&kInput);
     core::display::AddActionKey(&g_openKey);
     core_log("options window: available (Ctrl+O while testing)");

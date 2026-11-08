@@ -101,7 +101,9 @@ add_library(ddraw SHARED
     src/games/emperor/display_options.cpp
     src/games/emperor/options_window.cpp
     src/games/emperor/options_text.cpp
+    src/games/emperor/options_original.cpp
     src/games/emperor/sound.cpp
+    src/games/emperor/master_volume.cpp
     src/games/emperor/intro.cpp
     src/games/emperor/zoom.cpp
     src/games/emperor/city_picture.cpp
@@ -301,9 +303,11 @@ add_custom_command(TARGET test_guard POST_BUILD
 add_executable(test_restore proxy/ddraw/test_restore.cpp
     src/games/emperor/scroll.cpp src/games/emperor/resolution.cpp src/games/emperor/emperor.cpp
     src/games/emperor/ui_fixes.cpp src/games/emperor/china_map.cpp src/games/emperor/display_options.cpp
-    src/games/emperor/options_window.cpp src/games/emperor/options_text.cpp src/core/options/window.cpp
+    src/games/emperor/options_window.cpp src/games/emperor/options_text.cpp
+    src/games/emperor/options_original.cpp src/core/options/window.cpp
     src/core/display/common_sizes.cpp
-    src/games/emperor/sound.cpp src/games/emperor/ambient_rate.cpp src/games/emperor/intro.cpp
+    src/games/emperor/sound.cpp src/games/emperor/master_volume.cpp src/games/emperor/ambient_rate.cpp
+    src/games/emperor/intro.cpp
     src/games/emperor/zoom.cpp src/core/display/city_zoom.cpp
     src/games/emperor/city_picture.cpp src/core/display/city_strips.cpp src/core/capture/big_picture.cpp
     src/core/capture/png_stream.cpp

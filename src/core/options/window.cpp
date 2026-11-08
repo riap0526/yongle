@@ -122,15 +122,13 @@ void Window::RestoreDefaults()
     if (pages_.empty()) {
         return;
     }
-    for (size_t c = 0; c < pages_[page_].categories.size(); ++c) {
-        const auto &rows = pages_[page_].categories[c].rows;
-        for (size_t r = 0; r < rows.size(); ++r) {
-            if (rows[r].value.get) {
-                drafts_[page_][c][r].value = rows[r].defaultValue;
-            }
-            if (rows[r].toggle.get) {
-                drafts_[page_][c][r].toggle = rows[r].defaultToggle;
-            }
+    const auto &rows = Current().rows;
+    for (size_t r = 0; r < rows.size(); ++r) {
+        if (rows[r].value.get) {
+            drafts_[page_][category_][r].value = rows[r].defaultValue;
+        }
+        if (rows[r].toggle.get) {
+            drafts_[page_][category_][r].toggle = rows[r].defaultToggle;
         }
     }
 }
