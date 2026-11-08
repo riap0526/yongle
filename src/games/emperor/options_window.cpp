@@ -639,6 +639,8 @@ std::vector<co::Page> BuildPages()
         Header(sound.categories[0].rows, "More");
     }
     Add(sound.categories[0].rows, "audio", "ambient_sounds");
+    Add(sound.categories[0].rows, "audio", "nature_sounds");
+    Add(sound.categories[0].rows, "audio", "nature_sounds_gap");
     Add(sound.categories[0].rows, "audio", "background_sound");
     std::vector<co::Page> pages{std::move(general), std::move(display), std::move(sound)};
     for (auto &p : pages) {

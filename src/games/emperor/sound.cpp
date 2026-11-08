@@ -5,6 +5,7 @@
 #include "core/log.h"
 #include "core/settings/settings.h"
 #include "games/emperor/ambient_rate.h"
+#include "games/emperor/nature_sounds.h"
 #include "games/emperor/site.h"
 
 #include <cstdio>
@@ -130,6 +131,7 @@ void Pause(void *result)
             p.samples[p.sampleCount++] = samples[i];
         }
     }
+    emperor::nature_sounds::Pause(true);
     p.on = true;
     p.since = GetTickCount();
     p.musicMode = *kMusicMode;
@@ -156,6 +158,7 @@ void Resume(void *why)
             ++sounds;
         }
     }
+    emperor::nature_sounds::Pause(false);
     const DWORD away = GetTickCount() - p.since;
     if (p.musicMode == 1 && *kMusicMode == 1) {
         *kMusicStart = *kMusicStart + away; // music for a while: the pause does not count
@@ -177,6 +180,7 @@ void __cdecl StopAll_detour()
     if (g_paused.on) { // the game stops everything after all (e.g. it ends): nothing to resume
         g_paused.on = false;
     }
+    emperor::nature_sounds::Stop();
     Original(o_StopAll, kStopAll)();
 }
 
@@ -198,6 +202,21 @@ void __cdecl Ambient_detour()
         return; // as under the game's own dialogs: no new ambient sound (the one playing ends by itself)
     }
     ++g_counts.ambientCalls;
+    static bool told = false;
+    if (!told) {
+        // 0.2.0 item 10 (player feedback A6): the state of the game's 3D channels, which nothing plays on
+        // (sound_3d_start 0x763a74 has no caller): the provider the game chose at start-up (sound_3d_open 0x76307d:
+        // EAX, A3D, Hardware, RSX, Software in that order; 5 = none), its handle, how many 3D samples were allocated,
+        // the 3D-off flag 0x1108b40 (set when no provider opened) and sound_manager + 0x208 (sound off).
+        told = true;
+        const BYTE *m = reinterpret_cast<const BYTE *>(kManager + emperor::g_imageShift);
+        static const char *const kKinds[] = {"EAX", "A3D", "Hardware", "RSX", "Software", "none"};
+        const int kind = *reinterpret_cast<const int *>(m + 0x164);
+        core_log("sound: 3D channels: provider %s (%d), handle 0x%x, %d 3D samples, 3D off flag %d, sound off %d",
+                 kind >= 0 && kind <= 5 ? kKinds[kind] : "?", kind, *reinterpret_cast<const unsigned *>(m + 0x1f0),
+                 *reinterpret_cast<const int *>(m + 0x1ec), *reinterpret_cast<const int *>(0x1108b40 + emperor::g_imageShift),
+                 *reinterpret_cast<const int *>(m + 0x208));
+    }
     g_inAmbient = true;
     Original(o_Ambient, kAmbient)();
     g_inAmbient = false;
@@ -318,7 +337,7 @@ void RegisterSettings()
 
 void SetQuiet(bool quiet)
 {
-    g_quiet = quiet;
+    g_quiet = quiet; // the nature sounds: the one playing goes on, as the game's (no new one: OnLoop waits)
 }
 
 bool Attach()
@@ -380,6 +399,8 @@ void OnLoop()
             &a);
     }
     LogCounts(now);
+    const char s = *kGameScreen;
+    emperor::nature_sounds::OnLoop(now, s == 1 || s == 0x48 || s == 0x49); // 0.2.0 item 10
 }
 
 } // namespace emperor::sound

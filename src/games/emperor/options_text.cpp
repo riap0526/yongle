@@ -157,6 +157,12 @@ const Text kTexts[] = {
      kBackgroundSound, N(kBackgroundSound)},
     {"audio", "ambient_sounds", "How often the city plays a random sound of its life: birds, water, workshops.",
      kAmbient, N(kAmbient), false, "Ambient sounds: how often"},
+    {"audio", "nature_sounds", "Birds, wind, crickets, frogs and wind chimes that come with the game but that it never "
+                               "played originally. In the city, now and then one of them circles around you, at the "
+                               "sound effects volume.",
+     nullptr, 0},
+    {"audio", "nature_sounds_gap", "About how many seconds pass between two of them.", nullptr, 0, false,
+     "Unused nature sounds: time between (s)"},
 
     {"audio", "master_volume", "The volume of all the music and sounds together. The four volumes below are set "
                                "within it. The checkbox switches them all off and on.",

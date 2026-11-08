@@ -310,6 +310,18 @@ int main()
     w.Open(1, 0);
     p = Draw(w);
     Check(p.FindText("Display scale") && p.FindText("120%"), "row shown for that value");
+    {
+        int rights = 0, firstX = -1;
+        bool same = true;
+        for (const Op &o : p.ops) {
+            if (o.op == "arrow" && o.extra / 10 == static_cast<int>(co::Arrow::Right)) {
+                firstX = firstX < 0 ? o.x : firstX;
+                same = same && o.x == firstX;
+                ++rights;
+            }
+        }
+        Check(rights >= 2 && same, "the slider's right arrow lines up with the choice's");
+    }
     const Op *sl = nullptr;
     for (const Op &o : p.ops) {
         if (o.op == "arrow" && o.extra / 10 == static_cast<int>(co::Arrow::Left) && o.y > 140) sl = &o;

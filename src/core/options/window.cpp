@@ -361,11 +361,13 @@ std::vector<Window::Placed> Window::Layout()
 
 void Window::SliderGeometry(int rowY, int &arrowL, int &trackX, int &trackW, int &arrowR, int &y)
 {
-    int x = Left() + 48, w = Right() - Left() - 48;
-    arrowL = x;
-    trackX = x + kArrow + 2;
+    // The track is whole tiles; what is left over goes to the left, so the right arrow lines up with the choices'
+    // right arrows (right - kArrow; until 2026-11-09 it sat up to 15 px left of them).
+    const int w = Right() - Left() - 48;
     trackW = (w - 2 * kArrow - 4) / kTile * kTile;
-    arrowR = trackX + trackW + 2;
+    arrowR = Right() - kArrow;
+    trackX = arrowR - 2 - trackW;
+    arrowL = trackX - 2 - kArrow;
     y = rowY + 22;
 }
 

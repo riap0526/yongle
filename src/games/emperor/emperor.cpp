@@ -48,6 +48,7 @@
 #include "games/emperor/display_options.h"
 #include "games/emperor/fullscreen.h"
 #include "games/emperor/game_menu.h"
+#include "games/emperor/nature_sounds.h"
 #include "games/emperor/master_volume.h"
 #include "games/emperor/keys.h"
 #include "games/emperor/notice.h"
@@ -652,6 +653,7 @@ extern "C" void emperor_register_settings(void)
     emperor::fullscreen::RegisterSettings();
     emperor::master_volume::RegisterSettings(); // first in [sound]: the volume over all
     emperor::sound::RegisterSettings();
+    emperor::nature_sounds::RegisterSettings(); // 0.2.0 item 10
     emperor::intro::RegisterSettings();
     emperor::zoom::RegisterSettings();
     emperor::city_picture::RegisterSettings();
