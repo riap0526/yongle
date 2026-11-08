@@ -1,4 +1,4 @@
-// See keys.h. Evidence for every key: docs/key_bindings.md section 2 (game_wndproc 0x4766c0, its WM_CHAR table
+// See keys.h. Evidence for every key: docs/archive/key_bindings.md section 2 (game_wndproc 0x4766c0, its WM_CHAR table
 // 0x477c7c / 0x477bf4, city_alt_keys 0x43cfa0, the R poll 0x5db570; Ghidra and capstone, 2026-11-08).
 #include "games/emperor/keys.h"
 
@@ -7,6 +7,7 @@
 #include "core/log.h"
 #include "core/settings/settings.h"
 #include "core/ui/hotkey.h"
+#include "games/emperor/game_menu.h"
 #include "games/emperor/options_text.h"
 #include "games/emperor/options_window.h"
 #include "games/emperor/site.h"
@@ -308,6 +309,7 @@ void Fire(int a)
 struct Call {
     UINT m;
     WPARAM w;
+    LPARAM l;
     bool handled;
 };
 
@@ -323,6 +325,10 @@ void TranslateNow(void *p)
     const unsigned vk = static_cast<unsigned>(c.w);
     if (vk == VK_SHIFT || vk == VK_CONTROL || vk == VK_MENU) {
         return; // the game keeps track of the modifiers itself
+    }
+    if (vk == VK_ESCAPE && c.m == WM_KEYDOWN) { // K4: closes a window, or opens the pause menu (games/emperor/game_menu)
+        c.handled = g_eatChar = emperor::game_menu::Escape(c.l);
+        return;
     }
     const unsigned mods = HeldMods();
     int a = Bound(vk, mods);
@@ -347,12 +353,12 @@ void TranslateNow(void *p)
     }
 }
 
-bool Translate(UINT m, WPARAM w, LPARAM)
+bool Translate(UINT m, WPARAM w, LPARAM l)
 {
     if (!core::diag::Enabled(g_feature)) {
         return false;
     }
-    Call c{m, w, false};
+    Call c{m, w, l, false};
     if (!core::diag::Guarded(g_feature, &TranslateNow, &c)) {
         core_log("keys: the key bindings are off for the rest of the run (an error); the keys are the game's own");
         return false;

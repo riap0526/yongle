@@ -5,11 +5,13 @@
 #include "core/display/logical_size.h"
 #include "core/display/virtual_display.h"
 #include "core/log.h"
+#include "core/options/menu.h"
 #include "core/options/window.h"
 #include "core/settings/settings.h"
 #include "core/ui/hotkey.h"
 #include "core/ui/settings_view.h"
 #include "games/emperor/options_original.h"
+#include "games/emperor/game_menu.h"
 #include "games/emperor/keys.h"
 #include "games/emperor/options_text.h"
 #include "games/emperor/site.h"
@@ -659,7 +661,7 @@ std::vector<co::Page> BuildKeyPages()
     columns.rightLabel = ot::kColumnKey;
     columns.rightLabel2 = ot::kColumnAlternative;
     c.rows.push_back(std::move(columns));
-    // Augustus's sections, with Emperor's actions (docs/key_bindings.md section 3.2).
+    // Augustus's sections, with Emperor's actions (docs/archive/key_bindings.md section 3.2).
     for (int s = 0; s < emperor::keys::kSectionCount; ++s) {
         Header(c.rows, ot::KeySection(s));
         if (s == emperor::keys::kGlobal) { // ours first
@@ -697,6 +699,8 @@ std::vector<co::Page> BuildKeyPages()
 
 co::Window g_window; // the options window
 co::Window g_keys;   // the Hotkeys window, over it or alone (from the game's Options menu)
+co::Menu g_pause;    // the pause menu (K4), under the options window when that is opened from it
+bool g_pauseOpen = false;
 GamePainter g_painter;
 bool g_open = false;     // either is open
 bool g_keysOpen = false; // the Hotkeys window is the one shown
@@ -752,7 +756,7 @@ void Kept()
     core_log("options window: the new setting kept");
 }
 
-// Keys nobody may choose (docs/key_bindings.md section 3.2): Enter (the game's, not offered), the game's keys for
+// Keys nobody may choose (docs/archive/key_bindings.md section 3.2): Enter (the game's, not offered), the game's keys for
 // development and multiplayer (Ctrl+A, Alt+D, Alt+Z, Alt+T, Ctrl+Alt+C, Numpad2; comma and period are not hotkey keys),
 // and ours that stay fixed (F5 and Alt+Enter: window or full screen; Shift+F7: the resolution, for testing).
 bool ReservedKey(unsigned vk, unsigned mods)
@@ -843,9 +847,15 @@ struct Message {
     int x, y;
 };
 
+void HandlePause(const Message &msg);
+
 void HandleNow(void *p)
 {
     const Message &msg = *static_cast<const Message *>(p);
+    if (!g_open) {
+        HandlePause(msg);
+        return;
+    }
     const int x = msg.x - *kDialogX, y = msg.y - *kDialogY;
     co::Window &w = Front();
     co::Action a = co::Action::None;
@@ -901,14 +911,92 @@ void HandleNow(void *p)
 
 bool Active()
 {
-    return g_open;
+    return g_open || g_pauseOpen;
+}
+
+// lang_get_string 0x5278b0 (__cdecl(group, index); hooked by options_entry, which passes the game's texts on): the
+// pause menu shows the File menu's own Load / Save / Delete / Exit game.
+const char *Lang(int group, int index)
+{
+    using Lang_fn = const char *(__cdecl *)(int, int);
+    const char *t = reinterpret_cast<Lang_fn>(0x5278b0 + g_imageShift)(group, index);
+    return t ? t : "";
+}
+
+// The pause menu's items, in order (docs/archive/key_bindings.md section 8.1).
+enum PauseItem { kContinue, kReplay, kLoad, kSave, kDelete, kOptions, kMainMenu, kExit };
+
+void ClosePause(const char *why)
+{
+    if (!g_pauseOpen) {
+        return;
+    }
+    g_pauseOpen = false;
+    *kRedraw = 1;
+    core_log("pause menu: closed (%s)", why);
+}
+
+void PauseAct(int item)
+{
+    using emperor::game_menu::Item;
+    using emperor::game_menu::Request;
+    switch (item) {
+    case kContinue: ClosePause("Continue"); break;
+    case kReplay: ClosePause("Replay map"); Request(Item::Replay); break;
+    case kLoad: ClosePause("Load game"); Request(Item::Load); break;
+    case kSave: ClosePause("Save game"); Request(Item::Save); break;
+    case kDelete: ClosePause("Delete game"); Request(Item::Delete); break;
+    case kOptions: {
+        Where w{kPageGeneral, 0, false, nullptr};
+        OpenNow(&w); // over the pause menu; closing it shows the pause menu again
+        break;
+    }
+    case kMainMenu: ClosePause("Exit to main menu"); Request(Item::MainMenu); break;
+    case kExit: ClosePause("Exit game"); Request(Item::Exit); break;
+    default: break;
+    }
+}
+
+void HandlePause(const Message &msg)
+{
+    const int x = msg.x - *kDialogX, y = msg.y - *kDialogY;
+    switch (msg.m) {
+    case WM_MOUSEMOVE: g_pause.MouseMove(x, y); break;
+    case WM_LBUTTONDOWN:
+    case WM_LBUTTONDBLCLK:
+        Function<UiSound_fn>(kUiSound)(kClickSound);
+        g_pause.MouseDown(x, y);
+        break;
+    case WM_LBUTTONUP: {
+        const int item = g_pause.MouseUp(x, y);
+        if (item >= 0) {
+            PauseAct(item);
+        }
+        break;
+    }
+    case WM_RBUTTONUP: ClosePause("right click"); break;
+    case WM_KEYDOWN:
+    case WM_SYSKEYDOWN: {
+        auto held = [](int vk) { return (GetKeyState(vk) & 0x8000) != 0; };
+        const unsigned mods = (held(VK_CONTROL) ? core::ui::kModCtrl : 0u) |
+                              (held(VK_SHIFT) ? core::ui::kModShift : 0u) | (held(VK_MENU) ? core::ui::kModAlt : 0u);
+        if (g_pause.Key(static_cast<int>(msg.w)) == co::Menu::kClose) {
+            ClosePause("Esc");
+        }
+        else if (emperor::keys::IsOptionsKey(static_cast<unsigned>(msg.w), mods)) {
+            PauseAct(kOptions);
+        }
+        break;
+    }
+    default: break;
+    }
 }
 
 void OnMessage(UINT m, WPARAM w, LPARAM, int x, int y)
 {
     Message msg{m, w, x, y};
     if (!core::diag::Guarded(g_feature, &HandleNow, &msg)) {
-        g_open = g_keysOpen = g_keysOnly = false;
+        g_open = g_keysOpen = g_keysOnly = g_pauseOpen = false;
         SetWaiting(false, 0); // a wait for a key ends with the window (our keys work again)
         *kRedraw = 1;
         core_log("options window: closed after an error; the game's own options stay");
@@ -922,6 +1010,11 @@ void DrawNow(void *)
     Function<Void_fn>(kClipReset)();
     g_painter.ox = *kDialogX;
     g_painter.oy = *kDialogY;
+    if (!g_open) {
+        g_pause.Draw(g_painter);
+        *kRedraw = 1; // the hover frame moves with the mouse
+        return;
+    }
     co::Window &w = Front();
     w.Tick(GetTickCount());
     if (w.TakeCloseRequest()) { // OK, then "keep this setting?" answered or timed out
@@ -998,18 +1091,34 @@ bool OpenHotkeys()
     return true;
 }
 
+bool OpenPause()
+{
+    if (!Available()) {
+        return false;
+    }
+    if (g_open || g_pauseOpen) {
+        return true;
+    }
+    g_pause.Set(ot::kPauseTitle, {ot::kPauseContinue, ot::kMenuReplayMap, Lang(1, 3), Lang(1, 4), Lang(1, 5),
+                                  ot::kPauseOptions, ot::kMenuExitToMainMenu, Lang(1, 6)});
+    g_pauseOpen = true;
+    *kRedraw = 1;
+    core_log("pause menu: opened (the game is paused)");
+    return true;
+}
+
 bool IsOpen()
 {
-    return g_open;
+    return g_open || g_pauseOpen;
 }
 
 void OnPresent(unsigned long caller)
 {
-    if (!g_open || caller == kPresentFromPaint || *kDrawBuffer == nullptr) {
+    if (!(g_open || g_pauseOpen) || caller == kPresentFromPaint || *kDrawBuffer == nullptr) {
         return;
     }
     if (!core::diag::Guarded(g_feature, &DrawNow, nullptr)) {
-        g_open = g_keysOpen = g_keysOnly = false;
+        g_open = g_keysOpen = g_keysOnly = g_pauseOpen = false;
         SetWaiting(false, 0); // a wait for a key ends with the window (our keys work again)
         *kRedraw = 1;
         core_log("options window: closed after an error while drawing; the game's own options stay");

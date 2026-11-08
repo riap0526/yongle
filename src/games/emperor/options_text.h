@@ -53,5 +53,8 @@ extern const char *const kPausedOneKey, *const kPausedTwoKeys, *const kPausedNoK
 
 // The File menu's items for the screenshots (options_entry).
 extern const char *const kMenuCityScreenshot, *const kMenuMinimapScreenshot;
+// K4: the File menu's renamed items (also the titles of their confirmations) and the pause menu.
+extern const char *const kMenuReplayMap, *const kMenuExitToMainMenu;
+extern const char *const kPauseTitle, *const kPauseContinue, *const kPauseOptions;
 
 } // namespace emperor::options_text

@@ -47,6 +47,7 @@
 #include "games/emperor/city_picture.h"
 #include "games/emperor/display_options.h"
 #include "games/emperor/fullscreen.h"
+#include "games/emperor/game_menu.h"
 #include "games/emperor/master_volume.h"
 #include "games/emperor/keys.h"
 #include "games/emperor/notice.h"
@@ -153,6 +154,7 @@ struct Pace {
     bool behind = false;
     long dropped = 0;       // ticks owed and not run while behind (for the rate log)
     long droppedSpell = 0;  // the same, for the current spell of falling behind
+    long gaps = 0;          // pauses whose time was not made up (kGapMs; for the rate log)
 };
 Pace g_pace;
 
@@ -181,6 +183,11 @@ void LogRates(const char *why)
         const size_t len = std::strlen(paceNote);
         std::snprintf(paceNote + len, sizeof(paceNote) - len, "; %ld ticks dropped (falling behind)", g_pace.dropped);
         g_pace.dropped = 0;
+    }
+    if (g_pace.gaps > 0) {
+        const size_t len = std::strlen(paceNote);
+        std::snprintf(paceNote + len, sizeof(paceNote) - len, "; %ld pause(s) not made up", g_pace.gaps);
+        g_pace.gaps = 0;
     }
     long multi = 0, torn = 0;
     core::diag::TakeIntegrity(&multi, &torn);
@@ -286,6 +293,9 @@ int __cdecl LoopStep_detour()
         g_lastLoop = 0; // the pause is not a frame time
         emperor::scroll::Resume();
     }
+    if (emperor::game_menu::OnLoop() && emperor::options_window::IsOpen()) {
+        return 0; // K4: a confirmation answered No opened the pause menu again: no pass (the game stays paused)
+    }
     ++g_loops;
     DWORD now = timeGetTime();
     if (g_lastLoop != 0) {
@@ -366,6 +376,11 @@ constexpr int kMaxTicksPerFrame = 20;
 constexpr double kBehindMs = 50.0;    // fewer than 20 passes a second
 constexpr double kCaughtUpMs = 35.0;  // about 28 passes a second
 constexpr int kBehindTicks = 2;
+// A gap between two passes longer than this is a pause, not slow frames: our windows and the panel (draw-only frames
+// do not come here), the game's own confirmations (modal_dialog_run runs its own loop), loading. Its time is not owed:
+// before K4's third test, closing the pause menu, the options window or the panel made up to 20 ticks at once (the
+// city jumped).
+constexpr DWORD kGapMs = 250;
 constexpr DWORD kCappedMs = 16;
 core::diag::Feature g_paceFeature{"simulation pace (games/emperor)"};
 bool g_catchUp = true;
@@ -415,6 +430,10 @@ void DueBody(DueCall &c)
             core_log("emperor: no longer behind (a pass every %.0f ms): ticks are made up again; %ld dropped",
                      g_pace.passMs, g_pace.droppedSpell);
         }
+    }
+    if (g_pace.lastPass != 0 && now - g_pace.lastPass > kGapMs) {
+        g_pace.last = now - interval; // after a pause: one tick as soon as allowed, nothing made up
+        ++g_pace.gaps;
     }
     g_pace.lastPass = now;
     if (static_cast<int>(now - g_pace.last) < 0) {
@@ -706,6 +725,7 @@ extern "C" void emperor_attach(void)
     emperor::sound::Attach(); // O4: [sound] background_sound, ambient_sounds; pan within 0..127
     emperor::options_original::Attach(); // the game's own options; a new player's starting speeds
     emperor::master_volume::Attach();    // [sound] master_volume
+    emperor::game_menu::Attach();        // K4: Esc and the pause menu (after the window; before the File menu)
     emperor::options_entry::Attach();    // after the window and options_original: the menus open the window
     emperor::keys::Attach();             // 0.2.0 item 7: the key bindings (F6 opens the options window)
     emperor::intro::Attach(); // 0.2.0: [display] intro_movie (Emperor.ini is not changed)

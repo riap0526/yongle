@@ -2,6 +2,7 @@
 
 #include "core/log.h"
 #include "games/emperor/city_picture.h"
+#include "games/emperor/game_menu.h"
 #include "games/emperor/keys.h"
 #include "games/emperor/options_text.h"
 #include "games/emperor/options_window.h"
@@ -48,9 +49,13 @@ constexpr int kOptionsGroup = 2, kTextGeneral = 20, kTextVideo = 21, kTextAudio 
 constexpr int kAutosaveOn = 4, kAutosaveOff = 5; // the game's "Autosave - ON" / "- OFF" (0x449460)
 const Var<int> kAutosaveDisabled{0x10de15c};      // not 0: no autosave (shown as "Autosave - OFF")
 constexpr int kMainMenuGroup = 30, kTextWebsite = 4; // the main menu's "Visit Website" (0x84fa50)
-// The File menu: group 1 (19 texts); ours use numbers it does not have. They go after Save game (text 4).
-constexpr int kFileGroup = 1, kTextSaveGame = 4, kTextCityShot = 40, kTextMinimapShot = 41;
+// The File menu: group 1 (19 texts); ours use numbers it does not have. The game's: 1 New game, 2 Replay mission,
+// 3 Load, 4 Save, 5 Delete, 6 Exit game, 18 Proverbs.
+constexpr int kFileGroup = 1, kTextLoad = 3, kTextSaveGame = 4, kTextDelete = 5,
+              kTextExit = 6, kTextProverbs = 18;
+constexpr int kTextCityShot = 40, kTextMinimapShot = 41, kTextReplayMap = 42, kTextExitToMainMenu = 43;
 bool g_optionsOn = false, g_fileOn = false; // which of our menus are in
+bool g_shotsOn = false, g_k4On = false;     // the File menu's screenshots (item 6); its K4 order and names
 // The pause banner: group 13, string 2 "Game paused ('P' key continues)" (FUN_005b6b50 0x5b6ee9 -> 0x535f50 ->
 // lang_text_draw_centered 0x528890 -> lang_set_current_text -> lang_get_string).
 constexpr int kPauseGroup = 13, kTextPaused = 2;
@@ -131,24 +136,52 @@ MenuItem g_itemsNoAutosave[] = {
     {40, kTextAudio, &MenuAudio, 0, 0},
     {60, kTextHotkeys, &MenuHotkeys, 0, 0},
 };
-// The File menu with our two items: the game's items (0x81e0b0: 6; 0x81e110: 7, with Proverbs) copied at Attach,
-// ours inserted after Save game, every item 20 pixels below the one before.
+// The File menu: the game's items (0x81e0b0: 6; 0x81e110: 7, with Proverbs) copied at Attach. Item 6 adds our two
+// screenshots after Save game. K4 (docs/archive/key_bindings.md section 8) orders it as Augustus's: Replay map, Load, Save,
+// (screenshots), Delete, (Proverbs), Exit to main menu (the game's New game), Exit game; Replay map, Exit to main
+// menu and Exit game are ours (games/emperor/game_menu: our confirmations, Esc answers No). Every item 20 pixels below
+// the one before. Returns the number of items.
 const DWORD kFileItems6 = 0x81e0b0, kFileItems7 = 0x81e110;
-MenuItem g_file6[8], g_file7[9];
+MenuItem g_file6[9], g_file7[10];
 
-void MakeFileMenu(const MenuItem *game, int count, MenuItem *out)
+int MakeFileMenu(const MenuItem *game, int count, MenuItem *out)
 {
     int n = 0;
-    for (int k = 0; k < count; ++k) {
-        out[n++] = game[k];
-        if (game[k].text == kTextSaveGame) {
+    auto shots = [&] {
+        if (g_shotsOn) {
             out[n++] = MenuItem{0, kTextCityShot, &MenuCityShot, 0, 0};
             out[n++] = MenuItem{0, kTextMinimapShot, &MenuMinimapShot, 0, 0};
         }
+    };
+    if (!g_k4On) {
+        for (int k = 0; k < count; ++k) {
+            out[n++] = game[k];
+            if (game[k].text == kTextSaveGame) {
+                shots();
+            }
+        }
+    }
+    else {
+        auto copy = [&](int text) {
+            for (int k = 0; k < count; ++k) {
+                if (game[k].text == text) {
+                    out[n++] = game[k];
+                }
+            }
+        };
+        out[n++] = MenuItem{0, kTextReplayMap, &emperor::game_menu::MenuReplay, 0, 0};
+        copy(kTextLoad);
+        copy(kTextSaveGame);
+        shots();
+        copy(kTextDelete);
+        copy(kTextProverbs);
+        out[n++] = MenuItem{0, kTextExitToMainMenu, &emperor::game_menu::MenuMainMenu, 0, 0};
+        out[n++] = MenuItem{0, kTextExit, &emperor::game_menu::MenuExit, 0, 0};
     }
     for (int k = 0; k < n; ++k) {
         out[k].y = static_cast<short>(20 * k);
     }
+    return n;
 }
 
 const DWORD kBars[] = {0x81e480, 0x81e4b0, 0x81e4e0, 0x81e510, 0x81e540, 0x81e570}; // menu_bar_select 0x449590
@@ -162,8 +195,13 @@ const char *__cdecl Lang_detour(int group, int index)
             return t;
         }
     }
-    if (g_fileOn && group == kFileGroup && (index == kTextCityShot || index == kTextMinimapShot)) {
-        return index == kTextCityShot ? ot::kMenuCityScreenshot : ot::kMenuMinimapScreenshot;
+    if (g_fileOn && group == kFileGroup && index >= kTextCityShot && index <= kTextExitToMainMenu) {
+        switch (index) {
+        case kTextCityShot: return ot::kMenuCityScreenshot;
+        case kTextMinimapShot: return ot::kMenuMinimapScreenshot;
+        case kTextReplayMap: return ot::kMenuReplayMap;
+        default: return ot::kMenuExitToMainMenu;
+        }
     }
     if (g_optionsOn && group == kOptionsGroup && index >= kTextGeneral) {
         switch (index) {
@@ -206,7 +244,8 @@ int __cdecl Width_detour(int group)
     }
     if (g_fileOn && group == kFileGroup) {
         if (g_fileWidth == 0) {
-            g_fileWidth = Tiles({ot::kMenuCityScreenshot, ot::kMenuMinimapScreenshot});
+            g_fileWidth = Tiles({g_shotsOn ? ot::kMenuCityScreenshot : "", g_shotsOn ? ot::kMenuMinimapScreenshot : "",
+                                 g_k4On ? ot::kMenuReplayMap : "", g_k4On ? ot::kMenuExitToMainMenu : ""});
         }
         return std::max(w, g_fileWidth);
     }
@@ -297,8 +336,17 @@ bool IsSinglePlayerFile(const Menu &m)
 
 bool FileWanted()
 {
-    if (!emperor::city_picture::Available()) {
-        core_log("file menu: the screenshots are not available; the game's File menu stays");
+    g_shotsOn = emperor::city_picture::Available();
+    g_k4On = emperor::game_menu::Available();
+    if (!g_shotsOn) {
+        core_log("file menu: the screenshots are not available");
+    }
+    if (!g_k4On) {
+        core_log("file menu: the pause menu's confirmations are not available; the game's New game, Replay mission "
+                 "and Exit game stay");
+    }
+    if (!g_shotsOn && !g_k4On) {
+        core_log("file menu: nothing to change; the game's File menu stays");
         return false;
     }
     int found = 0;
@@ -314,8 +362,8 @@ bool FileWanted()
 
 void FileIn()
 {
-    MakeFileMenu(reinterpret_cast<const MenuItem *>(kFileItems6), 6, g_file6);
-    MakeFileMenu(reinterpret_cast<const MenuItem *>(kFileItems7), 7, g_file7);
+    const int n6 = MakeFileMenu(reinterpret_cast<const MenuItem *>(kFileItems6), 6, g_file6);
+    const int n7 = MakeFileMenu(reinterpret_cast<const MenuItem *>(kFileItems7), 7, g_file7);
     int changed = 0;
     for (DWORD bar : kBars) {
         Menu &m = *reinterpret_cast<Menu *>(bar);
@@ -324,10 +372,13 @@ void FileIn()
         }
         const bool seven = reinterpret_cast<DWORD>(m.items) == kFileItems7;
         m.items = seven ? g_file7 : g_file6;
-        m.count = seven ? 9 : 8;
+        m.count = seven ? n7 : n6;
         ++changed;
     }
-    core_log("file menu: Save city screenshot and Save minimap screenshot added after Save game (%d menu bar(s))", changed);
+    core_log("file menu: %s%s (%d menu bar(s))",
+             g_k4On ? "Replay map, Load, Save, Delete, Exit to main menu, Exit game (ours: Replay map, Exit to main "
+                      "menu, Exit game)" : "the game's items",
+             g_shotsOn ? "; Save city screenshot and Save minimap screenshot after Save game" : "", changed);
 }
 
 } // namespace

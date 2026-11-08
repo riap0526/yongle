@@ -87,6 +87,7 @@ add_library(ddraw SHARED
     src/core/ui/panel.cpp
     src/core/ui/hotkey.cpp
     src/core/options/window.cpp
+    src/core/options/menu.cpp
     src/core/ui/settings_view.cpp
     src/core/ui/perf_view.cpp
     src/core/settings/settings.cpp
@@ -110,6 +111,7 @@ add_library(ddraw SHARED
     src/games/emperor/city_picture.cpp
     src/games/emperor/notice.cpp
     src/games/emperor/keys.cpp
+    src/games/emperor/game_menu.cpp
     src/games/emperor/ambient_rate.cpp
 )
 # Augustus code (AGPL-3.0): third_party/augustus/README.md. Compiled as part of the DLL.
@@ -308,6 +310,7 @@ add_executable(test_restore proxy/ddraw/test_restore.cpp
     src/games/emperor/ui_fixes.cpp src/games/emperor/china_map.cpp src/games/emperor/display_options.cpp
     src/games/emperor/options_window.cpp src/games/emperor/options_text.cpp
     src/games/emperor/options_original.cpp src/games/emperor/options_entry.cpp src/core/options/window.cpp
+    src/core/options/menu.cpp src/games/emperor/game_menu.cpp
     src/core/display/common_sizes.cpp
     src/games/emperor/sound.cpp src/games/emperor/master_volume.cpp src/games/emperor/ambient_rate.cpp
     src/games/emperor/intro.cpp
@@ -356,7 +359,8 @@ target_include_directories(test_hotkey PRIVATE src)
 target_link_options(test_hotkey PRIVATE -static)
 
 # Offline test of core/options (the options window: drafts, widgets, layout, scrolling, tooltip) with a fake painter.
-add_executable(test_options proxy/ddraw/test_options.cpp src/core/options/window.cpp src/core/ui/hotkey.cpp)
+add_executable(test_options proxy/ddraw/test_options.cpp src/core/options/window.cpp src/core/options/menu.cpp
+    src/core/ui/hotkey.cpp)
 target_include_directories(test_options PRIVATE src)
 target_link_options(test_options PRIVATE -static)
 

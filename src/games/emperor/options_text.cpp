@@ -239,6 +239,11 @@ const char *const kNoticeClosePanel = "Close the debug panel first.";           
 const char *const kNoticeZoom = "Zoom: %d%%";
 const char *const kMenuCityScreenshot = "Save city screenshot";       // 136 in the menu font
 const char *const kMenuMinimapScreenshot = "Save minimap screenshot"; // 165
+const char *const kMenuReplayMap = "Replay map";               // the game's "Replay mission" (Open Play is no mission)
+const char *const kMenuExitToMainMenu = "Exit to main menu";   // the game's "New game" (it goes back to the menus)
+const char *const kPauseTitle = "Pause";
+const char *const kPauseContinue = "Continue";
+const char *const kPauseOptions = "Options";
 
 // The Hotkeys window's sections (games/emperor/keys::Section); the actions' names are their settings' labels.
 const char *const kKeySections[] = {"Arrow keys",   "Global hotkeys", "City hotkeys", "Building menus",

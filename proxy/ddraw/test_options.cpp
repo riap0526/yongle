@@ -2,6 +2,7 @@
 // defaults, checkboxes, choices, sliders (arrows, held repeat, the track, dragging, "automatic", the limit now),
 // rows shown only for another row's value, categories and tabs, scrolling (wheel, arrows, thumb), the tooltip after
 // a pause, keys, and that everything drawn stays inside the window. Drawing goes to a fake painter that records it.
+#include "core/options/menu.h"
 #include "core/options/window.h"
 #include "core/ui/hotkey.h"
 
@@ -701,6 +702,35 @@ int main()
         const Op *l1 = q.FindText("First line."), *l2 = q.FindText("Second line.");
         Check(v.TipShown() && l1 && l2 && l2->y > l1->y && !q.FindText("Restart first."),
               "the name: no red line; a line break in the tooltip");
+    }
+
+    // K4: the pause menu (core/options/menu.h): Augustus's layout, a click on a button, Esc and right click close.
+    {
+        co::Menu m;
+        m.Set("Pause", {"Continue", "Replay map", "Load game", "Save game", "Delete game", "Options",
+                        "Exit to main menu", "Exit game"});
+        FakePainter q;
+        m.Draw(q);
+        const Op *panel = q.Find("panel");
+        Check(panel && panel->w == 256 && panel->h == 384 && panel->x == (640 - 256) / 2 && panel->y == (480 - 384) / 2,
+              "pause menu: a panel 256 x 384, centred");
+        Check(q.Count("bar") == 8 && q.Find("bar")->w == 192 && q.Find("bar", 1)->y - q.Find("bar")->y == 40,
+              "pause menu: 8 buttons 192 wide, 40 apart");
+        const Op *last = q.Find("bar", 7);
+        Check(last && last->y + 25 <= panel->y + panel->h - 16, "pause menu: the last button inside the parchment");
+        Check(q.FindText("Pause") && q.FindText("Pause")->font == co::Font::Title && q.Count("frame") == 0,
+              "pause menu: the title; no hover frame yet");
+        const Op *save = q.FindText("Save game");
+        m.MouseMove(Cx(save), Cy(save));
+        q = FakePainter();
+        m.Draw(q);
+        Check(q.Count("frame") == 1 && q.Find("frame")->y == q.Find("bar", 3)->y, "pause menu: hover frame on Save game");
+        m.MouseDown(Cx(save), Cy(save));
+        Check(m.MouseUp(Cx(save), Cy(save)) == 3, "pause menu: a click on Save game gives item 3");
+        m.MouseDown(Cx(save), Cy(save));
+        Check(m.MouseUp(panel->x + 4, panel->y + 4) == co::Menu::kNone, "pause menu: released off the button: nothing");
+        Check(m.Key(0x1b) == co::Menu::kClose && m.Key('P') == co::Menu::kNone && m.RightClick() == co::Menu::kClose,
+              "pause menu: Esc and right click close; other keys nothing");
     }
 
     std::printf("%s\n", g_failures ? "SOME TESTS FAILED" : "all tests passed");

@@ -1,4 +1,4 @@
-// Key bindings (0.2.0 item 7, docs/key_bindings.md): every key the game uses in the city, and ours, as actions with
+// Key bindings (0.2.0 item 7, docs/archive/key_bindings.md): every key the game uses in the city, and ours, as actions with
 // up to two keys each ([keys] in emperor_engine.ini, changed in the Hotkeys window). On the city screens a key press
 // that belongs to an action becomes the key the game itself expects for it (sent to the game's window procedure); a
 // game key that belongs to no action any more is kept from the game; other keys go through. Other screens (saving,
