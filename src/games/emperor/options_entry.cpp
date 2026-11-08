@@ -1,12 +1,14 @@
 #include "games/emperor/options_entry.h"
 
 #include "core/log.h"
+#include "games/emperor/city_picture.h"
 #include "games/emperor/options_text.h"
 #include "games/emperor/options_window.h"
 #include "games/emperor/site.h"
 
 #include <algorithm>
 #include <cstring>
+#include <initializer_list>
 
 // Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e): docs/archive/resolution_ui_original_settings.md §12.2, §12.4 and
 // §14.7 (tools/recon/menu_tables.py, Ghidra, capstone, 2026-11-08); calling conventions: docs/symbols.md.
@@ -45,6 +47,9 @@ constexpr int kOptionsGroup = 2, kTextGeneral = 20, kTextVideo = 21, kTextAudio 
 constexpr int kAutosaveOn = 4, kAutosaveOff = 5; // the game's "Autosave - ON" / "- OFF" (0x449460)
 const Var<int> kAutosaveDisabled{0x10de15c};      // not 0: no autosave (shown as "Autosave - OFF")
 constexpr int kMainMenuGroup = 30, kTextWebsite = 4; // the main menu's "Visit Website" (0x84fa50)
+// The File menu: group 1 (19 texts); ours use numbers it does not have. They go after Save game (text 4).
+constexpr int kFileGroup = 1, kTextSaveGame = 4, kTextCityShot = 40, kTextMinimapShot = 41;
+bool g_optionsOn = false, g_fileOn = false; // which of our menus are in
 
 // The game's dialogs, the fall-back when our window is not available: Speed, Display, Sound options; Autosave.
 const DWORD kSpeedDialog = 0x402440, kDisplayDialog = 0x401ea0, kSoundDialog = 0x402030, kAutosaveToggle = 0x449460;
@@ -73,6 +78,15 @@ void __cdecl MessagesButton()
     if (!ow::OpenCategory(ow::kPageGeneral, ot::kCategoryMessages)) {
         reinterpret_cast<Handler_fn>(kMessagesDialog)();
     }
+}
+
+void __cdecl MenuCityShot()
+{
+    emperor::city_picture::RequestCity(); // the menu has put the city screen back before calling (0x44a3c0)
+}
+void __cdecl MenuMinimapShot()
+{
+    emperor::city_picture::RequestMinimap();
 }
 
 void __cdecl MenuHotkeys()
@@ -113,12 +127,35 @@ MenuItem g_itemsNoAutosave[] = {
     {40, kTextAudio, &MenuAudio, 0, 0},
     {60, kTextHotkeys, &MenuHotkeys, 0, 0},
 };
+// The File menu with our two items: the game's items (0x81e0b0: 6; 0x81e110: 7, with Proverbs) copied at Attach,
+// ours inserted after Save game, every item 20 pixels below the one before.
+const DWORD kFileItems6 = 0x81e0b0, kFileItems7 = 0x81e110;
+MenuItem g_file6[8], g_file7[9];
+
+void MakeFileMenu(const MenuItem *game, int count, MenuItem *out)
+{
+    int n = 0;
+    for (int k = 0; k < count; ++k) {
+        out[n++] = game[k];
+        if (game[k].text == kTextSaveGame) {
+            out[n++] = MenuItem{0, kTextCityShot, &MenuCityShot, 0, 0};
+            out[n++] = MenuItem{0, kTextMinimapShot, &MenuMinimapShot, 0, 0};
+        }
+    }
+    for (int k = 0; k < n; ++k) {
+        out[k].y = static_cast<short>(20 * k);
+    }
+}
+
 const DWORD kBars[] = {0x81e480, 0x81e4b0, 0x81e4e0, 0x81e510, 0x81e540, 0x81e570}; // menu_bar_select 0x449590
 const DWORD kItemsSingle = 0x81e2a0, kItemsOther = 0x81e2f0;
 
 const char *__cdecl Lang_detour(int group, int index)
 {
-    if (group == kOptionsGroup && index >= kTextGeneral) {
+    if (g_fileOn && group == kFileGroup && (index == kTextCityShot || index == kTextMinimapShot)) {
+        return index == kTextCityShot ? ot::kMenuCityScreenshot : ot::kMenuMinimapScreenshot;
+    }
+    if (g_optionsOn && group == kOptionsGroup && index >= kTextGeneral) {
         switch (index) {
         case kTextGeneral: return ot::kMenuGeneral;
         case kTextVideo: return ot::kMenuVideo;
@@ -128,30 +165,42 @@ const char *__cdecl Lang_detour(int group, int index)
         default: break;
         }
     }
-    if (group == kMainMenuGroup && index == kTextWebsite) {
+    if (g_optionsOn && group == kMainMenuGroup && index == kTextWebsite) {
         return ot::kMainMenuOptions;
     }
     return o_Lang(group, index);
 }
 
-int g_ourWidth = 0; // tiles, measured at the first drop-down (the fonts are loaded by then)
+int g_ourWidth = 0, g_fileWidth = 0; // tiles, measured at the first drop-down (the fonts are loaded by then)
+
+// The width in tiles of the widest text, as 0x535bc0 measures a group's own.
+int Tiles(std::initializer_list<const char *> texts)
+{
+    const int font = reinterpret_cast<ImageGetId_fn>(kImageGetId)(reinterpret_cast<void *>(kImages), kFontNormal);
+    int px = 1;
+    for (const char *t : texts) {
+        px = std::max(px, reinterpret_cast<TextWidth_fn>(kTextWidth)(t, font));
+    }
+    return px / 16 + 2;
+}
 
 int __cdecl Width_detour(int group)
 {
     int w = o_Width(group);
-    if (group != kOptionsGroup) {
-        return w;
-    }
-    if (g_ourWidth == 0) {
-        const int font = reinterpret_cast<ImageGetId_fn>(kImageGetId)(reinterpret_cast<void *>(kImages), kFontNormal);
-        int px = 1;
-        for (const char *t : {ot::kMenuGeneral, ot::kMenuVideo, ot::kMenuAudio, ot::kMenuHotkeys, o_Lang(kOptionsGroup, kAutosaveOn),
-                              o_Lang(kOptionsGroup, kAutosaveOff)}) {
-            px = std::max(px, reinterpret_cast<TextWidth_fn>(kTextWidth)(t, font));
+    if (g_optionsOn && group == kOptionsGroup) {
+        if (g_ourWidth == 0) {
+            g_ourWidth = Tiles({ot::kMenuGeneral, ot::kMenuVideo, ot::kMenuAudio, ot::kMenuHotkeys,
+                                o_Lang(kOptionsGroup, kAutosaveOn), o_Lang(kOptionsGroup, kAutosaveOff)});
         }
-        g_ourWidth = px / 16 + 2; // as 0x535bc0
+        return std::max(w, g_ourWidth);
     }
-    return std::max(w, g_ourWidth);
+    if (g_fileOn && group == kFileGroup) {
+        if (g_fileWidth == 0) {
+            g_fileWidth = Tiles({ot::kMenuCityScreenshot, ot::kMenuMinimapScreenshot});
+        }
+        return std::max(w, g_fileWidth);
+    }
+    return w;
 }
 
 BOOL WINAPI KeepWindow(HWND, int)
@@ -175,20 +224,17 @@ bool CallTo(DWORD site, const void *target)
     return PatchCode(site, code, sizeof(code));
 }
 
-
-} // namespace
-
-bool Attach()
+// The Options menu, the main menu and the message list's button (the options window).
+bool OptionsWanted()
 {
     if (!ow::Available()) {
         core_log("options window: not available; the game's Options menu and main menu stay as they are");
         return false;
     }
-    const Site *sites[] = {&kLangString, &kMenuWidth, &kWebsiteMinimize, &kWebsiteOpen};
-    for (const Site *s : sites) {
-        if (!Matches(*s)) {
-            core_log("options window: %s at 0x%lx does not match; the game's Options menu and main menu stay", s->name,
-                     s->address);
+    for (const Site *site : {&kWebsiteMinimize, &kWebsiteOpen}) {
+        if (!Matches(*site)) {
+            core_log("options window: %s at 0x%lx does not match; the game's Options menu and main menu stay",
+                     site->name, site->address);
             return false;
         }
     }
@@ -200,10 +246,11 @@ bool Attach()
             return false;
         }
     }
-    if (!Install(kLangString, &Lang_detour, o_Lang) || !Install(kMenuWidth, &Width_detour, o_Width)) {
-        core_log("options window: the menu texts could not be hooked; the game's Options menu stays");
-        return false;
-    }
+    return true;
+}
+
+void OptionsIn()
+{
     for (DWORD bar : kBars) {
         Menu &m = *reinterpret_cast<Menu *>(bar + sizeof(Menu));
         const bool single = reinterpret_cast<DWORD>(m.items) == kItemsSingle;
@@ -228,7 +275,78 @@ bool Attach()
     if (messages) {
         core_log("options window: the message list's button opens it at General > Messages");
     }
+}
+
+// The File menu's screenshot items (0.2.0 item 6, docs/archive/game_notices.md section 3.4): when the screenshots are there,
+// in the single-player File menus (0x81e0b0, 0x81e110; the other bars' File menus, e.g. multiplayer, stay).
+bool IsSinglePlayerFile(const Menu &m)
+{
+    const DWORD items = reinterpret_cast<DWORD>(m.items);
+    return m.group == kFileGroup && ((items == kFileItems6 && m.count == 6) || (items == kFileItems7 && m.count == 7));
+}
+
+bool FileWanted()
+{
+    if (!emperor::city_picture::Available()) {
+        core_log("file menu: the screenshots are not available; the game's File menu stays");
+        return false;
+    }
+    int found = 0;
+    for (DWORD bar : kBars) {
+        found += IsSinglePlayerFile(*reinterpret_cast<const Menu *>(bar)) ? 1 : 0; // the bar's first menu: File
+    }
+    if (found == 0) {
+        core_log("file menu: no File menu as expected; the game's File menu stays");
+        return false;
+    }
     return true;
+}
+
+void FileIn()
+{
+    MakeFileMenu(reinterpret_cast<const MenuItem *>(kFileItems6), 6, g_file6);
+    MakeFileMenu(reinterpret_cast<const MenuItem *>(kFileItems7), 7, g_file7);
+    int changed = 0;
+    for (DWORD bar : kBars) {
+        Menu &m = *reinterpret_cast<Menu *>(bar);
+        if (!IsSinglePlayerFile(m)) {
+            continue;
+        }
+        const bool seven = reinterpret_cast<DWORD>(m.items) == kFileItems7;
+        m.items = seven ? g_file7 : g_file6;
+        m.count = seven ? 9 : 8;
+        ++changed;
+    }
+    core_log("file menu: Save city screenshot and Save minimap screenshot added after Save game (%d menu bar(s))", changed);
+}
+
+} // namespace
+
+bool Attach()
+{
+    for (const Site *site : {&kLangString, &kMenuWidth}) {
+        if (!Matches(*site)) {
+            core_log("menus: %s at 0x%lx does not match; the game's menus stay as they are", site->name, site->address);
+            return false;
+        }
+    }
+    const bool options = OptionsWanted(), file = FileWanted();
+    if (!options && !file) {
+        return false;
+    }
+    if (!Install(kLangString, &Lang_detour, o_Lang) || !Install(kMenuWidth, &Width_detour, o_Width)) {
+        core_log("menus: the menu texts could not be hooked; the game's menus stay as they are");
+        return false;
+    }
+    g_optionsOn = options;
+    g_fileOn = file;
+    if (options) {
+        OptionsIn();
+    }
+    if (file) {
+        FileIn();
+    }
+    return options;
 }
 
 } // namespace emperor::options_entry

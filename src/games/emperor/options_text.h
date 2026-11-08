@@ -40,4 +40,13 @@ extern const char *const kHotkeysTitle, *const kColumnAction, *const kColumnKey,
     *const kKeyNotChanged, *const kKeyNotUsable, *const kKeyInUse, *const kKeepTitle, *const kKeepCountdown,
     *const kKeep, *const kRevert;
 
+// Our notices in the game's notice boxes (games/emperor/notice; docs/archive/game_notices.md). Our box is 400 pixels
+// wide for a text up to 320 pixels (with its side ornaments), 460 for a longer one. Errors are shown in red.
+extern const char *const kNoticeCitySaved, *const kNoticeMinimapSaved, *const kNoticeNotSaved, *const kNoticeBusy,
+    *const kNoticeOnlyCity, *const kNoticeUnavailable, *const kNoticeNoMemory, *const kNoticeClosePanel;
+extern const char *const kNoticeZoom; // printf format with the zoom in percent
+
+// The File menu's items for the screenshots (options_entry).
+extern const char *const kMenuCityScreenshot, *const kMenuMinimapScreenshot;
+
 } // namespace emperor::options_text

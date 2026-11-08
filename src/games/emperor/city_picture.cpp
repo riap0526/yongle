@@ -12,6 +12,8 @@
 #include "core/ui/hotkey.h"
 #include "core/ui/panel.h"
 #include "core/ui/settings_view.h"
+#include "games/emperor/notice.h"
+#include "games/emperor/options_text.h"
 #include "games/emperor/scroll.h"
 #include "games/emperor/site.h"
 #include "games/emperor/zoom.h"
@@ -96,10 +98,21 @@ template <typename T> T *At(DWORD address)
     return reinterpret_cast<T *>(address + g_imageShift);
 }
 
+namespace ot = emperor::options_text;
+
+// In the game's own notice boxes (games/emperor/notice; on our caption line when those are not available).
 void Notice(const char *text)
 {
-    core::output::SetNotice(text, 5000);
+    emperor::notice::Post(text);
 }
+
+// An error or something to do first: in red, as the game's own warnings.
+void Warn(const char *text)
+{
+    emperor::notice::Post(text, true);
+}
+
+std::atomic<int> g_saving{0}; // the kind being written (Kind), for the message when it is done
 
 // A game text of at most size bytes, for the log: printable characters as they are, others as \xNN; "(none)" when it
 // does not end within size.
@@ -197,14 +210,13 @@ bool CityScreen()
 
 void Done(bool ok, const char *text)
 {
-    char line[300];
-    if (ok) {
-        std::snprintf(line, sizeof(line), "Picture saved: %s", text);
+    core_log("picture: %s %s", ok ? "saved:" : "not saved:", text ? text : "");
+    if (!ok) {
+        Warn(ot::kNoticeNotSaved);
     }
     else {
-        std::snprintf(line, sizeof(line), "The picture could not be saved (details in the log).");
+        Notice(g_saving.load() == static_cast<int>(Kind::Minimap) ? ot::kNoticeMinimapSaved : ot::kNoticeCitySaved);
     }
-    Notice(line);
     g_busy = false;
 }
 
@@ -213,22 +225,22 @@ void Request(Kind kind)
     const char *what = kind == Kind::City ? "city picture" : "minimap picture";
     if (!g_attached || !core::diag::Enabled(g_feature) || !emperor::scroll::Working()) {
         core_log("picture: %s key pressed, but the pictures are off (see above)", what);
-        Notice("Pictures are not available now (details in the log).");
+        Warn(ot::kNoticeUnavailable);
         return;
     }
     if (core::ui::IsOpen()) { // the game is paused: the city is not drawn until the panel closes
-        Notice("Close the debug panel first.");
+        Warn(ot::kNoticeClosePanel);
         return;
     }
     if (!CityScreen()) {
         core_log("picture: %s key pressed outside the city (screen 0x%02x)", what,
                  static_cast<unsigned char>(*kGameScreen));
-        Notice("Pictures can only be taken while the city is shown.");
+        Warn(ot::kNoticeOnlyCity);
         return;
     }
     if (g_busy.load()) {
         core_log("picture: %s key pressed while the last picture is still being written", what);
-        Notice("The last picture is still being saved.");
+        Warn(ot::kNoticeBusy);
         return;
     }
     g_pending = kind;
@@ -311,7 +323,7 @@ core::capture::BigPicture *DrawCity(int orientation, int keepRows)
     if (!core::display::PlanStrips(c.in, &c.plan)) {
         core_log("picture: no city to draw (columns %d..%d, half rows %d..%d of %d, tiles %d x %d)", left, right, top,
                  bottom, mapRows, *kTileWidth, *kTileHalfHeight);
-        Notice("The picture could not be saved (details in the log).");
+        Warn(ot::kNoticeNotSaved);
         return nullptr;
     }
     const core::display::StripPlan &p = c.plan;
@@ -330,7 +342,7 @@ core::capture::BigPicture *DrawCity(int orientation, int keepRows)
             core_log("picture: no memory for the drawing buffer (%.1f MB)", bytes / (1024.0 * 1024.0));
         }
         delete c.pic;
-        Notice("Not enough memory for the city picture; nothing was saved.");
+        Warn(ot::kNoticeNoMemory);
         return nullptr;
     }
     BYTE timers[kTimerFlagCount];
@@ -347,14 +359,14 @@ core::capture::BigPicture *DrawCity(int orientation, int keepRows)
         delete c.pic;
         core_log("picture: the city picture is off for the rest of the run (an error while drawing; the game's "
                  "state was put back)");
-        Notice("The picture could not be saved (details in the log).");
+        Warn(ot::kNoticeNotSaved);
         return nullptr;
     }
     core_log("picture: the city drawn in %lu ms", static_cast<unsigned long>(c.drawMs));
     return c.pic;
 }
 
-void Save(core::capture::BigPicture *pic, const char *kind, int scale)
+void Save(core::capture::BigPicture *pic, const char *kind, int scale, Kind which)
 {
     core::capture::BigOptions o;
     o.kind = kind;
@@ -362,6 +374,7 @@ void Save(core::capture::BigPicture *pic, const char *kind, int scale)
     o.transparent = false;
     o.done = &Done;
     g_busy = true;
+    g_saving = static_cast<int>(which);
     core::capture::SaveBig(pic, o);
 }
 
@@ -379,10 +392,10 @@ void TakeCity(int orientation)
     core::capture::BigPicture *fewest = g_seamCheck ? DrawCity(orientation, 100000) : nullptr;
     char stem[48], kind[64];
     CityStem(stem, sizeof(stem));
-    Save(pic, stem, 1);
+    Save(pic, stem, 1, Kind::City);
     if (fewest) {
         std::snprintf(kind, sizeof(kind), "%s-fewest", stem);
-        Save(fewest, kind, 1);
+        Save(fewest, kind, 1, Kind::City);
     }
 }
 
@@ -420,7 +433,7 @@ void TakeMinimap()
     const size_t n = static_cast<size_t>(c.pitchPx) * c.rows;
     c.buf = static_cast<BYTE *>(std::malloc(n * 2));
     if (!c.buf) {
-        Notice("Not enough memory for the minimap picture; nothing was saved.");
+        Warn(ot::kNoticeNoMemory);
         return;
     }
     auto *px = reinterpret_cast<std::uint16_t *>(c.buf);
@@ -439,7 +452,7 @@ void TakeMinimap()
         std::free(c.buf);
         core_log("picture: the pictures are off for the rest of the run (an error while drawing the minimap; the "
                  "game's state was put back)");
-        Notice("The picture could not be saved (details in the log).");
+        Warn(ot::kNoticeNotSaved);
         return;
     }
     // what was drawn: the rows of the minimap only (its view frame lies below them)
@@ -458,14 +471,14 @@ void TakeMinimap()
     if (x2 < 0) {
         std::free(c.buf);
         core_log("picture: the minimap drew nothing");
-        Notice("The picture could not be saved (details in the log).");
+        Warn(ot::kNoticeNotSaved);
         return;
     }
     const int w = x2 - x1 + 1, h = y2 - y1 + 1;
     core::capture::BigPicture *pic = core::capture::BigPicture::Create(w, h);
     if (!pic) {
         std::free(c.buf);
-        Notice("Not enough memory for the minimap picture; nothing was saved.");
+        Warn(ot::kNoticeNoMemory);
         return;
     }
     for (int y = 0; y < h; ++y) {
@@ -481,7 +494,7 @@ void TakeMinimap()
     char stem[48], kind[64];
     CityStem(stem, sizeof(stem));
     std::snprintf(kind, sizeof(kind), "%s_minimap", stem);
-    Save(pic, kind, g_minimapScale);
+    Save(pic, kind, g_minimapScale, Kind::Minimap);
 }
 
 // After every city_render: a picture asked for is made now (the frame has been drawn as usual).
@@ -653,6 +666,21 @@ bool Attach(bool scrollAttached)
     core_log("picture: city picture (%s) and minimap picture (%s) installed; minimap x%d", city, minimap,
              g_minimapScale);
     return true;
+}
+
+bool Available()
+{
+    return g_attached;
+}
+
+void RequestCity()
+{
+    FireCity();
+}
+
+void RequestMinimap()
+{
+    FireMinimap();
 }
 
 } // namespace emperor::city_picture

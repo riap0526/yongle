@@ -48,6 +48,7 @@
 #include "games/emperor/display_options.h"
 #include "games/emperor/fullscreen.h"
 #include "games/emperor/master_volume.h"
+#include "games/emperor/notice.h"
 #include "games/emperor/options_entry.h"
 #include "games/emperor/options_original.h"
 #include "games/emperor/options_window.h"
@@ -697,6 +698,7 @@ extern "C" void emperor_attach(void)
         }
     }
     emperor::ui_fixes::Attach();
+    emperor::notice::Attach(); // 0.2.0 item 6: our messages in the game's notice boxes
     emperor::sound::Attach(); // O4: [sound] background_sound, ambient_sounds; pan within 0..127
     emperor::options_original::Attach(); // the game's own options; a new player's starting speeds
     emperor::master_volume::Attach();    // [sound] master_volume

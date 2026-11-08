@@ -222,6 +222,19 @@ const char *const kKeyNotUsable = "That key cannot be used here; try another one
 const char *const kKeyInUse = "%s is already the key for \"%s\"; try another one.";
 const char *const kKeepTitle = "Keep this setting?";
 const char *const kKeepCountdown = "The previous setting comes back in %d s.";
+// Widths in the notice font, measured with tools/mockups/textwidth.py (2026-11-08).
+const char *const kNoticeCitySaved = "City screenshot saved in the shots folder.";       // 279
+const char *const kNoticeMinimapSaved = "Minimap screenshot saved in the shots folder."; // 309 (still the 400 box)
+const char *const kNoticeNotSaved = "Screenshot could not be saved; see the log.";      // 291
+const char *const kNoticeBusy = "Still saving the last screenshot.";                    // 212
+const char *const kNoticeOnlyCity = "Screenshots work only in the city view.";           // 265
+const char *const kNoticeUnavailable = "The screenshots are not available now.";        // 261
+const char *const kNoticeNoMemory = "No memory for the screenshot; not saved.";         // 279
+const char *const kNoticeClosePanel = "Close the debug panel first.";                   // 186
+const char *const kNoticeZoom = "Zoom: %d%%";
+const char *const kMenuCityScreenshot = "Save city screenshot";       // 136 in the menu font
+const char *const kMenuMinimapScreenshot = "Save minimap screenshot"; // 165
+
 const char *const kKeep = "Keep";
 const char *const kRevert = "Revert";
 

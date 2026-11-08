@@ -17,4 +17,10 @@ void RegisterSettings();
 // when a site does not match or smooth scrolling's hooks are not there.
 bool Attach(bool scrollAttached);
 
+// True once attached (the File menu's items are added only then).
+bool Available();
+// Game thread (the File menu's items): as the keys, the city or minimap screenshot at the next city frame.
+void RequestCity();
+void RequestMinimap();
+
 } // namespace emperor::city_picture

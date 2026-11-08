@@ -6,6 +6,7 @@
 #include "core/log.h"
 #include "core/scroll/smooth_scroll.h"
 #include "core/settings/settings.h"
+#include "games/emperor/notice.h"
 #include "games/emperor/scroll.h"
 #include "games/emperor/site.h"
 
@@ -189,6 +190,7 @@ void MoveTowards(int target, int x, int y, const char *by)
         core_log("zoom: %s at (%d,%d): %d%% -> %d%%%s", by, x, y, g_requested, target,
                  target == g_requested ? " (nothing to do)" : "");
     }
+    emperor::notice::Zoom(g_requested); // the zoom box at once, also when there is nothing to do (at a limit)
     g_target = target;
     g_anchorX = x;
     g_anchorY = y;
@@ -438,6 +440,7 @@ bool Advance(bool smooth)
     }
     g_requested = next;
     Relayout(g_by); // logged (with the layout) only when the target is reached
+    emperor::notice::Zoom(g_now.percent); // the number counts along as the zoom moves (Augustus's way)
     if (!Animating()) {
         *kRedraw = 1;
     }
