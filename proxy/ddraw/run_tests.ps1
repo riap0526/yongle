@@ -7,6 +7,7 @@
 #               screen ~1 s each; the panel must open only with present = display (hotkey Insert, and once
 #               with ui.panel_key = Ctrl+F12); F11 screenshots and the F12 problem report
 #   test_hotkey core/ui/hotkey: the hotkey syntax (no DLL)
+#   test_options core/options: the options window with a fake painter (no DLL)
 #   test_ini    core/settings/ini_text: changing values in the ini, keeping everything else (no DLL)
 #   test_settings the settings model: load, requests, callbacks, saving (no DLL; rewrites the ini next to it,
 #               which is put back to the default at the end)
@@ -76,6 +77,7 @@ Run 'test_emu' 'emulated' @('.\ddraw.dll', 'panel') 'display'
 Run 'test_emu' 'emulated' @('.\ddraw.dll', 'panel-ctrlf12') 'display' "[ui]`r`npanel_key = Ctrl+F12"
 Run 'test_files' 'emulated' @()
 Run 'test_hotkey' 'emulated' @()
+Run 'test_options' 'emulated' @()
 Run 'test_ini' 'emulated' @()
 Run 'test_settings' 'emulated' @()
 Run 'test_scroll' 'emulated' @()

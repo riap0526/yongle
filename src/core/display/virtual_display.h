@@ -78,6 +78,16 @@ void SetKeyFilter(KeyFilter filter);
 using MouseFilter = bool (*)(UINT message, WPARAM wparam, int x, int y);
 void SetMouseFilter(MouseFilter filter);
 
+// A modal window of a game layer's own (e.g. its options window): while active() is true, the game window's keys,
+// characters and mouse messages go to message() on the game thread instead of the game (mouse positions in the mode's
+// coordinates; the wheel too), after our panel and the action keys had them; Alt+F4 still reaches the game. A button
+// released after the window closed is kept from the game when its press went to the window. One; nullptr removes it.
+struct ModalInput {
+    bool (*active)();
+    void (*message)(UINT message, WPARAM wparam, LPARAM lparam, int x, int y);
+};
+void SetModalInput(const ModalInput *input);
+
 // Called on the game thread when the game window gets the focus back (WM_ACTIVATEAPP becoming active, WM_SETFOCUS),
 // before the game and our panel see the message: e.g. what a game layer paused when the focus went goes on, whether
 // or not the panel is open. One handler; nullptr removes it.

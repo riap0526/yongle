@@ -66,6 +66,8 @@ bool Windowed() { return false; }
 void SetWindowClient(int, int) {}
 struct ActionKey;
 void AddActionKey(ActionKey *) {}
+struct ModalInput;
+void SetModalInput(const ModalInput *) {}
 } // namespace core::display
 
 namespace core::output {

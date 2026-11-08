@@ -86,6 +86,7 @@ add_library(ddraw SHARED
     src/core/scroll/smooth_scroll.cpp
     src/core/ui/panel.cpp
     src/core/ui/hotkey.cpp
+    src/core/options/window.cpp
     src/core/ui/settings_view.cpp
     src/core/ui/perf_view.cpp
     src/core/settings/settings.cpp
@@ -98,6 +99,8 @@ add_library(ddraw SHARED
     src/games/emperor/ui_fixes.cpp
     src/games/emperor/china_map.cpp
     src/games/emperor/display_options.cpp
+    src/games/emperor/options_window.cpp
+    src/games/emperor/options_text.cpp
     src/games/emperor/sound.cpp
     src/games/emperor/intro.cpp
     src/games/emperor/zoom.cpp
@@ -298,6 +301,8 @@ add_custom_command(TARGET test_guard POST_BUILD
 add_executable(test_restore proxy/ddraw/test_restore.cpp
     src/games/emperor/scroll.cpp src/games/emperor/resolution.cpp src/games/emperor/emperor.cpp
     src/games/emperor/ui_fixes.cpp src/games/emperor/china_map.cpp src/games/emperor/display_options.cpp
+    src/games/emperor/options_window.cpp src/games/emperor/options_text.cpp src/core/options/window.cpp
+    src/core/display/common_sizes.cpp
     src/games/emperor/sound.cpp src/games/emperor/ambient_rate.cpp src/games/emperor/intro.cpp
     src/games/emperor/zoom.cpp src/core/display/city_zoom.cpp
     src/games/emperor/city_picture.cpp src/core/display/city_strips.cpp src/core/capture/big_picture.cpp
@@ -340,6 +345,11 @@ target_link_options(test_settings PRIVATE -static)
 add_executable(test_hotkey proxy/ddraw/test_hotkey.cpp src/core/ui/hotkey.cpp)
 target_include_directories(test_hotkey PRIVATE src)
 target_link_options(test_hotkey PRIVATE -static)
+
+# Offline test of core/options (the options window: drafts, widgets, layout, scrolling, tooltip) with a fake painter.
+add_executable(test_options proxy/ddraw/test_options.cpp src/core/options/window.cpp)
+target_include_directories(test_options PRIVATE src)
+target_link_options(test_options PRIVATE -static)
 
 # Timer probe: timeGetTime/Sleep granularity and an emulation of Emperor's 50 ms present gate (docs/performance.md).
 # A development tool, not in the public source export.

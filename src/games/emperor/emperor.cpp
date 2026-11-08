@@ -47,6 +47,7 @@
 #include "games/emperor/city_picture.h"
 #include "games/emperor/display_options.h"
 #include "games/emperor/fullscreen.h"
+#include "games/emperor/options_window.h"
 #include "games/emperor/resolution.h"
 #include "games/emperor/scroll.h"
 #include "games/emperor/sound.h"
@@ -246,15 +247,18 @@ void DrawOnlyFrame(DrawOnlyCall &c)
 
 int __cdecl LoopStep_detour()
 {
-    if (core::ui::IsOpen()) {
+    const bool options = emperor::options_window::IsOpen();
+    if (core::ui::IsOpen() || options) {
         if (!g_paused) {
             g_paused = true;
-            LogRates(" (panel opened: game paused)");
+            LogRates(options ? " (options window opened: game paused)" : " (panel opened: game paused)");
         }
-        // While the panel asks whether to keep a new resolution, the game draws frames (at most ~60 per second) so
-        // the new layout can be seen; sim_tick_due says no, so the city does not move on.
+        // While the panel asks whether to keep a new resolution, or while our options window is open (it is drawn
+        // over each frame), the game draws frames (at most ~60 per second); sim_tick_due says no, so the city does
+        // not move on.
         DWORD now = timeGetTime();
-        if (core::ui::WantsGameFrames() && now - g_lastDrawOnly >= 16 && core::diag::Enabled(g_drawFrames)) {
+        if ((core::ui::WantsGameFrames() || options) && now - g_lastDrawOnly >= 16 &&
+            core::diag::Enabled(g_drawFrames)) {
             g_lastDrawOnly = now;
             DrawOnlyCall c{0, {}};
             if (core::diag::Guarded(g_drawFrames, [](void *p) { DrawOnlyFrame(*static_cast<DrawOnlyCall *>(p)); },
@@ -269,7 +273,7 @@ int __cdecl LoopStep_detour()
     }
     if (g_paused) {
         g_paused = false;
-        core_log("emperor: panel closed: game resumed");
+        core_log("emperor: panel or options window closed: game resumed");
         g_since = GetTickCount();
         g_loops = g_ticks = 0;
         g_lastLoop = 0; // the pause is not a frame time
@@ -490,6 +494,7 @@ void __cdecl SimTick_detour()
 void __cdecl ScreenPresent_detour(int param)
 {
     emperor::fullscreen::OnPresent();
+    emperor::options_window::OnPresent(GameAddress(__builtin_return_address(0))); // over the frame just drawn
     if (param == 1 || *kPresentForce != 0) {
         core::output::HoldNextFrame(kPresentGateMs);
     }
@@ -683,6 +688,9 @@ extern "C" void emperor_attach(void)
             core_log("zoom: not installed (smooth scrolling's hooks are not): the city stays at 100%%");
         }
         emperor::city_picture::Attach(scroll); // 0.2.0: the city and minimap pictures (scroll's city_render hook)
+        if (threaded) {
+            emperor::options_window::Attach(); // drawn in screen_present, which is hooked only then
+        }
     }
     emperor::ui_fixes::Attach();
     emperor::sound::Attach(); // O4: [sound] background_sound, ambient_sounds; pan within 0..127

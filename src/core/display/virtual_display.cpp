@@ -91,6 +91,8 @@ int EdgeBand()
 }
 
 POINT g_panelCursor{0, 0}; // the mode position the game last saw before our panel opened
+bool ModalActive();         // a game layer's modal window is open (SetModalInput)
+bool g_modalHeld = false;   // GetCursorPos holds the cursor for the modal window (g_panelCursor set when it opened)
 
 // The frame the game last presented (game thread): what the screenshot hotkey saves. The memory belongs to the
 // presenting surface; FrameGone clears it before that is freed.
@@ -215,7 +217,19 @@ int WINAPI GetSystemMetrics_detour(int index)
 BOOL WINAPI GetCursorPos_detour(LPPOINT pt)
 {
     void *caller = __builtin_return_address(0);
-    if (pt && Acting(caller, nullptr) && core::ui::IsOpen()) {
+    const bool modal = ModalActive();
+    if (pt && Acting(caller, nullptr) && modal && !g_modalHeld && !core::ui::IsOpen()) {
+        // A modal window just opened: the game keeps seeing the cursor where it is now, as for our panel.
+        POINT c{};
+        o_GetCursorPos(&c);
+        o_ScreenToClient(g_hwnd, &c);
+        g_panelCursor = ToVirtual(c);
+        g_modalHeld = true;
+    }
+    if (!modal) {
+        g_modalHeld = false;
+    }
+    if (pt && Acting(caller, nullptr) && (core::ui::IsOpen() || g_modalHeld)) {
         // The cursor is on our panel: the game sees it where it was when the panel opened, kept 2 pixels away from
         // the edges (the game may draw frames while the panel asks to keep a new resolution: no edge scrolling).
         LONG x = g_panelCursor.x, y = g_panelCursor.y;
@@ -255,7 +269,7 @@ BOOL WINAPI GetCursorPos_detour(LPPOINT pt)
 // While our panel is open no key is down for the game (keys pressed for the panel do not reach it).
 SHORT WINAPI GetAsyncKeyState_detour(int vk)
 {
-    if (core::ui::IsOpen() && Acting(__builtin_return_address(0), nullptr)) {
+    if ((core::ui::IsOpen() || ModalActive()) && Acting(__builtin_return_address(0), nullptr)) {
         return 0;
     }
     return o_GetAsyncKeyState(vk);
@@ -263,7 +277,7 @@ SHORT WINAPI GetAsyncKeyState_detour(int vk)
 
 SHORT WINAPI GetKeyState_detour(int vk)
 {
-    if (core::ui::IsOpen() && Acting(__builtin_return_address(0), nullptr)) {
+    if ((core::ui::IsOpen() || ModalActive()) && Acting(__builtin_return_address(0), nullptr)) {
         return 0;
     }
     return o_GetKeyState(vk);
@@ -747,6 +761,52 @@ bool PanelMessage(UINT m, WPARAM w, LPARAM l)
     return false;
 }
 
+// A game layer's modal window (SetModalInput): its input instead of the game's.
+const core::display::ModalInput *g_modal = nullptr;
+UINT g_modalButtons = 0; // buttons pressed on the modal window: their release is kept from the game
+
+bool ModalActive()
+{
+    return g_modal && g_modal->active();
+}
+
+bool ModalMessage(HWND hwnd, UINT m, WPARAM w, LPARAM l)
+{
+    if (!g_modal) {
+        return false;
+    }
+    UINT bit = ButtonBit(m);
+    bool up = m == WM_LBUTTONUP || m == WM_RBUTTONUP || m == WM_MBUTTONUP;
+    if (!g_modal->active()) {
+        if (up && (g_modalButtons & bit)) {
+            g_modalButtons &= ~bit;
+            return true;
+        }
+        return false;
+    }
+    if ((m == WM_SYSKEYDOWN || m == WM_SYSKEYUP) && w == VK_F4) {
+        return false; // Alt+F4 still closes the game
+    }
+    if (IsKeyMessage(m)) {
+        g_modal->message(m, w, l, 0, 0);
+        return true;
+    }
+    bool client = IsClientMouseMessage(m);
+    if (client || m == WM_MOUSEWHEEL || m == WM_MOUSEHWHEEL) {
+        POINT p{GET_X_LPARAM(l), GET_Y_LPARAM(l)};
+        if (!client) {
+            o_ScreenToClient(hwnd, &p);
+        }
+        p = ToVirtual(p);
+        if (bit) {
+            g_modalButtons = up ? g_modalButtons & ~bit : g_modalButtons | bit;
+        }
+        g_modal->message(m, w, l, p.x, p.y);
+        return true;
+    }
+    return false;
+}
+
 // A framed full-screen picture: presses and the wheel on the background around it are kept from the game (a click
 // on the parchment does nothing). A release reaches the game only when its press did, wherever it happens.
 // Movement is mapped and clamped to the picture's edge (ToVirtual), so the game's own cursor, a system cursor
@@ -940,6 +1000,9 @@ LRESULT CALLBACK SubclassProc(HWND hwnd, UINT m, WPARAM w, LPARAM l)
         g_focusHandler(); // before the panel (which may keep the message) and the game
     }
     if (hwnd == g_hwnd && PanelMessage(m, w, l)) {
+        return 0;
+    }
+    if (hwnd == g_hwnd && ModalMessage(hwnd, m, w, l)) {
         return 0;
     }
     if ((m == WM_KEYDOWN || m == WM_SYSKEYDOWN) && hwnd == g_hwnd && g_keyFilter && g_keyFilter(m, w, l)) {
@@ -1259,6 +1322,11 @@ void AddActionKey(ActionKey *key)
 void SetFocusHandler(FocusHandler handler)
 {
     g_focusHandler = handler;
+}
+
+void SetModalInput(const ModalInput *input)
+{
+    g_modal = input;
 }
 
 void Present(const void *pixels, int pitch, int w, int h, const char *how)
