@@ -351,24 +351,21 @@ bool DrawGameText(Image &im, const char *text, int x0, int y0, int w, int h)
 // ---------------------------------------------------------------------------------------------
 // R2d.1 (docs/resolution_ui/r2d1.md): how the two kinds of front-end screens are shown
 
-// O2a (docs/archive/optimization.md): original -- the game's whole 1024x768 frame at its own size (as native: one game pixel
-// per output pixel), centred, black around and no border, as the game looks on a wide screen without us; the loading
-// screens' status line where the game draws it.
-// The ini spellings name the size first and the background second, as the China map's scaled and native (O2a test,
-// docs/archive/optimization.md): kFramed is "scaled" and kBlack "scaled_black" (before 0.1.3 "framed" and "black", renamed
-// in the file at start-up).
-enum Look { kNative, kFramed, kBlack, kNativeCity, kOriginal };
-const char *const kLoadingLooks[] = {"native", "scaled", "scaled_black", "original"};
-const char *const kLoadingLabels[] = {"native (own size, black around)", "scaled (as large as fits, parchment around)",
-                                      "scaled_black (whole frame scaled, black bars)",
-                                      "original (whole frame at its own size, black around)"};
-const Look kLoadingLook[] = {kNative, kFramed, kBlack, kOriginal};
-const char *const kMenuLooks[] = {"native_city", "native", "scaled", "scaled_black", "original"};
-const char *const kMenuLabels[] = {"native_city (own size, your city around)", "native (own size, parchment around)",
-                                   "scaled (as large as fits, parchment around)",
-                                   "scaled_black (whole frame scaled, black bars)",
-                                   "original (whole frame at its own size, black around)"};
-const Look kMenuLook[] = {kNativeCity, kNative, kFramed, kBlack, kOriginal};
+// 0.2.0 item 8 (docs/archive/display_scale_all.md): every look shows the picture at its own size times the city's
+// scale (resolution::CityScale), or as large as fits when that is too large; the settings only choose the design around
+// it. kNative: the fret border, parchment around (the loading screens: black around); kNativeCity: the fret border, the
+// player's city blurred around; kOriginal (O2a): the game's whole 1024x768 frame, black around and no border, as the
+// game looks on a wide screen without us, the loading screens' status line where the game draws it. The scaled looks
+// (the whole frame as large as fits, on parchment or with black bars) are gone: original at a large display scale
+// gives the black-bar one.
+enum Look { kNative, kNativeCity, kOriginal };
+const char *const kLoadingLooks[] = {"framed", "original"};
+const char *const kLoadingLabels[] = {"framed (in a fret border)", "original (the game's own picture, black around)"};
+const Look kLoadingLook[] = {kNative, kOriginal};
+const char *const kMenuLooks[] = {"city", "parchment", "original"};
+const char *const kMenuLabels[] = {"city (your city around)", "parchment (parchment around)",
+                                   "original (the game's own picture, black around)"};
+const Look kMenuLook[] = {kNativeCity, kNative, kOriginal};
 Look g_loadingLook = kNative;
 Look g_menuLook = kNativeCity;
 
@@ -560,7 +557,8 @@ void CityLeft(bool wait = false)
     core::capture::SaveAs(g_shot.px.data(), g_shot.w * 2, g_shot.w, g_shot.h, kAutoPicture, wait);
 }
 
-int g_composed[8] = {0, 0, 0, 0, -1, -1, -1, -1}; // screen w, h, block w, h, labels, look, loading, background
+int g_composed[9] = {0, 0, 0, 0, -1, -1, -1, -1, -1}; // screen w, h, block w, h, labels, look, loading, background,
+                                                       // scale x 1000
 char g_composedText[256] = "";
 bool g_textDrawn = false; // the last background has the status line in it
 
@@ -568,24 +566,35 @@ bool g_textDrawn = false; // the last background has the status line in it
 // status panel under it with `text` (the game's bytes) in the game's font. Outside the frame (R2d.1): parchment;
 // black for a loading screen at its own size; for kNativeCity the city background with the border along the screen
 // edges, parchment until that background is ready; for kOriginal black everywhere, no border.
-void Compose(SIZE screen, int pw, int ph, int below, const char *text, bool labels, Look look, bool loading)
+// The outer fill's size in units for this layout: the city background is made at that size (one unit = one screen
+// pixel at scale 1; the output enlarges it by the layout's scale).
+SIZE OuterUnits(SIZE screen, int pw, int bh, double scale)
 {
-    const bool native = look == kNative || look == kNativeCity || look == kOriginal;
+    FrameLayout l{};
+    if (!core::display::ComputeFrameLayout(screen.cx, screen.cy, pw, bh, &l, scale)) {
+        return SIZE{0, 0};
+    }
+    return SIZE{l.outerU, l.outerV};
+}
+
+void Compose(SIZE screen, int pw, int ph, int below, const char *text, bool labels, Look look, bool loading, double scale)
+{
+    FrameLayout l{};
+    if (!core::display::ComputeFrameLayout(screen.cx, screen.cy, pw, ph + below, &l, scale)) {
+        return;
+    }
     int cityVersion = -1;
     if (look == kNativeCity && !labels && core::diag::Enabled(g_cityFeature)) {
-        RequestBackdrop(screen.cx, screen.cy);
+        RequestBackdrop(l.outerU, l.outerV);
         AcquireSRWLockShared(&g_backdrop.lock);
-        if (g_backdrop.w == screen.cx && g_backdrop.h == screen.cy) {
+        if (g_backdrop.w == l.outerU && g_backdrop.h == l.outerV) {
             cityVersion = g_backdrop.version;
         }
         ReleaseSRWLockShared(&g_backdrop.lock);
     }
-    const int key[8] = {screen.cx, screen.cy, pw, ph + below, labels, look, loading, cityVersion};
+    const int key[9] = {screen.cx, screen.cy, pw, ph + below, labels, look, loading, cityVersion,
+                        static_cast<int>(scale * 1000 + 0.5)};
     if ((std::memcmp(key, g_composed, sizeof(key)) == 0 && std::strcmp(text, g_composedText) == 0) || !LoadTiles()) {
-        return;
-    }
-    FrameLayout l{};
-    if (!core::display::ComputeFrameLayout(screen.cx, screen.cy, pw, ph + below, &l, native)) {
         return;
     }
     Image outer(l.outerU, l.outerV, kLabelOut), frame(l.frameU, l.frameV, kLabelPad);
@@ -598,23 +607,20 @@ void Compose(SIZE screen, int pw, int ph, int below, const char *text, bool labe
     }
     else if (!labels) {
         bool city = false;
-        if (l.native && cityVersion >= 0) { // units are screen pixels at scale 1
+        if (cityVersion >= 0) { // made at the outer fill's size (OuterUnits)
             AcquireSRWLockShared(&g_backdrop.lock);
-            if (g_backdrop.w == screen.cx && g_backdrop.h == screen.cy) {
-                for (int y = 0; y < screen.cy && y < outer.h; ++y) {
-                    std::memcpy(outer.px.data() + static_cast<size_t>(y) * outer.w,
-                                g_backdrop.px.data() + static_cast<size_t>(y) * screen.cx,
-                                static_cast<size_t>(std::min<int>(screen.cx, outer.w)) * 2);
-                }
+            if (g_backdrop.w == outer.w && g_backdrop.h == outer.h) {
+                std::memcpy(outer.px.data(), g_backdrop.px.data(), outer.px.size() * 2);
                 city = true;
             }
             ReleaseSRWLockShared(&g_backdrop.lock);
         }
         if (city) {
-            Frame(outer, false, false, screen.cx, screen.cy); // the border along the screen edges
+            // The border along the screen edges: the screen in units (the last unit may be partly off the screen).
+            Frame(outer, false, false, static_cast<int>(screen.cx / l.s), static_cast<int>(screen.cy / l.s));
             around = "the city background";
         }
-        else if (l.native && loading) {
+        else if (loading) {
             std::fill(outer.px.begin(), outer.px.end(), WORD{0});
             around = "black";
         }
@@ -631,13 +637,14 @@ void Compose(SIZE screen, int pw, int ph, int below, const char *text, bool labe
         Inset(frame, bx, by, pw, kInsetHeight);
         g_textDrawn = text[0] && DrawGameText(frame, text, bx, by, pw, kInsetHeight);
     }
-    core::output::SetBackground(screen.cx, screen.cy, pw, ph + below, native, outer.px.data(), outer.w * 2,
+    core::output::SetBackground(screen.cx, screen.cy, pw, ph + below, scale, outer.px.data(), outer.w * 2,
                                 frame.px.data(), frame.w * 2);
     std::memcpy(g_composed, key, sizeof(key));
     std::snprintf(g_composedText, sizeof(g_composedText), "%s", text);
-    core_log("fullscreen: background for a %dx%d block (picture %dx%d) on %ldx%ld, %s, %s around: outer %dx%d "
+    core_log("fullscreen: background for a %dx%d block (picture %dx%d) on %ldx%ld, %s %.2f, %s around: outer %dx%d "
              "units, frame %dx%d units%s%s",
-             pw, ph + below, pw, ph, screen.cx, screen.cy, l.native ? "own size" : "as large as fits", around,
+             pw, ph + below, pw, ph, screen.cx, screen.cy,
+             l.native ? "at the city's scale" : "as large as fits (the city's scale is larger):", l.s, around,
              l.outerU, l.outerV, l.frameU, l.frameV,
              below > 0 ? (g_textDrawn ? ", status panel with the line in the game's font" : ", status panel") : "",
              labels ? " (labels)" : "");
@@ -778,26 +785,26 @@ void Update()
     SIZE mode = core::display::ModeSize();
     const bool loading = g_picture.right > g_picture.left;
     const Look look = loading ? g_loadingLook : MenuLook();
-    const bool on = g_installed && core::diag::Enabled(g_feature) && look != kBlack &&
-                    emperor::resolution::FrontEnd() && *kScreenMode == 3 && mode.cx == 1024 && mode.cy == 768 &&
+    const bool on = g_installed && core::diag::Enabled(g_feature) && emperor::resolution::FrontEnd() && *kScreenMode == 3 && mode.cx == 1024 && mode.cy == 768 &&
                     *kGameScreen != kScreenVideo;
     core::output::Framing f{};
     f.on = on;
     f.labels = cfg->frame_labels != 0;
     const bool whole = look == kOriginal; // the whole frame, also for a loading picture (the game's own bands)
-    f.native = look == kNative || look == kNativeCity || whole;
+    f.scale = emperor::resolution::CityScale(); // own size times the city's scale (0.2.0 item 8)
     f.picture = loading && !whole ? g_picture : RECT{0, 0, mode.cx, mode.cy};
     f.below = loading && !whole ? kBelow : 0; // the status panel under a loading picture (docs/archive/resolution_ui_r2a.md §10)
     f.gameCaption = whole;
     if (on && g_menuLook == kNativeCity && !f.labels && core::diag::Enabled(g_cityFeature)) {
         // Made ahead, from the first front-end picture on (the start-up loading screens): the menus then show the
         // city at once instead of parchment for the time the picture takes to read and blur (R2d.1 follow-up).
-        const SIZE client = core::display::ClientSize();
-        RequestBackdrop(client.cx, client.cy);
+        const SIZE units = OuterUnits(core::display::ClientSize(), f.picture.right - f.picture.left,
+                                      f.picture.bottom - f.picture.top + f.below, f.scale);
+        RequestBackdrop(units.cx, units.cy);
     }
     if (on) {
         Compose(core::display::ClientSize(), f.picture.right - f.picture.left, f.picture.bottom - f.picture.top,
-                f.below, g_status, f.labels, look, loading);
+                f.below, g_status, f.labels, look, loading, f.scale);
     }
     core::display::SetFraming(f);
     // The status line: in the status panel when the background has it (the game's font), otherwise drawn by the
@@ -904,8 +911,8 @@ int MigrateFullscreenPictures(const char *old, core::settings::Migration *out, i
     if (_stricmp(old, "black") != 0 || max < 2) {
         return 0;
     }
-    out[0] = core::settings::Migration{"video", "loading_screen", "scaled_black"};
-    out[1] = core::settings::Migration{"video", "menu_screens", "scaled_black"};
+    out[0] = core::settings::Migration{"video", "loading_screen", "original"};
+    out[1] = core::settings::Migration{"video", "menu_screens", "original"};
     return 2;
 }
 
@@ -915,16 +922,24 @@ void RegisterSettings()
     using core::settings::Item;
     using core::settings::Type;
     core::settings::Retire("display", "fullscreen_pictures", &MigrateFullscreenPictures);
-    for (const char *key : {"loading_screen", "menu_screens"}) {
-        core::settings::RenameValue("video", key, "framed", "scaled");
-        core::settings::RenameValue("video", key, "black", "scaled_black");
-    }
+    // 0.2.0 item 8: the looks are designs only (the size follows the display scale). Older spellings, also of before
+    // 0.1.3 (framed, black), go straight to the new ones (renames do not chain): the scaled looks to the design they
+    // had around them.
+    core::settings::RenameValue("video", "menu_screens", "native_city", "city");
+    core::settings::RenameValue("video", "menu_screens", "native", "parchment");
+    core::settings::RenameValue("video", "menu_screens", "scaled", "parchment");
+    core::settings::RenameValue("video", "menu_screens", "framed", "parchment");
+    core::settings::RenameValue("video", "menu_screens", "scaled_black", "original");
+    core::settings::RenameValue("video", "menu_screens", "black", "original");
+    core::settings::RenameValue("video", "loading_screen", "native", "framed");
+    core::settings::RenameValue("video", "loading_screen", "scaled", "framed");
+    core::settings::RenameValue("video", "loading_screen", "scaled_black", "original");
+    core::settings::RenameValue("video", "loading_screen", "black", "original");
     int i = core::settings::Register(Item{
         "video", "loading_screen", "Loading screens",
-        "The pictures shown while a game loads. native: their own size, centered, black around; scaled: as large as "
-        "fits, in a fret border on parchment; scaled_black: the whole 1024x768 frame scaled to fit, black bars; original: "
-        "the whole 1024x768 frame at its own size, centered, black around (as the game itself on a wide screen).",
-        Type::Choice, "native", Effect::Live, true, true, 0, 0, 0, nullptr, kLoadingLooks, kLoadingLabels, 4});
+        "The pictures shown while a game loads, at the display scale. framed: in a fret border; original: the game's "
+        "own picture, black around.",
+        Type::Choice, "framed", Effect::Live, true, true, 0, 0, 0, nullptr, kLoadingLooks, kLoadingLabels, 2});
     core::settings::OnChange(i, [](int, const char *v, bool) {
         g_loadingLook = kLoadingLook[IndexOf<Look>(kLoadingLooks, v, 0)];
         if (g_installed) {
@@ -934,13 +949,11 @@ void RegisterSettings()
     });
     i = core::settings::Register(Item{
         "video", "menu_screens", "Menu screens",
-        "Main menu, emperor and campaign choice, briefings, high scores, victory and defeat (the game's 1024x768 "
-        "pictures). native_city: their own size in a fret border, your city blurred around them (menu_background.png "
-        "or .bmp in Yongle's folder or the game folder if you put one there, otherwise the city you saw last); native: their own size on "
-        "parchment; scaled: as large as fits, on parchment; scaled_black: the whole frame scaled, black bars; original: the "
-        "whole frame at its "
-        "own size, centered, black around (as the game itself on a wide screen).",
-        Type::Choice, "native_city", Effect::Live, true, true, 0, 0, 0, nullptr, kMenuLooks, kMenuLabels, 5});
+        "Main menu, emperor and campaign choice, briefings, high scores, victory and defeat, at the display scale. "
+        "city: in a fret border, your city blurred around (menu_background.png or .bmp in Yongle's folder or the game "
+        "folder if you put one there, otherwise the city you saw last); parchment: in a fret border on parchment; "
+        "original: the game's own picture, black around.",
+        Type::Choice, "city", Effect::Live, true, true, 0, 0, 0, nullptr, kMenuLooks, kMenuLabels, 3});
     core::settings::OnChange(i, [](int, const char *v, bool) {
         g_menuLook = kMenuLook[IndexOf<Look>(kMenuLooks, v, 0)];
         if (g_installed) {
@@ -952,8 +965,7 @@ void RegisterSettings()
     // worker thread.
     i = core::settings::Register(Item{
         "video", "background_blur", "City background: blur",
-        "How much the picture of your city behind the menus (Menu screens = native_city) is blurred, in screen "
-        "pixels. 0: not blurred.",
+        "How much the picture of your city behind the menus (Menu screens = city) is blurred. 0: not blurred.",
         Type::Int, "2", Effect::Live, true, true, 0, 8, 1, nullptr, nullptr, nullptr, 0});
     core::settings::OnChange(i, [](int, const char *v, bool initial) {
         g_citySigma = std::atoi(v);

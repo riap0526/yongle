@@ -23,6 +23,11 @@ void OnLoop();
 // frame, i.e. from a full-screen picture until the next city screen (R2a frames these, games/emperor/fullscreen.h).
 bool FrontEnd();
 
+// The city's scale on the screen (0.2.0 item 8): screen (or window client) pixels per game pixel at the city's
+// resolution setting, the smaller of width and height (Auto, a fixed size and the window alike). The front-end
+// screens are shown at their own size times it. Game thread.
+double CityScale();
+
 // The leather below (and right of) the sidebar, as after the city screen's sidebar (R2b), for another screen's
 // sidebar that the game draws only down to 768: the China map's (R2c). Game thread, after that sidebar was drawn.
 void DrawSidebarFiller();

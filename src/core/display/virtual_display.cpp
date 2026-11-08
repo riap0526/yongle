@@ -147,7 +147,7 @@ bool FramedPicture(PictureOnScreen *out)
     o_GetClientRect(g_hwnd, &c);
     FrameLayout l{};
     const int ph = b.bottom - b.top, bh = ph + (g_framing.below > 0 ? g_framing.below : 0);
-    if (!ComputeFrameLayout(c.right - c.left, c.bottom - c.top, b.right - b.left, bh, &l, g_framing.native)) {
+    if (!ComputeFrameLayout(c.right - c.left, c.bottom - c.top, b.right - b.left, bh, &l, g_framing.scale)) {
         return false;
     }
     *out = PictureOnScreen{l.picX, l.picY, l.picW, l.picH * ph / bh, b}; // the picture: the block's top part

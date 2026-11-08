@@ -43,7 +43,8 @@ struct Framing {
     int below = 0;       // units of the framed block below the picture (e.g. a loading screen's status panel, drawn
                          // in the background): the layout is for the picture's width x (its height + below)
     bool labels = false; // debug: the block is drawn plain white (for the layout check, tools/verify)
-    bool native = false; // R2d.1: the block at its own size when it fits (ComputeFrameLayout's native)
+    double scale = 0;    // > 0: the block at most at this scale (its own size times the display scale; R2d.1, 0.2.0
+                         // item 8); 0: as large as fits (ComputeFrameLayout's maxScale)
     bool gameCaption = false; // O2a: the status line (SetCaption) where the game's GDI line went inside the picture,
                               // white on black, instead of on a dark strip over the picture's bottom
 };
@@ -105,7 +106,7 @@ void TakeIntervals(char *out, std::size_t size);
 // Any thread: the background layers for a framed picture of pictureW x pictureH on a screenW x screenH output, laid
 // out by core::display::ComputeFrameLayout: the outer fill (outerU x outerV) and the frame (frameU x frameV), RGB565
 // with the given pitches. Copied; used while the output size and the picture size match.
-void SetBackground(int screenW, int screenH, int pictureW, int pictureH, bool native, const void *outer, int outerPitch,
+void SetBackground(int screenW, int screenH, int pictureW, int pictureH, double scale, const void *outer, int outerPitch,
                    const void *frame, int framePitch);
 
 // Any thread: a status line (UTF-8; "" clears it) for full-screen pictures: on a dark strip over the picture's

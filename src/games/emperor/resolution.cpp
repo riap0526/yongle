@@ -1396,6 +1396,22 @@ bool FrontEnd()
     return g_installed && g_frontEnd;
 }
 
+double CityScale()
+{
+    Setting s = g_setting;
+    if (core::display::Windowed()) {
+        s = g_windowedSetting;
+        s.scale = g_setting.kind == CORE_RESOLUTION_SCALED ? g_setting.scale : 100;
+    }
+    const core::display::LogicalSize l = Logical(s);
+    const SIZE n = core::display::NativeSize(); // windowed: the client area
+    if (l.w <= 0 || l.h <= 0 || n.cx <= 0 || n.cy <= 0) {
+        return 1.0;
+    }
+    const double kx = static_cast<double>(n.cx) / l.w, ky = static_cast<double>(n.cy) / l.h;
+    return kx < ky ? kx : ky;
+}
+
 bool SettingsChanged(const core_config *cfg)
 {
     if (!g_installed) {

@@ -270,14 +270,19 @@ void TakeScaling()
 
 struct Background {
     int version = 0;
-    int screenW = 0, screenH = 0, pictureW = 0, pictureH = 0, native = 0;
+    int screenW = 0, screenH = 0, pictureW = 0, pictureH = 0, scaleMilli = 0; // the Framing's scale x 1000
     int outerU = 0, outerV = 0, frameU = 0, frameV = 0;
     BYTE *outer = nullptr, *frame = nullptr; // RGB565, tightly packed
 };
 SRWLOCK g_bgLock = SRWLOCK_INIT;
 Background g_bg;               // under g_bgLock
 int g_bgUploaded = -1;         // the version in the textures (drawing thread)
-int g_bgKey[5] = {0, 0, 0, 0, 0}; // screenW, screenH, pictureW, pictureH, native of the textures
+int g_bgKey[5] = {0, 0, 0, 0, 0}; // screenW, screenH, pictureW, pictureH, scale x 1000 of the textures
+
+int Milli(double scale)
+{
+    return static_cast<int>(scale * 1000 + 0.5);
+}
 int g_bgOuterU = 0, g_bgOuterV = 0; // the outer fill's size in units (drawn scaled by s from (0,0))
 int g_bgFrameU = 0, g_bgFrameV = 0; // the frame layer's size in units
 
@@ -316,7 +321,7 @@ SDL_Texture *Upload(const BYTE *bits, int w, int h)
 
 // The background textures for this output and picture size, uploaded when the game layer composed new ones; false
 // while they do not match (black meanwhile).
-bool BackgroundFor(int ow, int oh, int pw, int ph, bool native)
+bool BackgroundFor(int ow, int oh, int pw, int ph, double scale)
 {
     AcquireSRWLockShared(&g_bgLock);
     if (g_bg.version != g_bgUploaded && g_bg.outer && g_bg.frame) {
@@ -328,7 +333,7 @@ bool BackgroundFor(int ow, int oh, int pw, int ph, bool native)
         g_bgKey[1] = g_bg.screenH;
         g_bgKey[2] = g_bg.pictureW;
         g_bgKey[3] = g_bg.pictureH;
-        g_bgKey[4] = g_bg.native;
+        g_bgKey[4] = g_bg.scaleMilli;
         g_bgOuterU = g_bg.outerU;
         g_bgOuterV = g_bg.outerV;
         g_bgFrameU = g_bg.frameU;
@@ -339,7 +344,7 @@ bool BackgroundFor(int ow, int oh, int pw, int ph, bool native)
     }
     ReleaseSRWLockShared(&g_bgLock);
     return g_bgOuter && g_bgFrame && g_bgKey[0] == ow && g_bgKey[1] == oh && g_bgKey[2] == pw && g_bgKey[3] == ph &&
-           g_bgKey[4] == (native ? 1 : 0);
+           g_bgKey[4] == Milli(scale);
 }
 
 int g_loggedLayout[5] = {0, 0, 0, 0, -1};
@@ -360,7 +365,7 @@ void LogLayout(int ow, int oh, int pw, int ph, bool bg, const core::display::Fra
              "background %s",
              pw, ph, l.picX, l.picY, l.picW, l.picH, ow, oh, l.frameW, l.frameH, l.frameX, l.frameY, l.frameU,
              l.frameV, l.padU, l.padV, l.snapX ? "yes" : "no", l.snapY ? "yes" : "no", l.s,
-             l.native ? " (native size)" : "", bg ? "ready" : "not composed yet (black)");
+             l.native ? " (the scale asked for)" : "", bg ? "ready" : "not composed yet (black)");
 }
 
 // A screenshot asked for this frame: read the screen back before our panel is drawn.
@@ -947,7 +952,7 @@ void DrawFramed(FramedDraw &d)
 {
     const core::display::FrameLayout &l = *d.l; // laid out for the block: the picture plus what lies below it
     const int bh = d.ph + d.fr->below;
-    const bool bg = BackgroundFor(d.ow, d.oh, d.pw, bh, d.fr->native);
+    const bool bg = BackgroundFor(d.ow, d.oh, d.pw, bh, d.fr->scale);
     LogLayout(d.ow, d.oh, d.pw, bh, bg, l);
     if (bg) {
         SDL_FRect outer{0, 0, static_cast<float>(g_bgOuterU * l.s), static_cast<float>(g_bgOuterV * l.s)};
@@ -1058,7 +1063,7 @@ void DrawFrame(const void *pixels, int pitch, int w, int h, const RECT &dst, SIZ
     core::display::FrameLayout l{};
     const bool framed = core::diag::Enabled(g_framedFeature) && fr.on && pw > 0 && ph > 0 && fr.below >= 0 &&
                         b.left >= 0 && b.top >= 0 && b.right <= w && b.bottom <= h &&
-                        core::display::ComputeFrameLayout(ow, oh, pw, ph + fr.below, &l, fr.native);
+                        core::display::ComputeFrameLayout(ow, oh, pw, ph + fr.below, &l, fr.scale);
     const BYTE *src = static_cast<const BYTE *>(pixels);
     int tw = w, th = h;
     if (framed) { // only the picture box goes into the texture: its edges are not blended with what lies outside
@@ -1618,11 +1623,11 @@ int RefreshHz()
     return g_refreshHz;
 }
 
-void SetBackground(int screenW, int screenH, int pictureW, int pictureH, bool native, const void *outer, int outerPitch,
+void SetBackground(int screenW, int screenH, int pictureW, int pictureH, double scale, const void *outer, int outerPitch,
                    const void *frame, int framePitch)
 {
     core::display::FrameLayout l{};
-    if (!core::display::ComputeFrameLayout(screenW, screenH, pictureW, pictureH, &l, native)) {
+    if (!core::display::ComputeFrameLayout(screenW, screenH, pictureW, pictureH, &l, scale)) {
         return;
     }
     const size_t outerRow = static_cast<size_t>(l.outerU) * 2, frameRow = static_cast<size_t>(l.frameU) * 2;
@@ -1649,7 +1654,7 @@ void SetBackground(int screenW, int screenH, int pictureW, int pictureH, bool na
     g_bg.screenH = screenH;
     g_bg.pictureW = pictureW;
     g_bg.pictureH = pictureH;
-    g_bg.native = native ? 1 : 0;
+    g_bg.scaleMilli = Milli(scale);
     g_bg.outerU = l.outerU;
     g_bg.outerV = l.outerV;
     g_bg.frameU = l.frameU;

@@ -169,14 +169,14 @@ void RegisterCoreItems()
     g_resolution = Add(Item{"video", "resolution", "Resolution",
                             "The size the game draws, scaled to the screen. Scaled (default): the screen's native "
                             "resolution divided by the display scale -- at 100 % every pixel of the game is one pixel "
-                            "of the screen, the sharpest picture. 1024x768 is the game's own size. Menus and other "
-                            "full-screen pictures stay at 1024x768. Windowed, a fixed size becomes the window's size.",
+                            "of the screen, the sharpest picture. 1024x768 is the game's own size. Menus and loading "
+                            "screens are shown as large as the city. Windowed, a fixed size becomes the window's size.",
                             Type::Resolution, "scaled", Effect::Relayout, true, true, 0, 0, 0, nullptr, nullptr,
                             nullptr, 0});
     g_scale = Add(Item{"video", "scale", "Display scale",
                        "For Resolution = Scaled. 100 % (default): the sharpest picture, everything at its own size "
-                       "(small on a large, high-resolution screen). A larger scale makes everything bigger but "
-                       "softer, because the picture is enlarged. Auto: 1080 pixels high on a taller screen (2560x1440: "
+                       "(small on a large, high-resolution screen). A larger scale makes everything bigger, menus and "
+                       "loading screens too, but softer, because the picture is enlarged. Auto: 1080 pixels high on a taller screen (2560x1440: "
                        "1920x1080, 133 %; 4K: 1920x1080), the screen's own size otherwise. Always limited so that the "
                        "result stays at least 1024x768.",
                        Type::Int, "100", Effect::Relayout, true, true, 100, 250, 5, "auto", nullptr, nullptr, 0, "%"});

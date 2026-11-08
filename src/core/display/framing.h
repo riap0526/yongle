@@ -30,13 +30,14 @@ struct FrameLayout {
     double picX, picY;         // the picture in screen pixels (one resample from its own pixels)
     double picW, picH;
     int outerU, outerV;        // the outer fill's size in units, drawn at (0,0) scaled by s
-    bool native;               // laid out at the picture's own size (s = 1)
+    bool native;               // laid out at the scale asked for (maxScale), not reduced to fit
 };
 
 // screenW x screenH: the output in pixels; pictureW x pictureH: the picture in units. False when either is empty.
-// native (R2d.1): scale 1 -- the picture's own size, centred, the same border and snapping rule -- when the picture
-// and its border fit on the screen; otherwise (and without it) as large as the screen allows.
-bool ComputeFrameLayout(int screenW, int screenH, int pictureW, int pictureH, FrameLayout *out, bool native = false);
+// maxScale > 0 (R2d.1; 0.2.0 item 8: the picture's own size times the display scale): at most that scale -- centred,
+// the same border and snapping rule -- when the picture and its border fit on the screen at it; otherwise (and with 0)
+// as large as the screen allows.
+bool ComputeFrameLayout(int screenW, int screenH, int pictureW, int pictureH, FrameLayout *out, double maxScale = 0);
 
 // Tile positions along a side of `size` units: the first at 0, the last flush with the end, the middle ones every
 // kTile (as the game's dialog panels place them). Writes at most max positions; returns the count.

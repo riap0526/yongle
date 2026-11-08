@@ -96,6 +96,13 @@ int main()
         FrameLayout f{};
         Check(ComputeFrameLayout(2560, 1440, 1024, 768, &f, false) && !f.native && std::fabs(f.s - 1.8) < 0.001,
               "native off: as before");
+        // 0.2.0 item 8: at most the city's scale.
+        const double auto1080 = 1440.0 / 1080.0; // Auto on 2560x1440: the city at 1920x1080
+        Check(ComputeFrameLayout(2560, 1440, 1024, 768, &n, auto1080) && n.native && std::fabs(n.s - auto1080) < 1e-9 &&
+                  std::abs(n.frameH - 1067) <= 1 && n.picH > 1023 && n.picH < 1025,
+              "menu at the city's scale 1.33 on 2560x1440: the picture 1365x1024");
+        Check(ComputeFrameLayout(2560, 1440, 1024, 768, &n, 1.875) && !n.native && std::fabs(n.s - 1.8) < 0.001,
+              "the city's scale 1.875 (fixed 1024x768) is too large: as large as fits");
     }
 
     std::printf("-- the v4 padding: load screen on 2560x1440 has 37 px above and below the picture\n");

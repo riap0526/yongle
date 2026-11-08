@@ -598,7 +598,7 @@ std::vector<co::Page> BuildPages()
     }
     co::Page display{"Video", {}};
     {
-        co::Category c{"Screen", {}};
+        co::Category c{"Display", {}}; // "Screen" until 2026-11-09 (Display, as modern games call it)
         Add(c.rows, "video", "window");
         Add(c.rows, "video", "resolution");
         Add(c.rows, "video", "scale");

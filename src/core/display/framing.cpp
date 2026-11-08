@@ -35,7 +35,7 @@ Axis AxisLayout(int screen, int picture, double s)
 
 } // namespace
 
-bool ComputeFrameLayout(int screenW, int screenH, int pictureW, int pictureH, FrameLayout *out, bool native)
+bool ComputeFrameLayout(int screenW, int screenH, int pictureW, int pictureH, FrameLayout *out, double maxScale)
 {
     if (screenW <= 0 || screenH <= 0 || pictureW <= 0 || pictureH <= 0) {
         return false;
@@ -43,8 +43,8 @@ bool ComputeFrameLayout(int screenW, int screenH, int pictureW, int pictureH, Fr
     FrameLayout l{};
     l.s = std::min(static_cast<double>(screenW) / (pictureW + 2 * kTile),
                    static_cast<double>(screenH) / (pictureH + 2 * kTile));
-    if (native && l.s >= 1.0) {
-        l.s = 1.0;
+    if (maxScale > 0 && l.s >= maxScale) {
+        l.s = maxScale;
         l.native = true;
     }
     Axis x = AxisLayout(screenW, pictureW, l.s), y = AxisLayout(screenH, pictureH, l.s);

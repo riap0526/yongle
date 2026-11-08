@@ -58,21 +58,14 @@ CHOICES(kShrink,
                     "moves."});
 
 CHOICES(kLoading,
-        {"native", "At their own size, centered, black around them."},
-        {"scaled", "As large as fits, in a fret border on parchment."},
-        {"scaled_black", "The whole 1024 x 768 picture enlarged to fit, with black bars.", "Scaled + black bars"},
-        {"original", "The whole 1024 x 768 picture at its own size, centered, black around it, as the game shows it on "
-                     "a wide screen."});
+        {"framed", "In a fret border, black around it."},
+        {"original", "The game's own picture, black around it, as the game shows it on a wide screen."});
 
 CHOICES(kMenus,
-        {"native_city", "At their own size in a fret border, with your city blurred around them. A picture of your "
-                        "own named menu_background.png or .bmp in the game folder is used instead of the city.",
-         "Native + city"},
-        {"native", "At their own size on parchment."},
-        {"scaled", "As large as fits, on parchment."},
-        {"scaled_black", "The whole 1024 x 768 picture enlarged to fit, with black bars.", "Scaled + black bars"},
-        {"original", "The whole 1024 x 768 picture at its own size, centered, black around it, as the game shows it on "
-                     "a wide screen."});
+        {"city", "In a fret border, with your city blurred around it. A picture of your own named "
+                 "menu_background.png or .bmp in the game folder is used instead of the city."},
+        {"parchment", "In a fret border on parchment."},
+        {"original", "The game's own picture, black around it, as the game shows it on a wide screen."});
 
 CHOICES(kEmpireMap,
         {"scaled", "Larger than its own size (see the scale below), in a fret border, over the background below."},
@@ -124,11 +117,11 @@ const Text kTexts[] = {
                                   "out. Off: the game's steps of whole tiles.",
      nullptr, 0},
     {"video", "window", "Full screen or a window. F5 switches between them.", kWindow, N(kWindow)},
-    {"video", "resolution", "The size the game is drawn at. Menus and other full-screen pictures stay at "
-                              "1024 x 768.",
+    {"video", "resolution", "The size the game is drawn at. Menus and loading screens are shown as large as the "
+                              "city.",
      kResolution, N(kResolution)},
-    {"video", "scale", "How large everything is. Larger is bigger but softer.\nAuto: 1080 pixels high on a taller "
-                       "screen. Never less than 1024 x 768.",
+    {"video", "scale", "How large everything is, menus and loading screens too. Larger is bigger but softer.\nAuto: "
+                       "1080 pixels high on a taller screen. Never less than 1024 x 768.",
      nullptr, 0},
     {"video", "scaling", "How the picture is enlarged when the game's pixels are not the screen's: a display scale "
                            "above 100%, 1024 x 768, the menus, a window. In full screen at 100% all three look the "
@@ -146,9 +139,9 @@ const Text kTexts[] = {
      nullptr, 0},
     {"video", "city_zoom_shrink", "Above 100% zoom: how the city is made smaller on the screen.", kShrink,
      N(kShrink)},
-    {"video", "loading_screen", "The pictures shown while a game loads.", kLoading, N(kLoading)},
-    {"video", "menu_screens", "The main menu, the choice of emperor and campaign, briefings, high scores, victory "
-                                "and defeat.",
+    {"video", "loading_screen", "How the pictures shown while a game loads look.", kLoading, N(kLoading)},
+    {"video", "menu_screens", "What is around the main menu, the choice of emperor and campaign, briefings, high "
+                                "scores, victory and defeat.",
      kMenus, N(kMenus)},
     {"video", "background_blur", "How much the picture of your city behind the menus is blurred. 0: not at all.",
      nullptr, 0},
