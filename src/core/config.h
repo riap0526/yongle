@@ -79,6 +79,10 @@ struct core_config {
     int cpu_affinity;          /* [compat] cpu_affinity (B plan, docs/archive/affinity.md): 0 auto, 1 original */
     int present_mode_log;      /* [debug] present_mode_log (hidden): nonzero: core/diag/present_mode.h logs (default on) */
     int window_background_test; /* [debug] window_background_test: nonzero: magenta class brush (live; core_config_live) */
+    /* The alternative keys (a key setting may have two, core/ui/hotkey.h; 0: none). */
+    unsigned panel_key2_vk, panel_key2_mods;
+    unsigned screenshot_key2_vk, screenshot_key2_mods;
+    unsigned report_key2_vk, report_key2_mods;
 };
 
 #define CORE_WINDOW_CENTER (-2147483647 - 1)

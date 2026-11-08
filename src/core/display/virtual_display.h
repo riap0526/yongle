@@ -64,6 +64,7 @@ struct ActionKey {
     volatile unsigned vk;
     volatile unsigned mods;
     void (*fire)();
+    volatile unsigned vk2 = 0, mods2 = 0; // the alternative key (vk2 0: none)
 };
 void AddActionKey(ActionKey *key);
 

@@ -1,4 +1,5 @@
-// Hotkeys written as text in emperor_engine.ini, e.g. "Insert", "Ctrl+F12", "Shift+Alt+P".
+// Hotkeys written as text in emperor_engine.ini, e.g. "Insert", "Ctrl+F12", "Shift+Alt+P"; an action may have two,
+// "Insert, Ctrl+F12" (ParseHotkeyList).
 //
 // Syntax: zero or more modifiers (Ctrl or Control, Shift, Alt), each followed by '+', then one key; case does not
 // matter, spaces around '+' are allowed. Keys: F1..F24, Insert (Ins), Delete (Del), Home, End, PageUp (PgUp),
@@ -24,6 +25,14 @@ bool ParseHotkey(const char *b, const char *e, Hotkey *out);
 
 // The hotkey in the canonical spelling ("Ctrl+F12", "Insert") for the log and the panel.
 void FormatHotkey(const Hotkey &key, char *out, size_t size);
+
+// An action's keys: one, or two separated by a comma ("Insert, Ctrl+F12"; the second is the alternative, as in
+// Augustus). Returns how many (1 or 2), or 0 (out unchanged) when the text is not such a list (an empty part, more
+// than two, the same key twice, or a part that is not a hotkey).
+constexpr int kMaxKeys = 2;
+int ParseHotkeyList(const char *b, const char *e, Hotkey out[kMaxKeys]);
+// The keys in the canonical spelling, ", " between them.
+void FormatHotkeyList(const Hotkey *keys, int count, char *out, size_t size);
 
 // True when vk can be a hotkey's key (one of the keys above; not a modifier, not Escape).
 bool IsHotkeyKey(unsigned vk);

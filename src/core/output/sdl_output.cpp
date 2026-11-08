@@ -1220,10 +1220,16 @@ bool g_threaded = false;
 // does not handle messages while the start-up loader runs or holds a stage, so the keys are polled here, once per
 // press (not its auto-repeat), only while the game window is in front and with exactly the configured modifiers.
 // The window subclass keeps the keys' messages from the game (core/display/virtual_display).
-bool KeyPressed(unsigned vk, unsigned keyMods, bool &wasDown)
+bool IsPanelKeyOut(unsigned vk, unsigned mods)
 {
     const core_config *cfg = core_config_get();
-    if (vk == 0 || (vk == cfg->panel_key_vk && keyMods == cfg->panel_key_mods) || core::ui::CapturingKey()) {
+    return (vk == cfg->panel_key_vk && mods == cfg->panel_key_mods) ||
+           (cfg->panel_key2_vk != 0 && vk == cfg->panel_key2_vk && mods == cfg->panel_key2_mods);
+}
+
+bool KeyPressed(unsigned vk, unsigned keyMods, bool &wasDown)
+{
+    if (vk == 0 || IsPanelKeyOut(vk, keyMods) || core::ui::CapturingKey()) {
         wasDown = true; // a key pressed for the panel does not count once the panel stops waiting for one
         return false;
     }
@@ -1237,19 +1243,27 @@ bool KeyPressed(unsigned vk, unsigned keyMods, bool &wasDown)
 
 bool ScreenshotKeyPressed()
 {
-    static bool wasDown = false;
+    static bool wasDown[2] = {false, false};
     const core_config *cfg = core_config_get();
-    return KeyPressed(cfg->screenshot_key_vk, cfg->screenshot_key_mods, wasDown);
+    const bool a = KeyPressed(cfg->screenshot_key_vk, cfg->screenshot_key_mods, wasDown[0]);
+    const bool b = KeyPressed(cfg->screenshot_key2_vk, cfg->screenshot_key2_mods, wasDown[1]);
+    return a || b;
 }
 
 bool ReportKeyPressed()
 {
-    static bool wasDown = false;
+    static bool wasDown[2] = {false, false};
     const core_config *cfg = core_config_get();
-    if (cfg->report_key_vk == cfg->screenshot_key_vk && cfg->report_key_mods == cfg->screenshot_key_mods) {
-        return false;
+    const unsigned vk[2] = {cfg->report_key_vk, cfg->report_key2_vk};
+    const unsigned mods[2] = {cfg->report_key_mods, cfg->report_key2_mods};
+    bool pressed = false;
+    for (int k = 0; k < 2; ++k) {
+        const bool isShot = (vk[k] == cfg->screenshot_key_vk && mods[k] == cfg->screenshot_key_mods) ||
+                            (vk[k] != 0 && vk[k] == cfg->screenshot_key2_vk && mods[k] == cfg->screenshot_key2_mods);
+        const bool p = KeyPressed(isShot ? 0 : vk[k], mods[k], wasDown[k]);
+        pressed = pressed || p;
     }
-    return KeyPressed(cfg->report_key_vk, cfg->report_key_mods, wasDown);
+    return pressed;
 }
 
 core::diag::Feature g_shotFeature{"screenshot (core/output)"};

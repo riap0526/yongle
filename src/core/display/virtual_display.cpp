@@ -610,10 +610,38 @@ bool IsHotkey(UINT m, WPARAM w, unsigned vk, unsigned keyMods)
     return mods == keyMods;
 }
 
+bool Same(unsigned vk, unsigned mods, unsigned vk2, unsigned mods2)
+{
+    return vk != 0 && vk == vk2 && mods == mods2;
+}
+
+// The key (vk, mods) is one of the panel's two keys / the screenshot's.
+bool IsPanelKey(unsigned vk, unsigned mods)
+{
+    const core_config *cfg = core_config_get();
+    return Same(vk, mods, cfg->panel_key_vk, cfg->panel_key_mods) ||
+           Same(vk, mods, cfg->panel_key2_vk, cfg->panel_key2_mods);
+}
+
+bool IsShotKey(unsigned vk, unsigned mods)
+{
+    const core_config *cfg = core_config_get();
+    return Same(vk, mods, cfg->screenshot_key_vk, cfg->screenshot_key_mods) ||
+           Same(vk, mods, cfg->screenshot_key2_vk, cfg->screenshot_key2_mods);
+}
+
+bool IsReportKey(unsigned vk, unsigned mods)
+{
+    const core_config *cfg = core_config_get();
+    return Same(vk, mods, cfg->report_key_vk, cfg->report_key_mods) ||
+           Same(vk, mods, cfg->report_key2_vk, cfg->report_key2_mods);
+}
+
 bool IsPanelHotkey(UINT m, WPARAM w)
 {
     const core_config *cfg = core_config_get();
-    return IsHotkey(m, w, cfg->panel_key_vk, cfg->panel_key_mods);
+    return (cfg->panel_key_vk != 0 && IsHotkey(m, w, cfg->panel_key_vk, cfg->panel_key_mods)) ||
+           (cfg->panel_key2_vk != 0 && IsHotkey(m, w, cfg->panel_key2_vk, cfg->panel_key2_mods));
 }
 
 // The screenshot hotkey (when it is not also the panel's): saves the last presented frame, also while the panel is
@@ -621,8 +649,14 @@ bool IsPanelHotkey(UINT m, WPARAM w)
 bool IsScreenshotHotkey(UINT m, WPARAM w)
 {
     const core_config *cfg = core_config_get();
-    return !(cfg->screenshot_key_vk == cfg->panel_key_vk && cfg->screenshot_key_mods == cfg->panel_key_mods) &&
-           IsHotkey(m, w, cfg->screenshot_key_vk, cfg->screenshot_key_mods);
+    const unsigned vk[2] = {cfg->screenshot_key_vk, cfg->screenshot_key2_vk};
+    const unsigned mods[2] = {cfg->screenshot_key_mods, cfg->screenshot_key2_mods};
+    for (int k = 0; k < 2; ++k) {
+        if (vk[k] != 0 && !IsPanelKey(vk[k], mods[k]) && IsHotkey(m, w, vk[k], mods[k])) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // The report key (debug.report_key, default F12; R2b.1, core/diag/report.h), when it is not the panel's or the
@@ -630,29 +664,34 @@ bool IsScreenshotHotkey(UINT m, WPARAM w)
 bool IsReportHotkey(UINT m, WPARAM w)
 {
     const core_config *cfg = core_config_get();
-    return cfg->report_key_vk != 0 &&
-           !(cfg->report_key_vk == cfg->panel_key_vk && cfg->report_key_mods == cfg->panel_key_mods) &&
-           !(cfg->report_key_vk == cfg->screenshot_key_vk && cfg->report_key_mods == cfg->screenshot_key_mods) &&
-           IsHotkey(m, w, cfg->report_key_vk, cfg->report_key_mods);
+    const unsigned vk[2] = {cfg->report_key_vk, cfg->report_key2_vk};
+    const unsigned mods[2] = {cfg->report_key_mods, cfg->report_key2_mods};
+    for (int k = 0; k < 2; ++k) {
+        if (vk[k] != 0 && !IsPanelKey(vk[k], mods[k]) && !IsShotKey(vk[k], mods[k]) &&
+            IsHotkey(m, w, vk[k], mods[k])) {
+            return true;
+        }
+    }
+    return false;
 }
 
-// A game layer's keys (AddActionKey).
+// A game layer's keys (AddActionKey), each with up to two keys.
 core::display::ActionKey *g_actionKeys[8] = {};
 int g_actionKeyCount = 0;
 
 core::display::ActionKey *ActionKeyFor(UINT m, WPARAM w)
 {
-    const core_config *cfg = core_config_get();
     for (int i = 0; i < g_actionKeyCount; ++i) {
         core::display::ActionKey *k = g_actionKeys[i];
-        const unsigned vk = k->vk, mods = k->mods;
-        if (vk == 0 || (vk == cfg->panel_key_vk && mods == cfg->panel_key_mods) ||
-            (vk == cfg->screenshot_key_vk && mods == cfg->screenshot_key_mods) ||
-            (vk == cfg->report_key_vk && mods == cfg->report_key_mods)) {
-            continue;
-        }
-        if (IsHotkey(m, w, vk, mods)) {
-            return k;
+        const unsigned vk[2] = {k->vk, k->vk2};
+        const unsigned mods[2] = {k->mods, k->mods2};
+        for (int n = 0; n < 2; ++n) {
+            if (vk[n] == 0 || IsPanelKey(vk[n], mods[n]) || IsShotKey(vk[n], mods[n]) || IsReportKey(vk[n], mods[n])) {
+                continue;
+            }
+            if (IsHotkey(m, w, vk[n], mods[n])) {
+                return k;
+            }
         }
     }
     return nullptr;

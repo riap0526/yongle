@@ -247,6 +247,23 @@ int main()
               "renamed value: nothing to do the next time");
     }
 
+    // A key setting with two keys (the second the alternative): canonical spelling, both in the typed view; the same
+    // key twice is not a value.
+    {
+        const int panelKey = cs::Find("ui", "panel_key");
+        cs::Request(panelKey, "insert ,ctrl+f12", true);
+        cs::RunPending();
+        Check(Value("ui", "panel_key") == "Insert, Ctrl+F12" && cfg->panel_key_vk == 0x2D && cfg->panel_key2_vk == 0x7B &&
+                  cfg->panel_key2_mods == 1,
+              "two keys: canonical, both in the typed view");
+        cs::Request(panelKey, "Insert, Insert", true);
+        cs::RunPending();
+        Check(Value("ui", "panel_key") == "Insert, Ctrl+F12", "the same key twice: dropped");
+        cs::Request(panelKey, "Insert", true);
+        cs::RunPending();
+        Check(Value("ui", "panel_key") == "Insert" && cfg->panel_key2_vk == 0, "back to one key: no alternative");
+    }
+
     // Moved settings (2026-11-08: [display] -> [video], [sound] -> [audio], china_map -> empire_map): the old lines'
     // values taken for the new settings (with the new setting's renamed values), the old lines replaced in the file; a
     // new line already in the file wins over an old one; old unknown keys stay where they were.

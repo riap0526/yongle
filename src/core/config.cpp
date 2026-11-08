@@ -26,7 +26,7 @@ core_config g_config = {CORE_BACKEND_EMULATED, CORE_SCALING_SHARP_BILINEAR, CORE
                         CORE_RESOLUTION_SCALED, 1024, 768, 100, 1, 1, 0x2D /* Insert */, 0, 0,
                         0x7A /* F11 */, 0, 0x7B /* F12 */, 0, 0, 0, 0, 0,
                         0 /* fail_direct3d9 */, 0 /* d3d9_pacing */, 0, 0, 0, CORE_WINDOW_CENTER, CORE_WINDOW_CENTER, 0, 0 /* cpu_affinity */,
-                        1 /* present_mode_log */, 0 /* window_background_test */};
+                        1 /* present_mode_log */, 0 /* window_background_test */, 0, 0, 0, 0, 0, 0};
 
 const char *const kBackend[] = {"emulated", "system"};
 const char *const kBackendLabels[] = {"emulated (our own DirectDraw)", "system (Windows' DirectDraw, logged)"};
@@ -67,6 +67,18 @@ int Index(const char *const *list, int n, const char *v)
     return 0;
 }
 
+// A key setting's one or two keys into the typed view (the second 0 when there is none; fallbackVk when the text
+// cannot be read, which the settings model does not let through).
+void Keys(const char *v, unsigned fallbackVk, unsigned *vk, unsigned *mods, unsigned *vk2, unsigned *mods2)
+{
+    core::ui::Hotkey keys[core::ui::kMaxKeys] = {{fallbackVk, 0}, {0, 0}};
+    core::ui::ParseHotkeyList(v, v + std::strlen(v), keys);
+    *vk = keys[0].vk;
+    *mods = keys[0].mods;
+    *vk2 = keys[1].vk;
+    *mods2 = keys[1].mods;
+}
+
 int g_backend, g_scaling, g_present, g_resolution, g_scale, g_timer, g_smooth, g_panelScale, g_panelKey,
     g_shotKey, g_reportKey, g_labels, g_loadingHold, g_perfOverlay, g_renderer, g_failD3d9, g_d3d9Pacing, g_window, g_windowW, g_windowH,
     g_windowX, g_windowY, g_windowLock, g_cpuAffinity, g_presentModeLog, g_windowBackground;
@@ -98,10 +110,8 @@ bool Sync(int i, const char *v, bool)
     else if (i == g_smooth) g_config.smooth_scroll = std::strcmp(v, "on") == 0;
     else if (i == g_panelScale) core_config_set_live(&g_config.panel_scale_percent, std::strcmp(v, "auto") == 0 ? 0 : std::atoi(v));
     else if (i == g_panelKey) {
-        core::ui::Hotkey key{0x2D, 0};
-        core::ui::ParseHotkey(v, v + std::strlen(v), &key);
-        g_config.panel_key_vk = key.vk;
-        g_config.panel_key_mods = key.mods;
+        Keys(v, 0x2D, &g_config.panel_key_vk, &g_config.panel_key_mods, &g_config.panel_key2_vk,
+             &g_config.panel_key2_mods);
     }
     else if (i == g_labels) g_config.frame_labels = std::strcmp(v, "on") == 0;
     else if (i == g_loadingHold) g_config.loading_stage_ms = std::atoi(v);
@@ -113,16 +123,12 @@ bool Sync(int i, const char *v, bool)
     else if (i == g_presentModeLog) g_config.present_mode_log = std::strcmp(v, "on") == 0;
     else if (i == g_windowBackground) core_config_set_live(&g_config.window_background_test, std::strcmp(v, "on") == 0);
     else if (i == g_shotKey) {
-        core::ui::Hotkey key{0x7A, 0};
-        core::ui::ParseHotkey(v, v + std::strlen(v), &key);
-        g_config.screenshot_key_vk = key.vk;
-        g_config.screenshot_key_mods = key.mods;
+        Keys(v, 0x7A, &g_config.screenshot_key_vk, &g_config.screenshot_key_mods, &g_config.screenshot_key2_vk,
+             &g_config.screenshot_key2_mods);
     }
     else if (i == g_reportKey) {
-        core::ui::Hotkey key{0x7B, 0};
-        core::ui::ParseHotkey(v, v + std::strlen(v), &key);
-        g_config.report_key_vk = key.vk;
-        g_config.report_key_mods = key.mods;
+        Keys(v, 0x7B, &g_config.report_key_vk, &g_config.report_key_mods, &g_config.report_key2_vk,
+             &g_config.report_key2_mods);
     }
     return true;
 }

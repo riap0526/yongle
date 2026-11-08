@@ -62,8 +62,9 @@ enum class Kind {
     Choice,      // label left, the value between two arrows on the right
     Slider,      // label on the first line; the number left on the second, then the slider
     CheckSlider, // a checkbox before the label on the first line (toggle), the slider on the second (value)
-    Key,         // label left, the key in a strip on the right; a click waits for a new key (value: KeyCode)
-    Columns,     // column titles over Key rows: label left, rightLabel over the keys, a line under them
+    Key,         // label left, two key strips on the right: value the first key, toggle the alternative (KeyCode,
+                 // 0 none); a click waits for a new key (Backspace leaves it empty)
+    Columns,     // column titles over Key rows: label left, rightLabel / rightLabel2 over the keys, a line under
 };
 
 // A key with its modifiers as a row's value: vk | mods << 16 (core/ui/hotkey.h kMod*); 0: none.
@@ -93,7 +94,7 @@ struct Row {
     int shownIfValue = 0;                  // ... has this draft value
     bool restart = false;                  // takes effect after a restart: a red "*" after the label
     bool relayout = false;                 // the screen is laid out again: Apply asks to keep it (15 s, else reverts)
-    std::string rightLabel;                // Columns: the title over the keys
+    std::string rightLabel, rightLabel2;   // Columns: the titles over the keys (first, alternative)
 };
 
 struct Category {
@@ -117,6 +118,7 @@ struct Look {
     std::string title = "Yongle options";
     bool hotkeysButton = true;
     bool applyButton = true;
+    bool plainHeaders = false; // section titles in gold at the left, without lines (Augustus's hotkey list)
 };
 
 // The texts of a wait for a key and of "keep this setting?" (the game layer gives them, so they sit with its other
@@ -126,6 +128,9 @@ struct Texts {
     std::string notChanged = "Not changed.";
     std::string notUsable = "That key cannot be used here; try another one.";
     std::string inUse = "%s is already the key for \"%s\"; try another one."; // the key, the other row's label
+    std::string reserved = "The game keeps this key for itself; choose another one.";
+    std::string clearHint = "Backspace: no key."; // shown while a key is awaited
+    std::string keyTip = "Click to change; right-click to remove."; // the tooltip of a key box
     std::string keepTitle = "Keep this setting?";
     std::string keepCountdown = "The previous setting comes back in %d s."; // seconds left
     std::string keep = "Keep", revert = "Revert";
@@ -137,6 +142,8 @@ public:
     void SetTexts(Texts texts) { texts_ = std::move(texts); }
     // A key the game itself uses: a sentence shown (not an error) when it is chosen; nullptr when none.
     void SetGameKeyNote(const char *(*note)(unsigned vk, unsigned mods)) { gameKeyNote_ = note; }
+    // A key that cannot be chosen at all (kept by the game or by us): refused with Texts::reserved.
+    void SetReservedKey(bool (*reserved)(unsigned vk, unsigned mods)) { reservedKey_ = reserved; }
     // Called after "keep this setting?" is answered with Keep (the owner saves then).
     void SetOnKept(void (*kept)()) { onKept_ = kept; }
     void SetPages(std::vector<Page> pages);
@@ -149,6 +156,9 @@ public:
     Action MouseDown(int x, int y, unsigned nowMs);
     Action MouseUp(int x, int y);
     void Wheel(int notches); // > 0: up
+    // A right click: on a key box it removes that key (in the draft) and returns true; elsewhere false (the owner
+    // closes the window, as the game does with its dialogs).
+    bool RightClick(int x, int y);
     // Windows virtual-key codes with the modifiers held (core/ui/hotkey.h kMod*): while a Key row waits, the new key
     // (Esc: not changed; a modifier alone: still waiting); otherwise Escape cancels, Enter is OK (or answers "keep
     // this setting?": Enter keeps, Escape reverts).
@@ -194,7 +204,7 @@ private:
     };
     enum class Hit {
         None, Tab, CategoryButton, RowLabel, RowCheck, ArrowLess, ArrowMore, ChoiceValue, Track, ScrollUp, ScrollDown,
-        ScrollTrack, Hotkeys, Defaults, CancelButton, Ok, ApplyButton, KeyStrip, Keep, Revert,
+        ScrollTrack, Hotkeys, Defaults, CancelButton, Ok, ApplyButton, KeyStrip, KeyStrip2, Keep, Revert,
     };
     struct Button {
         Hit hit;
@@ -275,8 +285,10 @@ private:
     Look look_;
     Texts texts_;
     const char *(*gameKeyNote_)(unsigned, unsigned) = nullptr;
+    bool (*reservedKey_)(unsigned, unsigned) = nullptr;
     void (*onKept_)() = nullptr;
     int capture_ = -1;          // the Key row (current category) waiting for a key
+    int captureCol_ = 0;        // ... and which of its keys: 0 the first (value), 1 the alternative (toggle)
     unsigned endedVk_ = 0;
     std::string note_;          // under the rows: the last wait's result
     bool noteError_ = false;

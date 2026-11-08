@@ -119,6 +119,56 @@ void FormatHotkey(const Hotkey &key, char *out, size_t size)
                   key.mods & kModAlt ? "Alt+" : "", name);
 }
 
+int ParseHotkeyList(const char *b, const char *e, Hotkey out[kMaxKeys])
+{
+    Hotkey keys[kMaxKeys] = {};
+    int n = 0;
+    const char *p = b;
+    while (true) {
+        const char *comma = p;
+        while (comma < e && *comma != ',') {
+            ++comma;
+        }
+        const char *s = p, *t = comma;
+        while (s < t && (*s == ' ' || *s == '\t')) ++s;
+        while (t > s && (t[-1] == ' ' || t[-1] == '\t')) --t;
+        if (s == t || n == kMaxKeys || !ParseHotkey(s, t, &keys[n])) {
+            return 0; // an empty part, too many, or not a hotkey
+        }
+        for (int k = 0; k < n; ++k) {
+            if (keys[k].vk == keys[n].vk && keys[k].mods == keys[n].mods) {
+                return 0; // the same key twice
+            }
+        }
+        ++n;
+        if (comma == e) {
+            break;
+        }
+        p = comma + 1;
+    }
+    for (int k = 0; k < n; ++k) {
+        out[k] = keys[k];
+    }
+    return n;
+}
+
+void FormatHotkeyList(const Hotkey *keys, int count, char *out, size_t size)
+{
+    size_t used = 0;
+    if (size > 0) {
+        out[0] = '\0';
+    }
+    for (int k = 0; k < count; ++k) {
+        char one[32];
+        FormatHotkey(keys[k], one, sizeof(one));
+        const int w = std::snprintf(out + used, size > used ? size - used : 0, "%s%s", k > 0 ? ", " : "", one);
+        if (w < 0 || used + static_cast<size_t>(w) >= size) {
+            break;
+        }
+        used += static_cast<size_t>(w);
+    }
+}
+
 bool IsHotkeyKey(unsigned vk)
 {
     char text[32];

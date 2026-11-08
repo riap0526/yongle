@@ -521,10 +521,12 @@ void AfterCity(int orientation)
 
 bool ApplyKey(core::display::ActionKey *key, unsigned fallbackVk, unsigned fallbackMods, const char *v)
 {
-    core::ui::Hotkey k{fallbackVk, fallbackMods};
-    core::ui::ParseHotkey(v, v + std::strlen(v), &k);
-    key->vk = k.vk;
-    key->mods = k.mods;
+    core::ui::Hotkey k[core::ui::kMaxKeys] = {{fallbackVk, fallbackMods}, {0, 0}};
+    core::ui::ParseHotkeyList(v, v + std::strlen(v), k); // one key, or two (the second the alternative)
+    key->vk = k[0].vk;
+    key->mods = k[0].mods;
+    key->vk2 = k[1].vk;
+    key->mods2 = k[1].mods;
     return true;
 }
 

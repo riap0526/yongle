@@ -9,7 +9,7 @@ namespace core::options {
 namespace {
 
 constexpr int kTile = 16;
-constexpr int kVkEscape = 0x1b, kVkReturn = 0x0d;
+constexpr int kVkEscape = 0x1b, kVkReturn = 0x0d, kVkBackspace = 0x08;
 constexpr int kBottomW[] = {160, 96, 80, 96}; // Restore defaults, Cancel, OK, Apply
 constexpr int kBottomGap = 8, kHotkeysW = 112;
 constexpr int kChoiceW = 200, kArrow = 24;
@@ -19,7 +19,7 @@ constexpr int kTipW = 230, kTipLine = 14;
 constexpr int kTipDx = 20, kTipDy = 40, kTipAbove = 8;
 constexpr int kLabelSlack = 16; // a name is hit this much past its end (its "*")
 constexpr int kTipRedLine = 16, kTipRedW = 320; // the restart line's height (the red font is the normal size)
-constexpr int kKeyW = 176;   // a key's strip (11 tiles), right-aligned like a choice
+constexpr int kKeyW = 144, kKeyGap = 8; // a key's strip (9 tiles); the first key, then the alternative at the right
 constexpr int kNoteH = 22;   // the line under Key rows: the last wait's result
 constexpr unsigned kConfirmMs = 15000;
 constexpr int kConfirmX = 120, kConfirmY = 168, kConfirmW = 400, kConfirmH = 144, kConfirmButtonW = 112;
@@ -481,6 +481,9 @@ Window::Target Window::HitTest(int x, int y)
         case Kind::Columns: break;
         case Kind::Key:
             if (In(x, y, right - kKeyW, pl.y - 6, kKeyW, Height(r))) {
+                return {Hit::KeyStrip2, pl.row};
+            }
+            if (In(x, y, right - 2 * kKeyW - kKeyGap, pl.y - 6, kKeyW, Height(r))) {
                 return {Hit::KeyStrip, pl.row};
             }
             if (In(x, y, left, pl.y - 6, tw, Height(r))) {
@@ -569,7 +572,7 @@ Action Window::MouseDown(int x, int y, unsigned nowMs)
     pressed_ = HitTest(x, y);
     pressedAt_ = lastRepeat_ = nowMs;
     tipShown_ = false;
-    if (capture_ >= 0 && !(pressed_ == Target{Hit::KeyStrip, capture_})) {
+    if (capture_ >= 0 && !(pressed_ == Target{captureCol_ == 0 ? Hit::KeyStrip : Hit::KeyStrip2, capture_})) {
         capture_ = -1; // a click elsewhere: the wait for a key ends, nothing changed
         note_ = texts_.notChanged;
         noteError_ = false;
@@ -623,9 +626,12 @@ Action Window::Activate(const Target &t, int)
         break;
     }
     case Hit::KeyStrip:
+    case Hit::KeyStrip2:
         capture_ = t.index; // waits for the next key (Key)
+        captureCol_ = t.hit == Hit::KeyStrip ? 0 : 1;
         endedVk_ = 0;
-        note_.clear();
+        note_ = texts_.clearHint;
+        noteError_ = false;
         break;
     case Hit::Keep: Answer(true); break;
     case Hit::Revert: Answer(false); break;
@@ -667,19 +673,36 @@ void Window::KeyPressed(int vk, unsigned mods)
     if (modifier) {
         return; // a modifier alone: still waiting for the key
     }
+    if (vk == kVkBackspace) { // this key left empty (an action may have one key, or none for now)
+        (captureCol_ == 0 ? DraftOf(row).value : DraftOf(row).toggle) = 0;
+        capture_ = -1;
+        endedVk_ = static_cast<unsigned>(vk);
+        note_.clear();
+        noteError_ = false;
+        return;
+    }
+    if (reservedKey_ && reservedKey_(static_cast<unsigned>(vk), mods)) {
+        note_ = texts_.reserved;
+        noteError_ = true;
+        return;
+    }
     if (!ui::IsHotkeyKey(static_cast<unsigned>(vk))) {
         note_ = texts_.notUsable;
         noteError_ = true;
         return;
     }
     const int code = KeyCode(static_cast<unsigned>(vk), mods);
-    for (size_t p = 0; p < pages_.size(); ++p) { // the other keys' drafts: one key, one action
+    for (size_t p = 0; p < pages_.size(); ++p) { // the other keys' drafts (both of each row): one key, one action
         for (size_t c = 0; c < pages_[p].categories.size(); ++c) {
             const auto &rows = pages_[p].categories[c].rows;
             for (size_t r = 0; r < rows.size(); ++r) {
-                const bool self = static_cast<int>(p) == page_ && static_cast<int>(c) == category_ &&
+                if (rows[r].kind != Kind::Key) {
+                    continue;
+                }
+                const bool here = static_cast<int>(p) == page_ && static_cast<int>(c) == category_ &&
                                   static_cast<int>(r) == row;
-                if (!self && rows[r].kind == Kind::Key && drafts_[p][c][r].value == code) {
+                const DraftValue &d = drafts_[p][c][r];
+                if ((d.value == code && !(here && captureCol_ == 0)) || (d.toggle == code && !(here && captureCol_ == 1))) {
                     char why[256];
                     std::snprintf(why, sizeof(why), texts_.inUse.c_str(), KeyText(code).c_str(),
                                   rows[r].label.c_str());
@@ -690,7 +713,7 @@ void Window::KeyPressed(int vk, unsigned mods)
             }
         }
     }
-    DraftOf(row).value = code;
+    (captureCol_ == 0 ? DraftOf(row).value : DraftOf(row).toggle) = code;
     capture_ = -1;
     endedVk_ = static_cast<unsigned>(vk);
     const char *game = gameKeyNote_ ? gameKeyNote_(static_cast<unsigned>(vk), mods) : nullptr;
@@ -710,6 +733,22 @@ Action Window::MouseUp(int x, int y)
         return Action::None;
     }
     return Activate(was, x);
+}
+
+bool Window::RightClick(int x, int y)
+{
+    if (pages_.empty() || confirm_.pending || capture_ >= 0) {
+        return false;
+    }
+    const Target t = HitTest(x, y);
+    if (t.hit != Hit::KeyStrip && t.hit != Hit::KeyStrip2) {
+        return false;
+    }
+    (t.hit == Hit::KeyStrip ? DraftOf(t.index).value : DraftOf(t.index).toggle) = 0;
+    note_.clear();
+    noteError_ = false;
+    tipShown_ = false;
+    return true;
 }
 
 void Window::Wheel(int notches)
@@ -783,6 +822,8 @@ std::string Window::TipText()
     switch (tip_.hit) {
     case Hit::RowLabel:
     case Hit::RowCheck: return r.help;
+    case Hit::KeyStrip:
+    case Hit::KeyStrip2: return capture_ >= 0 ? "" : texts_.keyTip;
     case Hit::ChoiceValue: { // not on the arrows: they only change the value
         if (r.kind != Kind::Choice) {
             return "";
@@ -868,26 +909,36 @@ void Window::Rows(Painter &p)
         }
         switch (r.kind) {
         case Kind::Columns: {
-            const char *rl = r.rightLabel.c_str();
             p.Text(label, left, y, Font::Gold);
-            p.Text(rl, right - kKeyW + (kKeyW - p.TextWidth(rl, Font::Gold)) / 2, y, Font::Gold);
+            const char *titles[2] = {r.rightLabel.c_str(), r.rightLabel2.c_str()};
+            for (int col = 0; col < 2; ++col) {
+                const int sx = right - (2 - col) * kKeyW - (col == 0 ? kKeyGap : 0);
+                p.Text(titles[col], sx + (kKeyW - p.TextWidth(titles[col], Font::Gold)) / 2, y, Font::Gold);
+            }
             p.Line(left, y + 18, right - left);
             break;
         }
         case Kind::Key: {
             p.Text(label, left, y + 3, Font::Normal);
-            const int sx = right - kKeyW, sw = kKeyW / kTile * kTile;
-            p.Strip(sx, y, sw);
-            const bool waiting = capture_ == pl.row;
-            const std::string v = waiting ? texts_.pressKey : KeyText(d.value);
-            const Font f = waiting ? Font::Normal : Font::Gold;
-            p.Text(v.c_str(), sx + (sw - p.TextWidth(v.c_str(), f)) / 2, y + 3, f);
-            if (waiting || hover_ == Target{Hit::KeyStrip, pl.row}) {
-                p.Frame(sx, y - 2, sw, 24);
+            const int sw = kKeyW / kTile * kTile;
+            for (int col = 0; col < 2; ++col) {
+                const int sx = right - (2 - col) * kKeyW - (col == 0 ? kKeyGap : 0);
+                p.Strip(sx, y, sw);
+                const bool waiting = capture_ == pl.row && captureCol_ == col;
+                const std::string v = waiting ? texts_.pressKey : KeyText(col == 0 ? d.value : d.toggle);
+                const Font f = waiting ? Font::Normal : Font::Gold;
+                p.Text(v.c_str(), sx + (sw - p.TextWidth(v.c_str(), f)) / 2, y + 3, f);
+                if (waiting || hover_ == Target{col == 0 ? Hit::KeyStrip : Hit::KeyStrip2, pl.row}) {
+                    p.Frame(sx, y - 2, sw, 24);
+                }
             }
             break;
         }
         case Kind::Header: {
+            if (look_.plainHeaders) {
+                p.Text(label, left, y + 4, Font::Gold);
+                break;
+            }
             int mid = (left + right) / 2, a = mid - tw / 2 - 10, b = mid + tw / 2 + 10;
             p.Line(left, y + 7, a - left);
             p.Text(label, mid - tw / 2, y, Font::Gold);

@@ -231,6 +231,7 @@ struct Setting {
     int min = 0, step = 1;
     const char *autoWord = nullptr;
     const char *shownIfValue = nullptr; // the item's own shownIfValue, or the window's (ShownIf)
+    int pendingAlt = -1; // a Key row's alternative waiting for its first key to be set (a swap of the two)
 };
 std::deque<Setting> g_settings; // the rows' contexts (rebuilt with the pages at each opening)
 
@@ -239,9 +240,10 @@ int Parse(const Setting &s, const char *text)
     const cs::Item &it = cs::Get(s.index);
     switch (it.type) {
     case cs::Type::Bool: return std::strcmp(text, "on") == 0;
-    case cs::Type::Hotkey: {
-        core::ui::Hotkey key{0, 0};
-        return core::ui::ParseHotkey(text, text + std::strlen(text), &key) ? co::KeyCode(key.vk, key.mods) : 0;
+    case cs::Type::Hotkey: { // the first key (Key rows read both with KeyGet)
+        core::ui::Hotkey keys[core::ui::kMaxKeys] = {};
+        return core::ui::ParseHotkeyList(text, text + std::strlen(text), keys) > 0 ? co::KeyCode(keys[0].vk, keys[0].mods)
+                                                                                  : 0;
     }
     case cs::Type::Int:
         if (s.autoWord && std::strcmp(text, s.autoWord) == 0) {
@@ -256,6 +258,74 @@ int Parse(const Setting &s, const char *text)
         }
         return 0;
     }
+}
+
+// A key setting's keys as KeyCodes (0: none).
+void KeyCodes(const char *text, int codes[2])
+{
+    core::ui::Hotkey keys[core::ui::kMaxKeys] = {};
+    const int n = core::ui::ParseHotkeyList(text, text + std::strlen(text), keys);
+    for (int k = 0; k < 2; ++k) {
+        codes[k] = k < n ? co::KeyCode(keys[k].vk, keys[k].mods) : 0;
+    }
+}
+
+int KeyGet(const void *ctx, int col)
+{
+    const Setting &s = *static_cast<const Setting *>(ctx);
+    char v[cs::kValueSize];
+    cs::Value(s.index, v, sizeof(v));
+    int codes[2];
+    KeyCodes(v, codes);
+    return codes[col];
+}
+int KeyGet0(const void *ctx)
+{
+    return KeyGet(ctx, 0);
+}
+int KeyGet1(const void *ctx)
+{
+    return KeyGet(ctx, 1);
+}
+
+void KeyWrite(const Setting &s, int first, int second)
+{
+    core::ui::Hotkey keys[2];
+    int n = 0;
+    for (int code : {first, second}) {
+        if (code != 0) {
+            keys[n++] = core::ui::Hotkey{static_cast<unsigned>(code) & 0xffff, static_cast<unsigned>(code) >> 16};
+        }
+    }
+    if (n == 0) {
+        return; // no key at all: the setting keeps what it had (the settings file needs at least one)
+    }
+    char v[cs::kValueSize];
+    core::ui::FormatHotkeyList(keys, n, v, sizeof(v));
+    const cs::Item &it = cs::Get(s.index);
+    core_log("options window: %s.%s = %s", it.section, it.key, v);
+    cs::Request(s.index, v, true);
+    cs::RunPending();
+}
+
+// The window sets the alternative before the first key (Window::Apply): when the new alternative is the key that is
+// still first (the two swapped), it waits for the first key's set.
+void KeySet1(const void *ctx, int value)
+{
+    Setting &s = *static_cast<Setting *>(const_cast<void *>(ctx));
+    const int first = KeyGet(ctx, 0);
+    if (value != 0 && value == first) {
+        s.pendingAlt = value;
+        return;
+    }
+    KeyWrite(s, first, value);
+}
+void KeySet0(const void *ctx, int value)
+{
+    Setting &s = *static_cast<Setting *>(const_cast<void *>(ctx));
+    const int second = s.pendingAlt >= 0 ? s.pendingAlt : KeyGet(ctx, 1);
+    s.pendingAlt = -1;
+    KeyWrite(s, value, value == second ? 0 : second);
 }
 
 int SettingGet(const void *ctx)
@@ -404,7 +474,15 @@ void Add(std::vector<co::Row> &rows, const char *section, const char *key)
         r.kind = co::Kind::Choice;
         ResolutionChoices(s);
         break;
-    case cs::Type::Hotkey: r.kind = co::Kind::Key; break; // the Hotkeys window
+    case cs::Type::Hotkey: { // the Hotkeys window: the first key and the alternative
+        r.kind = co::Kind::Key;
+        r.value = {&KeyGet0, &KeySet0, &s};
+        r.toggle = {&KeyGet1, &KeySet1, &s};
+        int codes[2];
+        KeyCodes(it.defaultValue, codes);
+        r.defaultToggle = codes[1];
+        break;
+    }
     }
     for (const auto &v : s.spell) {
         const ot::ChoiceText *c = text ? ot::Choice(*text, v.c_str()) : nullptr;
@@ -581,7 +659,9 @@ std::vector<co::Page> BuildKeyPages()
     columns.kind = co::Kind::Columns;
     columns.label = ot::kColumnAction;
     columns.rightLabel = ot::kColumnKey;
+    columns.rightLabel2 = ot::kColumnAlternative;
     c.rows.push_back(std::move(columns));
+    Header(c.rows, ot::kSectionGlobal);
     Add(c.rows, "ui", "panel_key");
     Add(c.rows, "debug", "screenshot_key");
     Add(c.rows, "debug", "report_key");
@@ -647,12 +727,26 @@ void Kept()
     core_log("options window: the new setting kept");
 }
 
+// Keys nobody may choose (docs/key_bindings.md section 3.2): Enter (the game's, not offered), the game's keys for
+// development and multiplayer (Ctrl+A, Alt+D, Alt+Z, Alt+T, Ctrl+Alt+C, Numpad2; comma and period are not hotkey keys),
+// and ours that stay fixed (F5 and Alt+Enter: window or full screen; Shift+F7: the resolution, for testing).
+bool ReservedKey(unsigned vk, unsigned mods)
+{
+    using core::ui::kModAlt;
+    using core::ui::kModCtrl;
+    using core::ui::kModShift;
+    return vk == VK_RETURN || (vk == 'A' && mods == kModCtrl) || (mods == kModAlt && (vk == 'D' || vk == 'Z' || vk == 'T')) ||
+           (vk == 'C' && mods == (kModCtrl | kModAlt)) || (vk == VK_NUMPAD2 && mods == 0) || (vk == VK_F5 && mods == 0) ||
+           (vk == VK_F7 && mods == kModShift);
+}
+
 void Prepare(co::Window &w, bool keys)
 {
     co::Look look;
     if (keys) {
         look.title = ot::kHotkeysTitle;
         look.hotkeysButton = look.applyButton = false;
+        look.plainHeaders = true; // Augustus's hotkey list: the section titles in gold at the left
     }
     w.SetLook(look);
     co::Texts t;
@@ -660,12 +754,16 @@ void Prepare(co::Window &w, bool keys)
     t.notChanged = ot::kKeyNotChanged;
     t.notUsable = ot::kKeyNotUsable;
     t.inUse = ot::kKeyInUse;
+    t.reserved = ot::kKeyReserved;
+    t.clearHint = ot::kKeyClearHint;
+    t.keyTip = ot::kKeyTip;
     t.keepTitle = ot::kKeepTitle;
     t.keepCountdown = ot::kKeepCountdown;
     t.keep = ot::kKeep;
     t.revert = ot::kRevert;
     w.SetTexts(t);
     w.SetGameKeyNote(core::ui::GetGameKeyNote());
+    w.SetReservedKey(&ReservedKey);
     w.SetOnKept(&Kept);
     w.SetRestartTip(ot::kRestartTip);
 }
@@ -733,7 +831,12 @@ void HandleNow(void *p)
         a = w.MouseDown(x, y, GetTickCount());
         break;
     case WM_LBUTTONUP: a = w.MouseUp(x, y); break;
-    case WM_RBUTTONUP: // the game closes its dialogs with a right click (not while a key is awaited)
+    case WM_RBUTTONUP: // the game closes its dialogs with a right click (not while a key is awaited); on a key box it
+                       // removes that key
+        if (w.RightClick(x, y)) {
+            Function<UiSound_fn>(kUiSound)(kClickSound);
+            break;
+        }
         if (!w.WaitingForKey()) {
             w.Closing();
             w.Cancel();

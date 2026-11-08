@@ -700,19 +700,33 @@ void CaptureKey(unsigned vk, bool ctrl, bool shift, bool alt)
     const Hotkey key{vk, (ctrl ? kModCtrl : 0u) | (shift ? kModShift : 0u) | (alt ? kModAlt : 0u)};
     char text[cs::kValueSize];
     FormatHotkey(key, text, sizeof(text));
+    // One key, one action: the other items' keys (both of each) and this item's alternative (it would be the same key
+    // twice). The new key replaces the item's first key; its alternative stays (set in the Hotkeys window).
+    Hotkey mine[kMaxKeys] = {};
+    char now[cs::kValueSize];
+    cs::Value(i, now, sizeof(now));
+    const int mineCount = ParseHotkeyList(now, now + std::strlen(now), mine);
     for (int j = 0; j < cs::Count(); ++j) {
-        if (j == i || cs::Get(j).type != Type::Hotkey) {
+        if (cs::Get(j).type != Type::Hotkey) {
             continue;
         }
         char other[cs::kValueSize];
         cs::Value(j, other, sizeof(other));
-        if (_stricmp(other, text) == 0) {
-            char why[200];
-            std::snprintf(why, sizeof(why), "%s is already the key for \"%s\"; try another one.", text,
-                          cs::Get(j).label);
-            Note(i, true, why);
-            return;
+        Hotkey keys[kMaxKeys] = {};
+        const int n = ParseHotkeyList(other, other + std::strlen(other), keys);
+        for (int k = j == i ? 1 : 0; k < n; ++k) {
+            if (keys[k].vk == key.vk && keys[k].mods == key.mods) {
+                char why[200];
+                std::snprintf(why, sizeof(why), "%s is already the key for \"%s\"; try another one.", text,
+                              cs::Get(j).label);
+                Note(i, true, why);
+                return;
+            }
         }
+    }
+    if (mineCount == 2) {
+        mine[0] = key;
+        FormatHotkeyList(mine, 2, text, sizeof(text));
     }
     g_settleVk = vk;
     g_capture = -1;

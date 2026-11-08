@@ -36,9 +36,9 @@ extern const char *const kMenuGeneral, *const kMenuVideo, *const kMenuAudio, *co
 extern const char *const kCategoryMessages; // the options window's General > Messages (the message list opens it)
 
 // The Hotkeys window and "keep this setting?" (core/options Window::Texts; %s / %d as there).
-extern const char *const kHotkeysTitle, *const kColumnAction, *const kColumnKey, *const kPressKey,
-    *const kKeyNotChanged, *const kKeyNotUsable, *const kKeyInUse, *const kKeepTitle, *const kKeepCountdown,
-    *const kKeep, *const kRevert;
+extern const char *const kHotkeysTitle, *const kColumnAction, *const kColumnKey, *const kColumnAlternative,
+    *const kSectionGlobal, *const kPressKey, *const kKeyNotChanged, *const kKeyNotUsable, *const kKeyInUse,
+    *const kKeyReserved, *const kKeyClearHint, *const kKeyTip, *const kKeepTitle, *const kKeepCountdown, *const kKeep, *const kRevert;
 
 // Our notices in the game's notice boxes (games/emperor/notice; docs/archive/game_notices.md). Our box is 400 pixels
 // wide for a text up to 320 pixels (with its side ornaments), 460 for a longer one. Errors are shown in red.

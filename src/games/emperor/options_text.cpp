@@ -215,11 +215,16 @@ const char *const kCategoryMessages = "Messages";
 
 const char *const kHotkeysTitle = "Hotkeys";
 const char *const kColumnAction = "Action";
-const char *const kColumnKey = "Key";
+const char *const kColumnKey = "Hotkey";
+const char *const kColumnAlternative = "Alternative";
+const char *const kSectionGlobal = "Global hotkeys";
 const char *const kPressKey = "Press a key";
 const char *const kKeyNotChanged = "Not changed.";
 const char *const kKeyNotUsable = "That key cannot be used here; try another one.";
 const char *const kKeyInUse = "%s is already the key for \"%s\"; try another one.";
+const char *const kKeyReserved = "The game keeps this key for itself; choose another one.";
+const char *const kKeyClearHint = "Backspace: no key.";
+const char *const kKeyTip = "Click to change; right-click to remove.";
 const char *const kKeepTitle = "Keep this setting?";
 const char *const kKeepCountdown = "The previous setting comes back in %d s.";
 // Widths in the notice font, measured with tools/mockups/textwidth.py (2026-11-08).

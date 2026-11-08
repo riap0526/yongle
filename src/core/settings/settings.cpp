@@ -390,10 +390,11 @@ bool Normalize(int index, const char *text, char *out, size_t size)
         std::snprintf(out, size, "%dx%d", w, h);
         return true;
     }
-    case Type::Hotkey: {
-        core::ui::Hotkey key;
-        if (!core::ui::ParseHotkey(v, v + t.size(), &key)) return false;
-        core::ui::FormatHotkey(key, out, size);
+    case Type::Hotkey: { // one key, or two: "Insert, Ctrl+F12" (the second the alternative)
+        core::ui::Hotkey keys[core::ui::kMaxKeys];
+        const int n = core::ui::ParseHotkeyList(v, v + t.size(), keys);
+        if (n == 0) return false;
+        core::ui::FormatHotkeyList(keys, n, out, size);
         return true;
     }
     }

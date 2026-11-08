@@ -546,6 +546,97 @@ int main()
               "OK sets the new key and closes");
     }
 
+    // Two keys per Key row (the alternative in toggle): one key, one action across both columns; Backspace leaves a key
+    // empty; a reserved key is refused with its own sentence; OK sets both.
+    {
+        g_values[11] = co::KeyCode(0x79, 0);                   // F10
+        g_values[12] = co::KeyCode(0x79, core::ui::kModShift); // Shift+F10 (the alternative)
+        g_values[13] = co::KeyCode(0x7a, 0);                   // F11
+        g_values[14] = 0;
+        co::Row cols;
+        cols.kind = co::Kind::Columns;
+        cols.label = "Action";
+        cols.rightLabel = "Hotkey";
+        cols.rightLabel2 = "Alternative";
+        co::Row a;
+        a.kind = co::Kind::Key;
+        a.label = "City";
+        a.value = V(11);
+        a.toggle = V(12);
+        co::Row b = a;
+        b.label = "Shot";
+        b.value = V(13);
+        b.toggle = V(14);
+        co::Window kw;
+        co::Look look;
+        look.title = "Hotkeys";
+        look.hotkeysButton = look.applyButton = false;
+        kw.SetLook(look);
+        kw.SetReservedKey([](unsigned vk, unsigned mods) { return vk == 'A' && mods == core::ui::kModCtrl; });
+        kw.SetPages({{"Hotkeys", {{"", {cols, Header("Global hotkeys"), a, b}}}}});
+        kw.Open(0, 0);
+        FakePainter q = Draw(kw);
+        const Op *alt = q.FindText("Shift+F10"), *f10 = q.FindText("F10");
+        Check(q.FindText("Hotkey") && q.FindText("Alternative") && q.FindText("Global hotkeys") && alt && f10 &&
+                  alt->x > f10->x && AllInside(q),
+              "two columns: Hotkey and Alternative, a section title, the alternative at the right");
+        Click(kw, Cx(alt), Cy(alt));
+        q = Draw(kw);
+        Check(kw.WaitingForKey() && q.FindText("Press a key") && q.FindText("Backspace: no key."),
+              "the alternative waits for a key; the note says Backspace leaves it empty");
+        kw.Key(0x7a, 0); // F11: the other row's first key
+        q = Draw(kw);
+        Check(kw.WaitingForKey() && q.FindText("F11 is already the key for \"Shot\"; try another one."),
+              "a key in use in the other row: refused");
+        kw.Key(0x79, 0); // F10: this row's first key
+        Check(kw.WaitingForKey(), "this row's other key: refused too");
+        kw.Key('A', core::ui::kModCtrl);
+        q = Draw(kw);
+        Check(kw.WaitingForKey() && q.FindText("The game keeps this key for itself; choose another one."),
+              "a reserved key: its own sentence");
+        kw.Key(0x0d, 0); // Enter: not a key that can be chosen
+        Check(kw.WaitingForKey(), "Enter: refused");
+        kw.Key(0x08, 0); // Backspace
+        Check(!kw.WaitingForKey() && kw.DraftToggle(0, 0, 2) == 0 && kw.Draft(0, 0, 2) == co::KeyCode(0x79, 0),
+              "Backspace: the alternative empty, the first key kept");
+        const Op *empty = nullptr;
+        q = Draw(kw);
+        for (const Op &o : q.ops) {
+            if (o.op == "strip" && o.y > (f10 ? f10->y - 8 : 0) && o.y < (f10 ? f10->y + 8 : 0) && o.x > f10->x) empty = &o;
+        }
+        Check(empty != nullptr, "the empty alternative still has its strip");
+        Click(kw, Cx(empty), Cy(empty));
+        kw.Key(0x7a, core::ui::kModCtrl); // Ctrl+F11 as the alternative
+        Check(kw.DraftToggle(0, 0, 2) == co::KeyCode(0x7a, core::ui::kModCtrl), "a new alternative in the draft");
+        q = Draw(kw);
+        kw.MouseDown(Cx(q.FindText("OK")), Cy(q.FindText("OK")), 0);
+        kw.MouseUp(Cx(q.FindText("OK")), Cy(q.FindText("OK")));
+        Check(g_values[11] == co::KeyCode(0x79, 0) && g_values[12] == co::KeyCode(0x7a, core::ui::kModCtrl),
+              "OK sets both keys");
+
+        // Plain section titles (Augustus's list): gold at the left, no lines. A right click on a key box removes that
+        // key; elsewhere it is not taken (the owner closes the window). A key box's tooltip says so.
+        look.plainHeaders = true;
+        kw.SetLook(look);
+        kw.Open(0, 0);
+        q = Draw(kw);
+        const Op *title = q.FindText("Global hotkeys"), *action = q.FindText("Action");
+        int lines = 0;
+        for (const Op &o : q.ops) lines += o.op == "line";
+        Check(title && action && title->x == action->x && title->font == co::Font::Gold && lines == 1,
+              "plain section title: at the left, gold, no lines (only the columns' line)");
+        const Op *ctrlF11 = q.FindText("Ctrl+F11");
+        kw.MouseMove(Cx(ctrlF11), Cy(ctrlF11));
+        kw.Tick(40000);
+        kw.Tick(40000 + co::Window::kTipDelayMs);
+        Check(kw.TipShown() && kw.TipText() == "Click to change; right-click to remove.", "a key box's tooltip");
+        Check(kw.RightClick(Cx(ctrlF11), Cy(ctrlF11)) && kw.DraftToggle(0, 0, 2) == 0 &&
+                  kw.Draft(0, 0, 2) == co::KeyCode(0x79, 0),
+              "right click on the alternative: removed, the first key kept");
+        Check(!kw.RightClick(Cx(title), Cy(title)), "right click elsewhere: not taken");
+        kw.Cancel();
+    }
+
     // Hover: the frame around the button under the mouse.
     w.MouseMove(Cx(p.FindText("Cancel")), Cy(p.FindText("Cancel")));
     p = Draw(w);

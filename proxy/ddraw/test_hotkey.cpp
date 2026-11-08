@@ -53,6 +53,25 @@ int main()
     Expect("Win+A", false);
     Expect("", false);
     Expect("AB", false);
+
+    // Two keys: the first and the alternative (the settings file's "Insert, Ctrl+F12").
+    auto list = [](const char *text, int want, const char *spelled) {
+        core::ui::Hotkey keys[core::ui::kMaxKeys] = {};
+        const int n = core::ui::ParseHotkeyList(text, text + std::strlen(text), keys);
+        char out[64] = "";
+        if (n > 0) core::ui::FormatHotkeyList(keys, n, out, sizeof(out));
+        const bool ok = n == want && (n == 0 || std::strcmp(out, spelled) == 0);
+        std::printf("list \"%s\" -> %d \"%s\" %s\n", text, n, out, ok ? "ok" : "FAILED");
+        if (!ok) ++g_failures;
+    };
+    list("Insert", 1, "Insert");
+    list("insert , ctrl+f12", 2, "Insert, Ctrl+F12");
+    list("F11,Shift+F11", 2, "F11, Shift+F11");
+    list("Insert, Insert", 0, "");
+    list("Insert, F1, F2", 0, "");
+    list("Insert,", 0, "");
+    list(", F1", 0, "");
+    list("Insert, Esc", 0, "");
     std::printf("RESULT: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
     return g_failures ? 1 : 0;
 }
