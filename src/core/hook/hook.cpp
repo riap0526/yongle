@@ -114,6 +114,46 @@ extern "C" int core_hook_install_api(const char *name, const wchar_t *module, co
     return core_hook_install(name, reinterpret_cast<void *>(target), detour, original);
 }
 
+extern "C" int core_hook_log_shimmed_imports(void)
+{
+    auto *base = reinterpret_cast<BYTE *>(GetModuleHandleW(nullptr));
+    auto *dos = reinterpret_cast<IMAGE_DOS_HEADER *>(base);
+    auto *nt = reinterpret_cast<IMAGE_NT_HEADERS *>(base + dos->e_lfanew);
+    const IMAGE_DATA_DIRECTORY &dir = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
+    if (!dir.VirtualAddress) {
+        return 0;
+    }
+    int shimmed = 0, total = 0;
+    for (auto *d = reinterpret_cast<IMAGE_IMPORT_DESCRIPTOR *>(base + dir.VirtualAddress); d->Name; ++d) {
+        const char *dll = reinterpret_cast<const char *>(base + d->Name);
+        wchar_t wdll[MAX_PATH];
+        MultiByteToWideChar(CP_ACP, 0, dll, -1, wdll, MAX_PATH);
+        if (!GetModuleHandleW(wdll) || !d->OriginalFirstThunk) {
+            continue;
+        }
+        auto *names = reinterpret_cast<IMAGE_THUNK_DATA32 *>(base + d->OriginalFirstThunk);
+        auto *addrs = reinterpret_cast<IMAGE_THUNK_DATA32 *>(base + d->FirstThunk);
+        for (; names->u1.AddressOfData; ++names, ++addrs) {
+            if (IMAGE_SNAP_BY_ORDINAL32(names->u1.Ordinal)) {
+                continue;
+            }
+            const char *proc = reinterpret_cast<const char *>(
+                reinterpret_cast<IMAGE_IMPORT_BY_NAME *>(base + names->u1.AddressOfData)->Name);
+            ++total;
+            void *real = core_real_export(wdll, proc);
+            void *now = reinterpret_cast<void *>(static_cast<uintptr_t>(addrs->u1.Function));
+            if (real && now != real) {
+                char where[MAX_PATH + 40];
+                core_log("hook: the exe's import %s!%s goes to %s (a compatibility shim)", dll, proc,
+                         core_describe_address(now, where, sizeof(where)));
+                ++shimmed;
+            }
+        }
+    }
+    core_log("hook: %d of the exe's %d named imports go through a compatibility shim", shimmed, total);
+    return shimmed;
+}
+
 extern "C" void core_hook_remove_all(void)
 {
     if (!g_ready) {

@@ -23,6 +23,10 @@ int core_hook_install_api(const char *name, const wchar_t *module, const char *p
    nullptr when the module is not loaded or does not export proc; a forwarded export falls back to GetProcAddress. */
 void *core_real_export(const wchar_t *module, const char *proc);
 
+/* Logs every import of the main executable whose address is not the named DLL's own export: what a compatibility
+   shim (the Windows application compatibility layer) redirects, and where to. Read only. Returns how many. */
+int core_hook_log_shimmed_imports(void);
+
 /* Disables and removes every hook. Only for DLL unload (FreeLibrary); on process exit nothing is restored. */
 void core_hook_remove_all(void);
 

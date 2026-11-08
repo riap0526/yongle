@@ -144,6 +144,7 @@ void *ExeEntryPoint()
 using CreateWindowExA_fn = HWND(WINAPI *)(DWORD, LPCSTR, LPCSTR, DWORD, int, int, int, int, HWND, HMENU, HINSTANCE,
                                           LPVOID);
 CreateWindowExA_fn g_createWindowExA = nullptr;
+CreateWindowExA_fn g_directCreateWindowExA = nullptr; // user32's own when a shim stands in front of it (else nullptr)
 std::atomic<int> g_windowsLogged{0};
 constexpr int kMaxWindowsLogged = 16;
 
@@ -152,7 +153,12 @@ HWND WINAPI CreateWindowExA_detour(DWORD exStyle, LPCSTR cls, LPCSTR title, DWOR
 {
     void *caller = __builtin_return_address(0);
     core_dpi_apply("first CreateWindowExA (entry hook did not run)");
-    HWND hwnd = g_createWindowExA(exStyle, cls, title, style, x, y, w, h, parent, menu, inst, param);
+    // The emulated backend's window covers the monitor: a top-level window goes straight to user32, past a
+    // compatibility shim's wrapper (GOG's layer re-centres a window that does not fit the work area after creating
+    // it; 0.2.0 item 9, docs/archive/compat_layer.md). The logging wrapper backend keeps the layer, as the game without us.
+    const bool direct = !parent && g_directCreateWindowExA && core_config_get()->backend == CORE_BACKEND_EMULATED;
+    HWND hwnd = (direct ? g_directCreateWindowExA : g_createWindowExA)(exStyle, cls, title, style, x, y, w, h, parent,
+                                                                        menu, inst, param);
     if (!parent && g_windowsLogged++ < kMaxWindowsLogged) {
         char atom[16];
         if (IS_INTRESOURCE(cls)) {
@@ -202,6 +208,11 @@ extern "C" void core_startup_install_hooks(void)
     core_hook_install_api("CreateWindowExA", L"user32.dll", "CreateWindowExA",
                           reinterpret_cast<void *>(&CreateWindowExA_detour),
                           reinterpret_cast<void **>(&g_createWindowExA));
+    // Behind a shim the hook sits on the shim's function and user32's own is untouched: callable directly. Without
+    // one, user32's own is the hooked function itself (calling it would come back here): nullptr.
+    void *real = core_real_export(L"user32.dll", "CreateWindowExA");
+    void *seen = reinterpret_cast<void *>(GetProcAddress(GetModuleHandleW(L"user32.dll"), "CreateWindowExA"));
+    g_directCreateWindowExA = real && real != seen ? reinterpret_cast<CreateWindowExA_fn>(real) : nullptr;
 }
 
 extern "C" void core_startup_detach(void)

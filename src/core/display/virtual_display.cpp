@@ -353,6 +353,18 @@ void LogPlacement(const char *api, int x, int y, int w, int h, const RECT &m, vo
     }
 }
 
+// 0.2.0 item 9: another module's placement of the game window (ours, SDL's) that came through the hooked entry (a
+// shim's or user32's): the first 30, with the thread, for the compatibility layer analysis.
+void LogOtherPlacement(const char *api, int x, int y, int w, int h, UINT flags, void *caller)
+{
+    static long logs = 0;
+    if (++logs <= 30) {
+        char where[MAX_PATH + 40];
+        core_log("display: %s(game window, %d,%d %dx%d, flags 0x%x) from %s on thread %lu: straight to user32", api, x,
+                 y, w, h, flags, core_describe_address(caller, where, sizeof(where)), GetCurrentThreadId());
+    }
+}
+
 BOOL WINAPI SetWindowPos_detour(HWND hwnd, HWND after, int x, int y, int w, int h, UINT flags)
 {
     void *caller = __builtin_return_address(0);
@@ -373,6 +385,17 @@ BOOL WINAPI SetWindowPos_detour(HWND hwnd, HWND after, int x, int y, int w, int 
         flags &= ~(SWP_NOSIZE | SWP_NOMOVE);
         return own_SetWindowPos(hwnd, after, x, y, w, h, flags);
     }
+    if (g_hwnd && hwnd == g_hwnd) {
+        // The rest (z-order only: after each mode change the game calls SetWindowPos(HWND_NOTOPMOST, NOMOVE |
+        // NOSIZE)), and every other module's call for the game window (ours, SDL's), also goes straight to user32.
+        // With GOG's compatibility layer SetWindowPos reaches AcGenral.dll first, whose wrapper re-centres any window
+        // that does not fit the monitor's work area after every call: our full-screen window is larger than the work
+        // area by the taskbar, so it went up by half the taskbar's height (30 px). 0.2.0 item 9, docs/archive/compat_layer.md.
+        if (!FromExe(caller)) {
+            LogOtherPlacement("SetWindowPos", x, y, w, h, flags, caller);
+        }
+        return own_SetWindowPos(hwnd, after, x, y, w, h, flags);
+    }
     return o_SetWindowPos(hwnd, after, x, y, w, h, flags);
 }
 
@@ -389,6 +412,10 @@ BOOL WINAPI MoveWindow_detour(HWND hwnd, int x, int y, int w, int h, BOOL repain
         y = m.top;
         w = m.right - m.left;
         h = m.bottom - m.top;
+        return own_MoveWindow(hwnd, x, y, w, h, repaint);
+    }
+    if (g_hwnd && hwnd == g_hwnd) { // another module's (as SetWindowPos above)
+        LogOtherPlacement("MoveWindow", x, y, w, h, 0, caller);
         return own_MoveWindow(hwnd, x, y, w, h, repaint);
     }
     return o_MoveWindow(hwnd, x, y, w, h, repaint);
@@ -929,6 +956,18 @@ void KeepOnMonitor(const WINDOWPOS *wp)
         return;
     }
     ++keeps;
+    if (keeps <= 3) {
+        // 0.2.0 item 9: who moved it. WM_WINDOWPOSCHANGED is sent from inside the SetWindowPos (or similar) that
+        // moved the window, so its caller is on this stack.
+        unsigned char copy[6144];
+        const DWORD esp = reinterpret_cast<DWORD>(__builtin_frame_address(0));
+        NT_TIB *tib = reinterpret_cast<NT_TIB *>(NtCurrentTeb());
+        DWORD size = reinterpret_cast<DWORD>(tib->StackBase) - esp;
+        size = size > sizeof(copy) ? sizeof(copy) : size;
+        std::memcpy(copy, reinterpret_cast<const void *>(esp), size);
+        core_log("display: the window was moved off the monitor (%ld); the stack:", keeps);
+        core::diag::LogCapturedStack("moved", reinterpret_cast<unsigned long>(&KeepOnMonitor), esp, esp, copy, size);
+    }
     if (keeps <= kLogged || keeps % 100 == 0) {
         core_log("display: the window was moved to [%ld,%ld,%ld,%ld] in full screen; put back on the monitor "
                  "[%ld,%ld,%ld,%ld] (%ld so far)%s",
@@ -1154,6 +1193,7 @@ void InstallHooks()
     Hook("SetCursor", &SetCursor_detour, o_SetCursor);
     Hook("GetAsyncKeyState", &GetAsyncKeyState_detour, o_GetAsyncKeyState);
     Hook("GetKeyState", &GetKeyState_detour, o_GetKeyState);
+    core_hook_log_shimmed_imports(); // 0.2.0 item 9: what GOG's compatibility layer redirects
 }
 
 bool Attach(HWND hwnd, core_scaling scaling, core_present_mode present)
