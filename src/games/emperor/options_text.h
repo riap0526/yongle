@@ -29,6 +29,13 @@ const char *ChoiceHelp(const Text &t, const char *spell); // "" when none
 extern const char *const kRestartTip;
 
 // The game's Options menu (in the city) and the main menu's button that open the window (options_entry).
-extern const char *const kMenuGeneral, *const kMenuVideo, *const kMenuAudio, *const kMainMenuOptions;
+extern const char *const kMenuGeneral, *const kMenuVideo, *const kMenuAudio, *const kMainMenuOptions,
+    *const kMenuHotkeys;
+extern const char *const kCategoryMessages; // the options window's General > Messages (the message list opens it)
+
+// The Hotkeys window and "keep this setting?" (core/options Window::Texts; %s / %d as there).
+extern const char *const kHotkeysTitle, *const kColumnAction, *const kColumnKey, *const kPressKey,
+    *const kKeyNotChanged, *const kKeyNotUsable, *const kKeyInUse, *const kKeepTitle, *const kKeepCountdown,
+    *const kKeep, *const kRevert;
 
 } // namespace emperor::options_text

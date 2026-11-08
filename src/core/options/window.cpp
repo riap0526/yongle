@@ -1,5 +1,7 @@
 #include "core/options/window.h"
 
+#include "core/ui/hotkey.h"
+
 #include <algorithm>
 #include <cstdio>
 
@@ -17,22 +19,41 @@ constexpr int kTipW = 230, kTipLine = 14;
 constexpr int kTipDx = 20, kTipDy = 40, kTipAbove = 8;
 constexpr int kLabelSlack = 16; // a name is hit this much past its end (its "*")
 constexpr int kTipRedLine = 16, kTipRedW = 320; // the restart line's height (the red font is the normal size)
+constexpr int kKeyW = 176;   // a key's strip (11 tiles), right-aligned like a choice
+constexpr int kNoteH = 22;   // the line under Key rows: the last wait's result
+constexpr unsigned kConfirmMs = 15000;
+constexpr int kConfirmX = 120, kConfirmY = 168, kConfirmW = 400, kConfirmH = 144, kConfirmButtonW = 112;
 
 bool In(int x, int y, int rx, int ry, int rw, int rh)
 {
     return x >= rx && y >= ry && x < rx + rw && y < ry + rh;
 }
 
-int BottomX(int k) // the right-aligned bottom buttons
-{
-    int x = kWidth - 16 - (kBottomW[0] + kBottomW[1] + kBottomW[2] + kBottomW[3] + 3 * kBottomGap);
-    for (int i = 0; i < k; ++i) {
-        x += kBottomW[i] + kBottomGap;
-    }
-    return x;
-}
-
 } // namespace
+
+std::vector<Window::Button> Window::BottomButtons() const
+{
+    // Right-aligned: Restore defaults, Cancel, OK (and Apply); the Hotkeys button on the left.
+    std::vector<Button> b = {{Hit::Defaults, "Restore defaults", 0, kBottomW[0]},
+                             {Hit::CancelButton, "Cancel", 0, kBottomW[1]},
+                             {Hit::Ok, "OK", 0, kBottomW[2]}};
+    if (look_.applyButton) {
+        b.push_back({Hit::ApplyButton, "Apply", 0, kBottomW[3]});
+    }
+    int total = -kBottomGap;
+    for (const Button &x : b) {
+        total += x.w + kBottomGap;
+    }
+    int x = kWidth - 16 - total;
+    for (Button &e : b) {
+        e.x = x;
+        x += e.w + kBottomGap;
+    }
+    if (look_.hotkeysButton) {
+        b.push_back({Hit::Hotkeys, "Hotkeys", 16, kHotkeysW});
+    }
+    return b;
+}
 
 void Window::SetPages(std::vector<Page> pages)
 {
@@ -59,6 +80,52 @@ void Window::Open(int page, int category)
     dragRow_ = -1;
     dragThumb_ = false;
     tipShown_ = false;
+    capture_ = -1;
+    endedVk_ = 0;
+    note_.clear();
+    confirm_ = Confirm{};
+    closeRequest_ = false;
+}
+
+void Window::Closing()
+{
+    capture_ = -1;
+    if (confirm_.pending) {
+        confirm_.closeAfter = false;
+        Answer(false);
+    }
+}
+
+bool Window::TakeCloseRequest()
+{
+    bool r = closeRequest_;
+    closeRequest_ = false;
+    return r;
+}
+
+// "Keep this setting?" answered (or timed out: Revert).
+void Window::Answer(bool keep)
+{
+    if (!confirm_.pending) {
+        return;
+    }
+    if (keep) {
+        if (onKept_) {
+            onKept_();
+        }
+    }
+    else {
+        for (const Confirm::Was &w : confirm_.before) {
+            const Row &r = pages_[w.page].categories[w.category].rows[w.row];
+            if (r.value.set) {
+                r.value.set(r.value.ctx, w.value);
+            }
+        }
+    }
+    const bool close = confirm_.closeAfter;
+    confirm_ = Confirm{};
+    Cancel(); // drafts = what is in effect now
+    closeRequest_ = closeRequest_ || close;
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -99,22 +166,35 @@ bool Window::Dirty() const
 
 void Window::Apply()
 {
+    Confirm c;
     for (size_t p = 0; p < pages_.size(); ++p) {
-        for (size_t c = 0; c < pages_[p].categories.size(); ++c) {
-            const auto &rows = pages_[p].categories[c].rows;
+        for (size_t cat = 0; cat < pages_[p].categories.size(); ++cat) {
+            const auto &rows = pages_[p].categories[cat].rows;
             for (size_t r = 0; r < rows.size(); ++r) {
                 const Row &row = rows[r];
-                const DraftValue &d = drafts_[p][c][r];
+                const DraftValue &d = drafts_[p][cat][r];
                 if (row.toggle.get && row.toggle.set && d.toggle != row.toggle.get(row.toggle.ctx)) {
                     row.toggle.set(row.toggle.ctx, d.toggle);
                 }
-                if (row.value.get && row.value.set && d.value != row.value.get(row.value.ctx)) {
-                    row.value.set(row.value.ctx, d.value);
+                if (row.value.get && row.value.set) {
+                    const int was = row.value.get(row.value.ctx);
+                    if (d.value != was) {
+                        if (row.relayout) {
+                            c.before.push_back({static_cast<int>(p), static_cast<int>(cat), static_cast<int>(r), was});
+                        }
+                        row.value.set(row.value.ctx, d.value);
+                    }
                 }
             }
         }
     }
     Cancel(); // drafts = what is in effect now (a value the owner adjusted shows as it is)
+    if (!c.before.empty()) { // the screen was laid out again: keep it? (reverts by itself after 15 s)
+        c.pending = true;
+        c.until = now_ + kConfirmMs;
+        confirm_ = c;
+        tipShown_ = false;
+    }
 }
 
 void Window::RestoreDefaults()
@@ -176,8 +256,36 @@ int Window::Height(const Row &r)
     case Kind::Choice: return 32;
     case Kind::Slider:
     case Kind::CheckSlider: return 54;
+    case Kind::Key: return 32;
+    case Kind::Columns: return 30;
     }
     return 28;
+}
+
+bool Window::HasKeyRows()
+{
+    for (const Row &r : Current().rows) {
+        if (r.kind == Kind::Key) {
+            return true;
+        }
+    }
+    return false;
+}
+
+int Window::RowsHeight()
+{
+    return kContentH - 32 - (HasKeyRows() ? kNoteH : 0);
+}
+
+std::string Window::KeyText(int code) const
+{
+    if (code == 0) {
+        return "";
+    }
+    char text[32];
+    core::ui::FormatHotkey(core::ui::Hotkey{static_cast<unsigned>(code) & 0xffff, static_cast<unsigned>(code) >> 16},
+                           text, sizeof(text));
+    return text;
 }
 
 int Window::ContentX() const
@@ -322,6 +430,16 @@ Window::Target Window::HitTest(int x, int y)
     if (pages_.empty()) {
         return {};
     }
+    if (confirm_.pending) { // "keep this setting?": only its two buttons
+        const int by = kConfirmY + kConfirmH - 44, mid = kConfirmX + kConfirmW / 2;
+        if (In(x, y, mid - 8 - kConfirmButtonW, by, kConfirmButtonW, 25)) {
+            return {Hit::Keep, 0};
+        }
+        if (In(x, y, mid + 8, by, kConfirmButtonW, 25)) {
+            return {Hit::Revert, 0};
+        }
+        return {};
+    }
     // Tabs: the widths depend on the text, so they are measured when drawn (tabX_).
     for (size_t k = 0; k < tabs_.size(); ++k) {
         if (In(x, y, tabs_[k].x, kTabY, tabs_[k].w, 25)) {
@@ -335,13 +453,9 @@ Window::Target Window::HitTest(int x, int y)
             }
         }
     }
-    if (In(x, y, 16, kButtonY, kHotkeysW, 25)) {
-        return {Hit::Hotkeys, 0};
-    }
-    const Hit bottom[] = {Hit::Defaults, Hit::CancelButton, Hit::Ok, Hit::ApplyButton};
-    for (int k = 0; k < 4; ++k) {
-        if (In(x, y, BottomX(k), kButtonY, kBottomW[k], 25)) {
-            return {bottom[k], 0};
+    for (const Button &b : BottomButtons()) {
+        if (In(x, y, b.x, kButtonY, b.w, 25)) {
+            return {b.hit, 0};
         }
     }
     if (Scrolls()) {
@@ -363,7 +477,16 @@ Window::Target Window::HitTest(int x, int y)
         const Row &r = Current().rows[pl.row];
         int tw = (labelWidths_.count(pl.row) ? labelWidths_[pl.row] : 0) + kLabelSlack;
         switch (r.kind) {
-        case Kind::Header: break;
+        case Kind::Header:
+        case Kind::Columns: break;
+        case Kind::Key:
+            if (In(x, y, right - kKeyW, pl.y - 6, kKeyW, Height(r))) {
+                return {Hit::KeyStrip, pl.row};
+            }
+            if (In(x, y, left, pl.y - 6, tw, Height(r))) {
+                return {Hit::RowLabel, pl.row};
+            }
+            break;
         case Kind::Check:
             if (In(x, y, left, pl.y - 5, 24 + tw, Height(r))) {
                 return {Hit::RowCheck, pl.row};
@@ -446,6 +569,11 @@ Action Window::MouseDown(int x, int y, unsigned nowMs)
     pressed_ = HitTest(x, y);
     pressedAt_ = lastRepeat_ = nowMs;
     tipShown_ = false;
+    if (capture_ >= 0 && !(pressed_ == Target{Hit::KeyStrip, capture_})) {
+        capture_ = -1; // a click elsewhere: the wait for a key ends, nothing changed
+        note_ = texts_.notChanged;
+        noteError_ = false;
+    }
     switch (pressed_.hit) {
     case Hit::ArrowLess: Step(pressed_.index, -1); break;
     case Hit::ArrowMore: Step(pressed_.index, +1); break;
@@ -494,6 +622,13 @@ Action Window::Activate(const Target &t, int)
         }
         break;
     }
+    case Hit::KeyStrip:
+        capture_ = t.index; // waits for the next key (Key)
+        endedVk_ = 0;
+        note_.clear();
+        break;
+    case Hit::Keep: Answer(true); break;
+    case Hit::Revert: Answer(false); break;
     case Hit::Hotkeys: return Action::OpenHotkeys;
     case Hit::Defaults: RestoreDefaults(); break;
     case Hit::CancelButton:
@@ -501,6 +636,10 @@ Action Window::Activate(const Target &t, int)
         return Action::Close;
     case Hit::Ok:
         Apply();
+        if (confirm_.pending) { // closes once "keep this setting?" is answered
+            confirm_.closeAfter = true;
+            return Action::None;
+        }
         return Action::Close;
     case Hit::ApplyButton:
         if (Dirty()) {
@@ -510,6 +649,53 @@ Action Window::Activate(const Target &t, int)
     default: break;
     }
     return Action::None;
+}
+
+void Window::KeyPressed(int vk, unsigned mods)
+{
+    namespace ui = core::ui;
+    const int row = capture_;
+    if (vk == kVkEscape) {
+        capture_ = -1;
+        endedVk_ = vk;
+        note_ = texts_.notChanged;
+        noteError_ = false;
+        return;
+    }
+    const bool modifier = vk == 0x10 || vk == 0x11 || vk == 0x12 || (vk >= 0xa0 && vk <= 0xa5) || vk == 0x5b ||
+                          vk == 0x5c || vk == 0x14 || vk == 0x90; // Shift, Ctrl, Alt, Windows, Caps / Num Lock
+    if (modifier) {
+        return; // a modifier alone: still waiting for the key
+    }
+    if (!ui::IsHotkeyKey(static_cast<unsigned>(vk))) {
+        note_ = texts_.notUsable;
+        noteError_ = true;
+        return;
+    }
+    const int code = KeyCode(static_cast<unsigned>(vk), mods);
+    for (size_t p = 0; p < pages_.size(); ++p) { // the other keys' drafts: one key, one action
+        for (size_t c = 0; c < pages_[p].categories.size(); ++c) {
+            const auto &rows = pages_[p].categories[c].rows;
+            for (size_t r = 0; r < rows.size(); ++r) {
+                const bool self = static_cast<int>(p) == page_ && static_cast<int>(c) == category_ &&
+                                  static_cast<int>(r) == row;
+                if (!self && rows[r].kind == Kind::Key && drafts_[p][c][r].value == code) {
+                    char why[256];
+                    std::snprintf(why, sizeof(why), texts_.inUse.c_str(), KeyText(code).c_str(),
+                                  rows[r].label.c_str());
+                    note_ = why;
+                    noteError_ = true;
+                    return;
+                }
+            }
+        }
+    }
+    DraftOf(row).value = code;
+    capture_ = -1;
+    endedVk_ = static_cast<unsigned>(vk);
+    const char *game = gameKeyNote_ ? gameKeyNote_(static_cast<unsigned>(vk), mods) : nullptr;
+    note_ = game ? game : "";
+    noteError_ = false;
 }
 
 Action Window::MouseUp(int x, int y)
@@ -528,19 +714,33 @@ Action Window::MouseUp(int x, int y)
 
 void Window::Wheel(int notches)
 {
-    if (!pages_.empty() && Scrolls()) {
+    if (!pages_.empty() && !confirm_.pending && Scrolls()) {
         ScrollTo(first_ - notches);
     }
 }
 
-Action Window::Key(int vk)
+Action Window::Key(int vk, unsigned mods)
 {
+    if (confirm_.pending) {
+        if (vk == kVkReturn || vk == kVkEscape) {
+            Answer(vk == kVkReturn);
+        }
+        return Action::None;
+    }
+    if (capture_ >= 0) {
+        KeyPressed(vk, mods);
+        return Action::None;
+    }
     if (vk == kVkEscape) {
         Cancel();
         return Action::Close;
     }
     if (vk == kVkReturn) {
         Apply();
+        if (confirm_.pending) {
+            confirm_.closeAfter = true;
+            return Action::None;
+        }
         return Action::Close;
     }
     return Action::None;
@@ -549,6 +749,9 @@ Action Window::Key(int vk)
 void Window::Tick(unsigned nowMs)
 {
     now_ = nowMs;
+    if (confirm_.pending && static_cast<int>(nowMs - confirm_.until) >= 0) {
+        Answer(false); // no answer within 15 s: the previous setting comes back
+    }
     bool repeats = pressed_.hit == Hit::ArrowLess || pressed_.hit == Hit::ArrowMore ||
                    pressed_.hit == Hit::ScrollUp || pressed_.hit == Hit::ScrollDown;
     if (repeats && nowMs - pressedAt_ >= kRepeatDelayMs && nowMs - lastRepeat_ >= kRepeatMs &&
@@ -621,15 +824,30 @@ void Window::Tabs(Painter &p)
 
 void Window::Bottom(Painter &p)
 {
-    TextButton(p, "Hotkeys", 16, kButtonY, kHotkeysW, 0, Font::Normal, hover_.hit == Hit::Hotkeys);
-    const char *labels[] = {"Restore defaults", "Cancel", "OK", "Apply"};
-    const Hit hits[] = {Hit::Defaults, Hit::CancelButton, Hit::Ok, Hit::ApplyButton};
-    bool dirty = Dirty();
-    for (int k = 0; k < 4; ++k) {
-        bool disabled = k == 3 && !dirty;
-        TextButton(p, labels[k], BottomX(k), kButtonY, kBottomW[k], 0, disabled ? Font::Disabled : Font::Normal,
-                   hover_.hit == hits[k] && !disabled);
+    const bool dirty = Dirty();
+    for (const Button &b : BottomButtons()) {
+        const bool disabled = b.hit == Hit::ApplyButton && !dirty;
+        TextButton(p, b.label, b.x, kButtonY, b.w, 0, disabled ? Font::Disabled : Font::Normal,
+                   hover_.hit == b.hit && !disabled);
     }
+}
+
+void Window::ConfirmBox(Painter &p)
+{
+    if (!confirm_.pending) {
+        return;
+    }
+    p.Panel(kConfirmX, kConfirmY, kConfirmW, kConfirmH);
+    const char *title = texts_.keepTitle.c_str();
+    p.Text(title, kConfirmX + (kConfirmW - p.TextWidth(title, Font::Gold)) / 2, kConfirmY + 24, Font::Gold);
+    char line[128];
+    const int left = std::max(0, static_cast<int>(confirm_.until - now_) + 999) / 1000;
+    std::snprintf(line, sizeof(line), texts_.keepCountdown.c_str(), left);
+    p.Text(line, kConfirmX + (kConfirmW - p.TextWidth(line, Font::Normal)) / 2, kConfirmY + 56, Font::Normal);
+    const int by = kConfirmY + kConfirmH - 44, mid = kConfirmX + kConfirmW / 2;
+    TextButton(p, texts_.keep.c_str(), mid - 8 - kConfirmButtonW, by, kConfirmButtonW, 0, Font::Normal,
+               hover_.hit == Hit::Keep);
+    TextButton(p, texts_.revert.c_str(), mid + 8, by, kConfirmButtonW, 0, Font::Normal, hover_.hit == Hit::Revert);
 }
 
 void Window::Rows(Painter &p)
@@ -649,6 +867,26 @@ void Window::Rows(Painter &p)
             p.Text("*", left + (checkFirst ? 24 : 0) + tw + 3, ly, Font::Disabled);
         }
         switch (r.kind) {
+        case Kind::Columns: {
+            const char *rl = r.rightLabel.c_str();
+            p.Text(label, left, y, Font::Gold);
+            p.Text(rl, right - kKeyW + (kKeyW - p.TextWidth(rl, Font::Gold)) / 2, y, Font::Gold);
+            p.Line(left, y + 18, right - left);
+            break;
+        }
+        case Kind::Key: {
+            p.Text(label, left, y + 3, Font::Normal);
+            const int sx = right - kKeyW, sw = kKeyW / kTile * kTile;
+            p.Strip(sx, y, sw);
+            const bool waiting = capture_ == pl.row;
+            const std::string v = waiting ? texts_.pressKey : KeyText(d.value);
+            const Font f = waiting ? Font::Normal : Font::Gold;
+            p.Text(v.c_str(), sx + (sw - p.TextWidth(v.c_str(), f)) / 2, y + 3, f);
+            if (waiting || hover_ == Target{Hit::KeyStrip, pl.row}) {
+                p.Frame(sx, y - 2, sw, 24);
+            }
+            break;
+        }
         case Kind::Header: {
             int mid = (left + right) / 2, a = mid - tw / 2 - 10, b = mid + tw / 2 + 10;
             p.Line(left, y + 7, a - left);
@@ -795,9 +1033,14 @@ void Window::Draw(Painter &p)
         return;
     }
     p.Panel(0, 0, kWidth, kHeight);
-    const char *title = "Yongle options";
+    const char *title = look_.title.c_str();
     p.Text(title, (kWidth - p.TextWidth(title, Font::Title)) / 2, 12, Font::Title);
-    Tabs(p);
+    if (pages_.size() > 1) {
+        Tabs(p);
+    }
+    else {
+        tabs_.clear(); // one page (Hotkeys): no tabs
+    }
     if (HasList()) {
         p.Inset(kCategoryX, kContentY, kCategoryW, kContentH);
         const auto &cats = pages_[page_].categories;
@@ -810,9 +1053,17 @@ void Window::Draw(Painter &p)
     }
     p.Inset(ContentX(), kContentY, ContentW(), kContentH);
     Rows(p);
+    if (!note_.empty() && HasKeyRows()) { // the last wait for a key: under the rows
+        p.Text(note_.c_str(), Left(), kContentY + kContentH - 16 - kNoteH + 4, noteError_ ? Font::Disabled : Font::Gold);
+    }
     Scrollbar(p);
     Bottom(p);
-    Tooltip(p);
+    if (confirm_.pending) {
+        ConfirmBox(p);
+    }
+    else {
+        Tooltip(p);
+    }
 }
 
 } // namespace core::options

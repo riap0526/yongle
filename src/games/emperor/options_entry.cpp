@@ -40,7 +40,8 @@ const DWORD kImageGetId = 0x408170, kImages = 0x1c42130, kTextWidth = 0x527a80;
 constexpr int kFontNormal = 0x1e14; // the drop-down's font (0x449840)
 
 // The Options menu: group 2 of EmperorText.eng. Ours use text numbers the group does not have (it has 7).
-constexpr int kOptionsGroup = 2, kTextGeneral = 20, kTextVideo = 21, kTextAudio = 22, kTextAutosave = 24;
+constexpr int kOptionsGroup = 2, kTextGeneral = 20, kTextVideo = 21, kTextAudio = 22, kTextHotkeys = 23,
+              kTextAutosave = 24;
 constexpr int kAutosaveOn = 4, kAutosaveOff = 5; // the game's "Autosave - ON" / "- OFF" (0x449460)
 const Var<int> kAutosaveDisabled{0x10de15c};      // not 0: no autosave (shown as "Autosave - OFF")
 constexpr int kMainMenuGroup = 30, kTextWebsite = 4; // the main menu's "Visit Website" (0x84fa50)
@@ -66,6 +67,20 @@ void __cdecl MenuAudio()
         reinterpret_cast<Handler_fn>(kSoundDialog)();
     }
 }
+const DWORD kMessagesDialog = 0x402690, kMessagesButtonHandler = 0x857efc;
+void __cdecl MessagesButton()
+{
+    if (!ow::OpenCategory(ow::kPageGeneral, ot::kCategoryMessages)) {
+        reinterpret_cast<Handler_fn>(kMessagesDialog)();
+    }
+}
+
+void __cdecl MenuHotkeys()
+{
+    if (!ow::OpenHotkeys()) {
+        core_log("options window: not available; the Options menu's Hotkeys does nothing"); // the game has none
+    }
+}
 
 // A drop-down's item (16 bytes, as 0x81e2a0): y, text number, handler; +8 is 1 for Autosave (the game keeps the menu
 // open after it, 0x44a3c0), +12 goes to button_param.
@@ -89,12 +104,14 @@ MenuItem g_items[] = {
     {0, kTextGeneral, &MenuGeneral, 0, 0},
     {20, kTextVideo, &MenuVideo, 0, 0},
     {40, kTextAudio, &MenuAudio, 0, 0},
-    {60, kTextAutosave, reinterpret_cast<Handler_fn>(kAutosaveToggle), 1, 0},
+    {60, kTextHotkeys, &MenuHotkeys, 0, 0},
+    {80, kTextAutosave, reinterpret_cast<Handler_fn>(kAutosaveToggle), 1, 0},
 };
 MenuItem g_itemsNoAutosave[] = {
     {0, kTextGeneral, &MenuGeneral, 0, 0},
     {20, kTextVideo, &MenuVideo, 0, 0},
     {40, kTextAudio, &MenuAudio, 0, 0},
+    {60, kTextHotkeys, &MenuHotkeys, 0, 0},
 };
 const DWORD kBars[] = {0x81e480, 0x81e4b0, 0x81e4e0, 0x81e510, 0x81e540, 0x81e570}; // menu_bar_select 0x449590
 const DWORD kItemsSingle = 0x81e2a0, kItemsOther = 0x81e2f0;
@@ -106,6 +123,7 @@ const char *__cdecl Lang_detour(int group, int index)
         case kTextGeneral: return ot::kMenuGeneral;
         case kTextVideo: return ot::kMenuVideo;
         case kTextAudio: return ot::kMenuAudio;
+        case kTextHotkeys: return ot::kMenuHotkeys;
         case kTextAutosave: return o_Lang(group, *kAutosaveDisabled != 0 ? kAutosaveOff : kAutosaveOn);
         default: break;
         }
@@ -127,7 +145,7 @@ int __cdecl Width_detour(int group)
     if (g_ourWidth == 0) {
         const int font = reinterpret_cast<ImageGetId_fn>(kImageGetId)(reinterpret_cast<void *>(kImages), kFontNormal);
         int px = 1;
-        for (const char *t : {ot::kMenuGeneral, ot::kMenuVideo, ot::kMenuAudio, o_Lang(kOptionsGroup, kAutosaveOn),
+        for (const char *t : {ot::kMenuGeneral, ot::kMenuVideo, ot::kMenuAudio, ot::kMenuHotkeys, o_Lang(kOptionsGroup, kAutosaveOn),
                               o_Lang(kOptionsGroup, kAutosaveOff)}) {
             px = std::max(px, reinterpret_cast<TextWidth_fn>(kTextWidth)(t, font));
         }
@@ -190,13 +208,26 @@ bool Attach()
         Menu &m = *reinterpret_cast<Menu *>(bar + sizeof(Menu));
         const bool single = reinterpret_cast<DWORD>(m.items) == kItemsSingle;
         m.items = single ? g_items : g_itemsNoAutosave; // .data: writable as it is
-        m.count = single ? 4 : 3;
+        m.count = single ? 5 : 4;
     }
     const bool mainMenu = CallTo(kWebsiteMinimize.address, reinterpret_cast<const void *>(&KeepWindow)) &&
                           CallTo(kWebsiteOpen.address, reinterpret_cast<const void *>(&OpenOptions));
-    core_log("options window: the game's Options menu opens it (General Settings, Video, Audio; Autosave as the "
+    // The message list's "Click to change how messages are received" (messages_text_buttons 0x857ed8, button 1:
+    // its left-click handler at +0x24 = 0x857efc is the game's Messages dialog 0x402690): our General > Messages.
+    Handler_fn &messagesButton = *reinterpret_cast<Handler_fn *>(kMessagesButtonHandler);
+    const bool messages = reinterpret_cast<DWORD>(messagesButton) == kMessagesDialog;
+    if (messages) {
+        messagesButton = &MessagesButton; // .data
+    }
+    else {
+        core_log("options window: the message list's button is not as expected; it opens the game's Messages");
+    }
+    core_log("options window: the game's Options menu opens it (General Settings, Video, Audio, Hotkeys; Autosave as the "
              "game's); the main menu's Visit Website is Options%s",
              mainMenu ? "" : " (not changed: the code could not be written)");
+    if (messages) {
+        core_log("options window: the message list's button opens it at General > Messages");
+    }
     return true;
 }
 

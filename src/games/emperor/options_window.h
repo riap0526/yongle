@@ -10,6 +10,8 @@ bool Available(); // attached and not switched off after an error
 // Game thread: opens the window at a page and category (0-based). false: not available (the caller falls back to
 // the game's own dialog).
 bool Open(int page, int category);
+bool OpenHotkeys(); // the Hotkeys window alone (the game's Options menu); false: not available
+bool OpenCategory(int page, const char *name); // at the category of that name (its first when none has it)
 // The pages and categories the menus open (BuildPages' order).
 constexpr int kPageGeneral = 0, kPageVideo = 1, kPageAudio = 2;
 // Game thread, before the game's frame is presented: draws the window over it. caller: the game address screen_present

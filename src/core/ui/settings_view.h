@@ -33,5 +33,11 @@ void CaptureKey(unsigned vk, bool ctrl, bool shift, bool alt);
 // shown when such a key is chosen; nullptr when the game does not use it.
 using GameKeyNote = const char *(*)(unsigned vk, unsigned mods);
 void SetGameKeyNote(GameKeyNote fn);
+GameKeyNote GetGameKeyNote(); // nullptr when none was set
+
+// Another window of ours waits for a key (the options window's Hotkeys, games/emperor): CapturingKey() is true then
+// too, so the window subclass gives it every key and our key polls leave them alone. settleVk: the key that ended the
+// wait (0 none), held until it is released, as for the panel.
+void SetOtherCapture(bool waiting, unsigned settleVk);
 
 } // namespace core::ui

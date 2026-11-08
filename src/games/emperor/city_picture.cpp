@@ -561,6 +561,10 @@ const char *GameKeyNote(unsigned vk, unsigned mods)
     if (mods == (kModCtrl | kModAlt) && vk == 'C') {
         return "The game also uses this key; it no longer reaches the game.";
     }
+    if (vk == VK_INSERT && mods == 0) { // the game's only use: insert / overwrite in a text box (P1 section 12.5)
+        return "In the game this key only switches between inserting and overwriting while you type a name; that "
+               "no longer works with it.";
+    }
     if (vk == 0x71 || vk == 0x74 || vk == 0x75 || vk == 'R') {
         return "The game also reacts to this key itself.";
     }

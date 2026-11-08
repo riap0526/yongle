@@ -3,6 +3,7 @@
 // rows shown only for another row's value, categories and tabs, scrolling (wheel, arrows, thumb), the tooltip after
 // a pause, keys, and that everything drawn stays inside the window. Drawing goes to a fake painter that records it.
 #include "core/options/window.h"
+#include "core/ui/hotkey.h"
 
 #include <cstdio>
 #include <cstring>
@@ -441,6 +442,109 @@ int main()
     w.Open(0, 0);
     p = Draw(w);
     Check(!p.FindText("*"), "no * rows: no mark");
+
+    // "Keep this setting?": a relayout row applied asks; Keep calls the owner; no answer in 15 s reverts.
+    {
+        static int kept = 0;
+        g_values[8] = 1;
+        co::Row res;
+        res.kind = co::Kind::Choice;
+        res.label = "Size";
+        res.value = V(8);
+        res.choices = {"A", "B", "C"};
+        res.relayout = true;
+        co::Window r;
+        r.SetOnKept([] { ++kept; });
+        r.SetPages({{"Video", {{"", {res}}}}});
+        r.Open(0, 0);
+        r.Tick(1000);
+        FakePainter q = Draw(r);
+        const Op *more3 = nullptr;
+        for (const Op &o : q.ops) {
+            if (o.op == "arrow" && o.extra / 10 == static_cast<int>(co::Arrow::Right)) more3 = &o;
+        }
+        Click(r, Cx(more3), Cy(more3), 1000);
+        q = Draw(r);
+        Click(r, Cx(q.FindText("Apply")), Cy(q.FindText("Apply")), 1000);
+        q = Draw(r);
+        Check(g_values[8] == 2 && r.Confirming() && q.FindText("Keep this setting?") && q.FindText("Keep"),
+              "relayout: applied, then asks to keep it");
+        Click(r, Cx(q.FindText("Keep")), Cy(q.FindText("Keep")), 2000);
+        Check(!r.Confirming() && kept == 1 && g_values[8] == 2, "Keep: kept, the owner told");
+        Click(r, Cx(more3), Cy(more3), 3000);
+        q = Draw(r);
+        Click(r, Cx(q.FindText("Apply")), Cy(q.FindText("Apply")), 3000);
+        r.Tick(3000 + 14000);
+        Check(r.Confirming() && g_values[8] == 0, "still asking after 14 s");
+        r.Tick(3000 + 15001);
+        Check(!r.Confirming() && g_values[8] == 2 && kept == 1, "no answer in 15 s: the previous value back");
+        Click(r, Cx(more3), Cy(more3), 20000);
+        q = Draw(r);
+        r.MouseDown(Cx(q.FindText("OK")), Cy(q.FindText("OK")), 20000);
+        co::Action ra = r.MouseUp(Cx(q.FindText("OK")), Cy(q.FindText("OK")));
+        Check(ra == co::Action::None && r.Confirming(), "OK with a relayout change: waits for the answer");
+        Check(r.Key(0x0d) == co::Action::None && !r.Confirming() && r.TakeCloseRequest() && kept == 2,
+              "Enter keeps, then the window asks to close");
+    }
+
+    // The Hotkeys window: Key rows, no Apply, no Hotkeys button.
+    {
+        g_values[9] = co::KeyCode(0x2d, 0);           // Insert
+        g_values[10] = co::KeyCode(0x7a, 0);          // F11
+        co::Row cols;
+        cols.kind = co::Kind::Columns;
+        cols.label = "Action";
+        cols.rightLabel = "Key";
+        co::Row k1;
+        k1.kind = co::Kind::Key;
+        k1.label = "Panel";
+        k1.value = V(9);
+        k1.defaultValue = co::KeyCode(0x2d, 0);
+        co::Row k2 = k1;
+        k2.label = "Screenshot";
+        k2.value = V(10);
+        k2.defaultValue = co::KeyCode(0x7a, 0);
+        co::Window kw;
+        co::Look look;
+        look.title = "Hotkeys";
+        look.hotkeysButton = look.applyButton = false;
+        kw.SetLook(look);
+        kw.SetGameKeyNote([](unsigned vk, unsigned) -> const char * { return vk == 0x50 ? "The game uses P." : nullptr; });
+        kw.SetPages({{"Hotkeys", {{"", {cols, k1, k2}}}}});
+        kw.Open(0, 0);
+        FakePainter q = Draw(kw);
+        Check(q.FindText("Hotkeys") && !q.FindText("Apply") && q.Count("text") > 0 && q.FindText("Insert") &&
+                  q.FindText("F11") && q.FindText("Action") && q.FindText("Key"),
+              "Hotkeys window: title, columns, keys; no Apply");
+        int hotkeysButtons = 0;
+        for (const Op &o : q.ops) hotkeysButtons += o.op == "text" && o.text == "Hotkeys" && o.y > 400;
+        Check(hotkeysButtons == 0 && AllInside(q), "no Hotkeys button; everything inside");
+        const Op *ins = q.FindText("Insert");
+        Click(kw, Cx(ins), Cy(ins));
+        q = Draw(kw);
+        Check(kw.WaitingForKey() && q.FindText("Press a key") && q.Count("frame") >= 1, "a click on a key waits");
+        kw.Key(0x10, core::ui::kModShift); // Shift alone
+        Check(kw.WaitingForKey(), "a modifier alone: still waiting");
+        kw.Key(0x7a, 0); // F11: the other row's
+        q = Draw(kw);
+        Check(kw.WaitingForKey() && q.FindText("F11 is already the key for \"Screenshot\"; try another one."),
+              "a key in use: refused, still waiting");
+        kw.Key(0x1b, 0);
+        Check(!kw.WaitingForKey() && kw.Draft(0, 0, 1) == co::KeyCode(0x2d, 0) && kw.EndedWaitVk() == 0x1b,
+              "Esc: not changed");
+        Click(kw, Cx(ins), Cy(ins));
+        kw.Key(0x50, core::ui::kModCtrl); // Ctrl+P
+        q = Draw(kw);
+        Check(!kw.WaitingForKey() && kw.Draft(0, 0, 1) == co::KeyCode(0x50, core::ui::kModCtrl) && q.FindText("Ctrl+P") &&
+                  q.FindText("The game uses P."),
+              "a new key: in the draft, the game's note shown");
+        Check(g_values[9] == co::KeyCode(0x2d, 0), "not set before OK");
+        q = Draw(kw);
+        kw.MouseDown(Cx(q.FindText("OK")), Cy(q.FindText("OK")), 0);
+        Check(kw.MouseUp(Cx(q.FindText("OK")), Cy(q.FindText("OK"))) == co::Action::Close &&
+                  g_values[9] == co::KeyCode(0x50, core::ui::kModCtrl),
+              "OK sets the new key and closes");
+    }
 
     // Hover: the frame around the button under the mouse.
     w.MouseMove(Cx(p.FindText("Cancel")), Cy(p.FindText("Cancel")));

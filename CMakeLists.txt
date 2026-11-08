@@ -352,7 +352,7 @@ target_include_directories(test_hotkey PRIVATE src)
 target_link_options(test_hotkey PRIVATE -static)
 
 # Offline test of core/options (the options window: drafts, widgets, layout, scrolling, tooltip) with a fake painter.
-add_executable(test_options proxy/ddraw/test_options.cpp src/core/options/window.cpp)
+add_executable(test_options proxy/ddraw/test_options.cpp src/core/options/window.cpp src/core/ui/hotkey.cpp)
 target_include_directories(test_options PRIVATE src)
 target_link_options(test_options PRIVATE -static)
 

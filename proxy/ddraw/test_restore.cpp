@@ -90,6 +90,8 @@ void AddSection(const char *, Section) {}
 void PerfWidget() {}
 using GameKeyNote = const char *(*)(unsigned, unsigned);
 void SetGameKeyNote(GameKeyNote) {}
+GameKeyNote GetGameKeyNote() { return nullptr; }
+void SetOtherCapture(bool, unsigned) {}
 } // namespace core::ui
 
 namespace core::capture {

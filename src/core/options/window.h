@@ -62,7 +62,15 @@ enum class Kind {
     Choice,      // label left, the value between two arrows on the right
     Slider,      // label on the first line; the number left on the second, then the slider
     CheckSlider, // a checkbox before the label on the first line (toggle), the slider on the second (value)
+    Key,         // label left, the key in a strip on the right; a click waits for a new key (value: KeyCode)
+    Columns,     // column titles over Key rows: label left, rightLabel over the keys, a line under them
 };
+
+// A key with its modifiers as a row's value: vk | mods << 16 (core/ui/hotkey.h kMod*); 0: none.
+inline int KeyCode(unsigned vk, unsigned mods)
+{
+    return static_cast<int>(vk | mods << 16);
+}
 
 struct Row {
     Kind kind = Kind::Header;
@@ -82,6 +90,8 @@ struct Row {
     std::string shownIfId;                 // shown only while the row with this id (same page) ...
     int shownIfValue = 0;                  // ... has this draft value
     bool restart = false;                  // takes effect after a restart: a red "*" after the label
+    bool relayout = false;                 // the screen is laid out again: Apply asks to keep it (15 s, else reverts)
+    std::string rightLabel;                // Columns: the title over the keys
 };
 
 struct Category {
@@ -100,8 +110,33 @@ enum class Action {
     OpenHotkeys, // the Hotkeys button
 };
 
+// What the window shows around its pages: the options window, or the Hotkeys window (no Hotkeys button, no Apply).
+struct Look {
+    std::string title = "Yongle options";
+    bool hotkeysButton = true;
+    bool applyButton = true;
+};
+
+// The texts of a wait for a key and of "keep this setting?" (the game layer gives them, so they sit with its other
+// texts for players).
+struct Texts {
+    std::string pressKey = "Press a key";
+    std::string notChanged = "Not changed.";
+    std::string notUsable = "That key cannot be used here; try another one.";
+    std::string inUse = "%s is already the key for \"%s\"; try another one."; // the key, the other row's label
+    std::string keepTitle = "Keep this setting?";
+    std::string keepCountdown = "The previous setting comes back in %d s."; // seconds left
+    std::string keep = "Keep", revert = "Revert";
+};
+
 class Window {
 public:
+    void SetLook(Look look) { look_ = std::move(look); }
+    void SetTexts(Texts texts) { texts_ = std::move(texts); }
+    // A key the game itself uses: a sentence shown (not an error) when it is chosen; nullptr when none.
+    void SetGameKeyNote(const char *(*note)(unsigned vk, unsigned mods)) { gameKeyNote_ = note; }
+    // Called after "keep this setting?" is answered with Keep (the owner saves then).
+    void SetOnKept(void (*kept)()) { onKept_ = kept; }
     void SetPages(std::vector<Page> pages);
     // The red first line of a "*" row's tooltips (its name's and its values'), above the description.
     void SetRestartTip(std::string text) { restartTip_ = std::move(text); }
@@ -112,9 +147,20 @@ public:
     Action MouseDown(int x, int y, unsigned nowMs);
     Action MouseUp(int x, int y);
     void Wheel(int notches); // > 0: up
-    Action Key(int vk);      // Windows virtual-key codes: Escape cancels, Enter is OK
+    // Windows virtual-key codes with the modifiers held (core/ui/hotkey.h kMod*): while a Key row waits, the new key
+    // (Esc: not changed; a modifier alone: still waiting); otherwise Escape cancels, Enter is OK (or answers "keep
+    // this setting?": Enter keeps, Escape reverts).
+    Action Key(int vk, unsigned mods = 0);
     void Tick(unsigned nowMs); // held arrows repeat; the tooltip appears after a short pause, beside the cursor
     void Draw(Painter &p);
+
+    bool WaitingForKey() const { return capture_ >= 0; }
+    unsigned EndedWaitVk() const { return endedVk_; } // the key that ended the last wait (0 none)
+    bool Confirming() const { return confirm_.pending; }
+    // The window is being closed from outside (e.g. a right click): an unanswered "keep this setting?" reverts.
+    void Closing();
+    // After Tick: true once when the window wants to close (OK, then "keep this setting?" answered or timed out).
+    bool TakeCloseRequest();
 
     bool Dirty() const;   // a draft differs from the value in effect (Apply is enabled)
     void Apply();         // sets the rows whose draft differs
@@ -122,6 +168,8 @@ public:
     void RestoreDefaults(); // drafts of the current category to the defaults (Apply / OK still needed)
 
     // For tests and the game layer.
+    size_t PageCount() const { return pages_.size(); }
+    const std::vector<Category> &Categories(int page) const { return pages_[page].categories; }
     int PageIndex() const { return page_; }
     int CategoryIndex() const { return category_; }
     int FirstRow() const { return first_; }
@@ -144,7 +192,21 @@ private:
     };
     enum class Hit {
         None, Tab, CategoryButton, RowLabel, RowCheck, ArrowLess, ArrowMore, ChoiceValue, Track, ScrollUp, ScrollDown,
-        ScrollTrack, Hotkeys, Defaults, CancelButton, Ok, ApplyButton,
+        ScrollTrack, Hotkeys, Defaults, CancelButton, Ok, ApplyButton, KeyStrip, Keep, Revert,
+    };
+    struct Button {
+        Hit hit;
+        const char *label;
+        int x, w;
+    };
+    struct Confirm {
+        bool pending = false;
+        unsigned until = 0;
+        bool closeAfter = false; // OK was pressed: close once answered
+        struct Was {
+            int page, category, row, value;
+        };
+        std::vector<Was> before;
     };
     struct Target {
         Hit hit = Hit::None;
@@ -163,7 +225,8 @@ private:
     int ContentX() const;
     int ContentW() const;
     bool Scrolls();
-    static int RowsHeight() { return kContentH - 32; } // the height the rows may take
+    int RowsHeight();   // the height the rows may take (less the note line under Key rows)
+    bool HasKeyRows();  // the current category has Key rows (the note line under them)
     int Left() const;
     int Right();
     std::vector<int> VisibleRows();
@@ -183,6 +246,11 @@ private:
     void Scrollbar(Painter &p);
     void Tooltip(Painter &p);
     void TextButton(Painter &p, const char *label, int x, int y, int w, int style, Font f, bool hover);
+    std::vector<Button> BottomButtons() const;
+    void ConfirmBox(Painter &p);
+    void Answer(bool keep);
+    void KeyPressed(int vk, unsigned mods);
+    std::string KeyText(int code) const;
     std::vector<std::string> Wrap(Painter &p, const std::string &text, int maxW, Font f);
     DraftValue &DraftOf(int row) { return drafts_[page_][category_][row]; }
 
@@ -202,6 +270,16 @@ private:
     Target tip_;           // what the tooltip is for (a row's label, check or choice)
     bool tipShown_ = false;
     std::string restartTip_;
+    Look look_;
+    Texts texts_;
+    const char *(*gameKeyNote_)(unsigned, unsigned) = nullptr;
+    void (*onKept_)() = nullptr;
+    int capture_ = -1;          // the Key row (current category) waiting for a key
+    unsigned endedVk_ = 0;
+    std::string note_;          // under the rows: the last wait's result
+    bool noteError_ = false;
+    Confirm confirm_;
+    bool closeRequest_ = false;
 };
 
 } // namespace core::options

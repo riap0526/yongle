@@ -630,9 +630,11 @@ void PanelClosed()
 // the report key changed to Ctrl+F12 also made a report).
 std::atomic<unsigned> g_settleVk{0};
 
+std::atomic<bool> g_otherCapture{false}; // SetOtherCapture: another window of ours waits for a key
+
 bool CapturingKey()
 {
-    if (g_capture.load() >= 0) {
+    if (g_capture.load() >= 0 || g_otherCapture.load()) {
         return true;
     }
     const unsigned vk = g_settleVk.load();
@@ -702,6 +704,19 @@ void CaptureKey(unsigned vk, bool ctrl, bool shift, bool alt)
 void SetGameKeyNote(GameKeyNote fn)
 {
     g_gameKeyNote = fn;
+}
+
+GameKeyNote GetGameKeyNote()
+{
+    return g_gameKeyNote;
+}
+
+void SetOtherCapture(bool waiting, unsigned settleVk)
+{
+    g_otherCapture = waiting;
+    if (!waiting && settleVk != 0) {
+        g_settleVk = settleVk;
+    }
 }
 
 } // namespace core::ui

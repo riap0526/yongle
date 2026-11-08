@@ -668,6 +668,9 @@ bool PanelMessage(UINT m, WPARAM w, LPARAM l)
         core::ui::QueueMessage(m, w, l); // the panel waits for a new key: every key goes to it (also Esc)
         return true;
     }
+    if (!core::ui::IsOpen() && ModalActive() && core::ui::CapturingKey() && IsKeyMessage(m)) {
+        return false; // the modal window waits for a key (or it is still held): ModalMessage gives it every key
+    }
     if (core::display::ActionKey *k = ActionKeyFor(m, w)) {
         if (!(l & 0x40000000)) { // not an auto-repeat
             k->fire();

@@ -7,6 +7,8 @@
 #include "core/log.h"
 #include "core/options/window.h"
 #include "core/settings/settings.h"
+#include "core/ui/hotkey.h"
+#include "core/ui/settings_view.h"
 #include "games/emperor/options_original.h"
 #include "games/emperor/options_text.h"
 #include "games/emperor/site.h"
@@ -237,6 +239,10 @@ int Parse(const Setting &s, const char *text)
     const cs::Item &it = cs::Get(s.index);
     switch (it.type) {
     case cs::Type::Bool: return std::strcmp(text, "on") == 0;
+    case cs::Type::Hotkey: {
+        core::ui::Hotkey key{0, 0};
+        return core::ui::ParseHotkey(text, text + std::strlen(text), &key) ? co::KeyCode(key.vk, key.mods) : 0;
+    }
     case cs::Type::Int:
         if (s.autoWord && std::strcmp(text, s.autoWord) == 0) {
             return s.min - s.step;
@@ -267,6 +273,13 @@ void SettingSet(const void *ctx, int value)
     char v[cs::kValueSize];
     switch (it.type) {
     case cs::Type::Bool: std::snprintf(v, sizeof(v), "%s", value ? "on" : "off"); break;
+    case cs::Type::Hotkey:
+        if (value == 0) {
+            return;
+        }
+        core::ui::FormatHotkey(core::ui::Hotkey{static_cast<unsigned>(value) & 0xffff, static_cast<unsigned>(value) >> 16},
+                               v, sizeof(v));
+        break;
     case cs::Type::Int:
         if (s.autoWord && value < s.min) {
             std::snprintf(v, sizeof(v), "%s", s.autoWord);
@@ -283,7 +296,9 @@ void SettingSet(const void *ctx, int value)
         break;
     }
     core_log("options window: %s.%s = %s", it.section, it.key, v);
-    cs::Request(s.index, v, true);
+    // A setting that lays the screen out again is saved only when "keep this setting?" is answered with Keep (the
+    // window's OnKept), as the panel does: if the game does not survive it, the file still has the previous one.
+    cs::Request(s.index, v, it.effect != cs::Effect::Relayout);
     // Carried out now: the window takes input on the game thread, where RunPending runs; the window reads the values
     // back right after Apply (the first test: a queued value was read back as the old one, so Apply stayed on and a
     // second Apply set the old value again).
@@ -352,6 +367,7 @@ void Add(std::vector<co::Row> &rows, const char *section, const char *key)
     r.label = text && text->label ? text->label : it.label;
     r.help = text && text->summary ? text->summary : it.help ? it.help : "";
     r.restart = it.effect == cs::Effect::Restart && !(text && text->noRestartMark);
+    r.relayout = it.effect == cs::Effect::Relayout;
     r.value = {&SettingGet, &SettingSet, &s};
     switch (it.type) {
     case cs::Type::Bool: r.kind = co::Kind::Check; break;
@@ -374,7 +390,7 @@ void Add(std::vector<co::Row> &rows, const char *section, const char *key)
         r.kind = co::Kind::Choice;
         ResolutionChoices(s);
         break;
-    case cs::Type::Hotkey: return; // the Hotkeys window
+    case cs::Type::Hotkey: r.kind = co::Kind::Key; break; // the Hotkeys window
     }
     for (const auto &v : s.spell) {
         r.choices.push_back(Shown(v));
@@ -476,7 +492,7 @@ std::vector<co::Page> BuildPages()
         }
     }
     {
-        co::Category c{"Messages", {}};
+        co::Category c{ot::kCategoryMessages, {}};
         oo::MessageRows(c.rows);
         if (!c.rows.empty()) {
             general.categories.push_back(std::move(c));
@@ -536,32 +552,142 @@ std::vector<co::Page> BuildPages()
 // ---------------------------------------------------------------------------------------------------------------
 // Opening, input, drawing
 
-co::Window g_window;
+// The Hotkeys window: our keys, one page (the same size as the options window; the game's own keys join it when
+// they can be changed).
+std::vector<co::Page> BuildKeyPages()
+{
+    co::Category c{"", {}};
+    co::Row columns;
+    columns.kind = co::Kind::Columns;
+    columns.label = ot::kColumnAction;
+    columns.rightLabel = ot::kColumnKey;
+    c.rows.push_back(std::move(columns));
+    Add(c.rows, "ui", "panel_key");
+    Add(c.rows, "debug", "screenshot_key");
+    Add(c.rows, "debug", "report_key");
+    Add(c.rows, "ui", "city_picture_key");
+    Add(c.rows, "ui", "minimap_picture_key");
+    return {co::Page{ot::kHotkeysTitle, {std::move(c)}}};
+}
+
+co::Window g_window; // the options window
+co::Window g_keys;   // the Hotkeys window, over it or alone (from the game's Options menu)
 GamePainter g_painter;
-bool g_open = false;
+bool g_open = false;     // either is open
+bool g_keysOpen = false; // the Hotkeys window is the one shown
+bool g_keysOnly = false; // ... opened alone: closing it closes everything
+bool g_waiting = false;  // a Key row waits for a key (core/ui SetOtherCapture)
 core::diag::Feature g_feature{"options window (games/emperor)"};
+
+co::Window &Front()
+{
+    return g_keysOpen ? g_keys : g_window;
+}
+
+void SetWaiting(bool waiting, unsigned endedVk)
+{
+    if (waiting != g_waiting) {
+        g_waiting = waiting;
+        core::ui::SetOtherCapture(waiting, waiting ? 0 : endedVk);
+        if (waiting) {
+            core_log("options window: waiting for a key (our keys and the game's do nothing meanwhile)");
+        }
+        else {
+            core_log("options window: the wait for a key ended (key 0x%x)", endedVk);
+        }
+    }
+}
 
 void Close(const char *why)
 {
     if (!g_open) {
         return;
     }
-    g_open = false;
+    g_open = g_keysOpen = g_keysOnly = false;
+    SetWaiting(false, 0);
     *kRedraw = 1; // the screen under the window is drawn again
     core_log("options window: closed (%s)", why);
 }
 
+void CloseKeys(const char *why)
+{
+    SetWaiting(false, g_keys.EndedWaitVk());
+    if (g_keysOnly) {
+        Close(why);
+        return;
+    }
+    g_keysOpen = false;
+    core_log("options window: Hotkeys closed (%s)", why);
+}
+
+void Kept()
+{
+    cs::RequestSave(); // the setting that laid the screen out again is kept: now it goes into the file
+    cs::RunPending();
+    core_log("options window: the new setting kept");
+}
+
+void Prepare(co::Window &w, bool keys)
+{
+    co::Look look;
+    if (keys) {
+        look.title = ot::kHotkeysTitle;
+        look.hotkeysButton = look.applyButton = false;
+    }
+    w.SetLook(look);
+    co::Texts t;
+    t.pressKey = ot::kPressKey;
+    t.notChanged = ot::kKeyNotChanged;
+    t.notUsable = ot::kKeyNotUsable;
+    t.inUse = ot::kKeyInUse;
+    t.keepTitle = ot::kKeepTitle;
+    t.keepCountdown = ot::kKeepCountdown;
+    t.keep = ot::kKeep;
+    t.revert = ot::kRevert;
+    w.SetTexts(t);
+    w.SetGameKeyNote(core::ui::GetGameKeyNote());
+    w.SetOnKept(&Kept);
+    w.SetRestartTip(ot::kRestartTip);
+}
+
+void OpenKeys(bool alone)
+{
+    Prepare(g_keys, true);
+    g_keys.SetPages(BuildKeyPages());
+    g_keys.Open(0, 0);
+    g_keysOpen = true;
+    g_keysOnly = alone;
+    core_log("options window: Hotkeys opened%s", alone ? " (from the Options menu)" : "");
+}
+
 struct Where {
     int page, category;
+    bool keys;            // the Hotkeys window alone
+    const char *name;     // the category by its name (nullptr: by number)
 };
 
 void OpenNow(void *p)
 {
     const Where &w = *static_cast<const Where *>(p);
+    if (w.keys) {
+        OpenKeys(true);
+        g_open = true;
+        return;
+    }
+    Prepare(g_window, false);
     g_window.SetPages(BuildPages());
-    g_window.SetRestartTip(ot::kRestartTip);
-    g_window.Open(w.page, w.category);
+    int category = w.category;
+    if (w.name && w.page >= 0 && w.page < static_cast<int>(g_window.PageCount())) {
+        const auto &cats = g_window.Categories(w.page);
+        for (size_t k = 0; k < cats.size(); ++k) {
+            if (cats[k].name == w.name) {
+                category = static_cast<int>(k);
+            }
+        }
+    }
+    g_window.Open(w.page, category);
     g_open = true;
+    g_keysOpen = g_keysOnly = false;
     core_log("options window: opened (page %d, category %d)", w.page, w.category);
 }
 
@@ -577,28 +703,45 @@ void HandleNow(void *p)
 {
     const Message &msg = *static_cast<const Message *>(p);
     const int x = msg.x - *kDialogX, y = msg.y - *kDialogY;
+    co::Window &w = Front();
     co::Action a = co::Action::None;
     switch (msg.m) {
-    case WM_MOUSEMOVE: g_window.MouseMove(x, y); break;
+    case WM_MOUSEMOVE: w.MouseMove(x, y); break;
     case WM_LBUTTONDOWN:
     case WM_LBUTTONDBLCLK:
         Function<UiSound_fn>(kUiSound)(kClickSound); // as the game: a click sound at every press, even on the panel
-        a = g_window.MouseDown(x, y, GetTickCount());
+        a = w.MouseDown(x, y, GetTickCount());
         break;
-    case WM_LBUTTONUP: a = g_window.MouseUp(x, y); break;
-    case WM_RBUTTONUP: // the game closes its dialogs with a right click
-        g_window.Cancel();
-        a = co::Action::Close;
+    case WM_LBUTTONUP: a = w.MouseUp(x, y); break;
+    case WM_RBUTTONUP: // the game closes its dialogs with a right click (not while a key is awaited)
+        if (!w.WaitingForKey()) {
+            w.Closing();
+            w.Cancel();
+            a = co::Action::Close;
+        }
         break;
-    case WM_MOUSEWHEEL: g_window.Wheel(GET_WHEEL_DELTA_WPARAM(msg.w) / WHEEL_DELTA); break;
-    case WM_KEYDOWN: a = g_window.Key(static_cast<int>(msg.w)); break;
+    case WM_MOUSEWHEEL: w.Wheel(GET_WHEEL_DELTA_WPARAM(msg.w) / WHEEL_DELTA); break;
+    case WM_KEYDOWN:
+    case WM_SYSKEYDOWN: { // Alt combinations and F10 come as system keys
+        auto held = [](int vk) { return (GetKeyState(vk) & 0x8000) != 0; };
+        const unsigned mods = (held(VK_CONTROL) ? core::ui::kModCtrl : 0u) |
+                              (held(VK_SHIFT) ? core::ui::kModShift : 0u) | (held(VK_MENU) ? core::ui::kModAlt : 0u);
+        a = w.Key(static_cast<int>(msg.w), mods);
+        break;
+    }
     default: break;
     }
+    SetWaiting(w.WaitingForKey(), w.EndedWaitVk());
     if (a == co::Action::Close) {
-        Close("OK or Cancel");
+        if (g_keysOpen) {
+            CloseKeys("OK or Cancel");
+        }
+        else {
+            Close("OK or Cancel");
+        }
     }
     else if (a == co::Action::OpenHotkeys) {
-        core_log("options window: Hotkeys (not yet: S2e)");
+        OpenKeys(false);
     }
 }
 
@@ -611,7 +754,8 @@ void OnMessage(UINT m, WPARAM w, LPARAM, int x, int y)
 {
     Message msg{m, w, x, y};
     if (!core::diag::Guarded(g_feature, &HandleNow, &msg)) {
-        g_open = false;
+        g_open = g_keysOpen = g_keysOnly = false;
+        SetWaiting(false, 0); // a wait for a key ends with the window (our keys work again)
         *kRedraw = 1;
         core_log("options window: closed after an error; the game's own options stay");
     }
@@ -624,8 +768,18 @@ void DrawNow(void *)
     Function<Void_fn>(kClipReset)();
     g_painter.ox = *kDialogX;
     g_painter.oy = *kDialogY;
-    g_window.Tick(GetTickCount());
-    g_window.Draw(g_painter);
+    co::Window &w = Front();
+    w.Tick(GetTickCount());
+    if (w.TakeCloseRequest()) { // OK, then "keep this setting?" answered or timed out
+        if (g_keysOpen) {
+            CloseKeys("OK");
+        }
+        else {
+            Close("OK");
+        }
+        return;
+    }
+    Front().Draw(g_painter); // the Hotkeys window covers the options window (the same size)
     *kRedraw = 1; // the next frame draws the screen under the window again (tooltips, hover frames)
 }
 
@@ -644,10 +798,47 @@ bool Open(int page, int category)
     if (g_open) {
         return true;
     }
-    Where w{page, category};
+    Where w{page, category, false, nullptr};
     if (!core::diag::Guarded(g_feature, &OpenNow, &w)) {
-        g_open = false;
+        g_open = g_keysOpen = g_keysOnly = false;
+        SetWaiting(false, 0); // a wait for a key ends with the window (our keys work again)
         core_log("options window: not available after an error (the game's own options stay)");
+        return false;
+    }
+    return true;
+}
+
+bool OpenCategory(int page, const char *name)
+{
+    if (!Available()) {
+        return false;
+    }
+    if (g_open) {
+        return true;
+    }
+    Where w{page, 0, false, name};
+    if (!core::diag::Guarded(g_feature, &OpenNow, &w)) {
+        g_open = g_keysOpen = g_keysOnly = false;
+        SetWaiting(false, 0); // a wait for a key ends with the window (our keys work again)
+        core_log("options window: not available after an error (the game's own options stay)");
+        return false;
+    }
+    return true;
+}
+
+bool OpenHotkeys()
+{
+    if (!Available()) {
+        return false;
+    }
+    if (g_open) {
+        return true;
+    }
+    Where w{0, 0, true, nullptr};
+    if (!core::diag::Guarded(g_feature, &OpenNow, &w)) {
+        g_open = g_keysOpen = g_keysOnly = false;
+        SetWaiting(false, 0); // a wait for a key ends with the window (our keys work again)
+        core_log("options window: not available after an error");
         return false;
     }
     return true;
@@ -664,7 +855,8 @@ void OnPresent(unsigned long caller)
         return;
     }
     if (!core::diag::Guarded(g_feature, &DrawNow, nullptr)) {
-        g_open = false;
+        g_open = g_keysOpen = g_keysOnly = false;
+        SetWaiting(false, 0); // a wait for a key ends with the window (our keys work again)
         *kRedraw = 1;
         core_log("options window: closed after an error while drawing; the game's own options stay");
     }

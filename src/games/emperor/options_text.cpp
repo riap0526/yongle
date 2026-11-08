@@ -164,6 +164,19 @@ const Text kTexts[] = {
                                "within it. The checkbox switches them all off and on.",
      nullptr, 0},
 
+    // The Hotkeys window.
+    {"ui", "panel_key", "Opens and closes Yongle's settings panel.", nullptr, 0, false, "Settings panel"},
+    {"debug", "screenshot_key", "Saves the game's picture as a PNG file in the shots folder in Yongle's folder.",
+     nullptr, 0, false, "Screenshot"},
+    {"debug", "report_key", "When something odd is on the screen: marks the log and saves the picture shown, for a "
+                            "problem report.",
+     nullptr, 0, false, "Problem report"},
+    {"ui", "city_picture_key", "Saves the whole city as one picture in the shots folder; the game stops for a moment "
+                               "while it is drawn.",
+     nullptr, 0, false, "City picture"},
+    {"ui", "minimap_picture_key", "Saves the minimap of the whole map as a picture in the shots folder.", nullptr, 0,
+     false, "Minimap picture"},
+
     // The game's own options (kept in Emperor.inf, as the game's Options menu sets them).
     {"game", "game_speed", "How fast the game runs.", nullptr, 0, false, "Game speed"},
     {"game", "scroll_speed", "How fast the view moves when you scroll the city.", nullptr, 0, false, "Scroll speed"},
@@ -190,6 +203,20 @@ const char *const kMenuGeneral = "General Settings";
 const char *const kMenuVideo = "Video";
 const char *const kMenuAudio = "Audio";
 const char *const kMainMenuOptions = "Options";
+const char *const kMenuHotkeys = "Hotkeys";
+const char *const kCategoryMessages = "Messages";
+
+const char *const kHotkeysTitle = "Hotkeys";
+const char *const kColumnAction = "Action";
+const char *const kColumnKey = "Key";
+const char *const kPressKey = "Press a key";
+const char *const kKeyNotChanged = "Not changed.";
+const char *const kKeyNotUsable = "That key cannot be used here; try another one.";
+const char *const kKeyInUse = "%s is already the key for \"%s\"; try another one.";
+const char *const kKeepTitle = "Keep this setting?";
+const char *const kKeepCountdown = "The previous setting comes back in %d s.";
+const char *const kKeep = "Keep";
+const char *const kRevert = "Revert";
 
 const Text *Find(const char *section, const char *key)
 {
