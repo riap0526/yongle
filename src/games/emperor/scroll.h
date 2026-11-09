@@ -30,7 +30,7 @@ void SetAverageFrameMs(double ms);
 void TakeStats(char *out, size_t size);
 
 // For a problem report (core/diag/report.h; game thread): saves our city buffer as last drawn (the city with the
-// pixel offset still in it) as report<n>_<screen>_m4city_..., or logs that it has not been used yet.
+// pixel offset still in it) as report<n>_<screen>_city_..., or logs that it has not been used yet.
 void SaveCityBuffer(int report);
 
 // R2b.1 (docs/archive/resolution_ui_r2b1.md, R2b.1-5 / -6): where the city should be seen to, beyond the game's own clip,

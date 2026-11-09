@@ -10,6 +10,7 @@
 #include "games/emperor/options_text.h"
 #include "games/emperor/options_window.h"
 #include "games/emperor/site.h"
+#include <string>
 
 namespace emperor::game_menu {
 namespace {
@@ -39,6 +40,14 @@ using Bool_fn = bool(__cdecl *)();
 // is added after it (right button released: 0x10de064).
 const Site kInputMouse{"input_update_mouse", 0x52b000, {0x83, 0xec, 0x08, 0x8d, 0x44, 0x24, 0x00, 0x53}};
 Void_fn o_InputMouse = nullptr;
+// text_get_width(text, font) 0x527a80 (__cdecl) and image_get_id 0x408170 (__thiscall on the image table 0x1c42130,
+// ret 4): what modal_dialog_draw 0x5bfa00 measures with. Its box is max(title in font 0x1e1c, text in font 0x1e14)
+// + 20 pixels wide and each button a third of that [confirmed: Ghidra, 0x5bfa00].
+const Site kTextWidth{"text_get_width", 0x527a80, {0x51, 0x53, 0x55, 0x56, 0x57, 0x68, 0x1c, 0x1e}};
+using TextWidth_fn = int(__cdecl *)(const char *text, int font);
+using ImageGetId_fn = int(__thiscall *)(void *, int);
+const DWORD kImageGetId = 0x408170, kImages = 0x1c42130;
+constexpr int kTitleFont = 0x1e1c, kTextFont = 0x1e14;
 // lang_get_string 0x5278b0 (__cdecl(group, index); hooked by options_entry, which passes the game's texts on).
 const DWORD kLangString = 0x5278b0;
 using Lang_fn = const char *(__cdecl *)(int group, int index);
@@ -84,6 +93,22 @@ bool RightClickScreen(int s)
     }
 }
 
+// The menu screens that go back a step with a right click (released, 0x10de064), as Augustus' menus do with Esc:
+// tutorials 0x02 (0x5edbc0), choose a campaign 0x1f, choose an emperor 0x2f (0x5a6df0), the emperor's campaigns 0x30
+// (0x5165e0 -> screen_enter_registry), the mission intro 0x35, mission choice and briefing 0x3d (0x4472d0), high
+// scores 0x53 (0x50b150 -> the main menu) [confirmed: Ghidra, screen_handle_input 0x538160 and those functions;
+// 0x1f and 0x35 go through objects' virtual functions, not followed]. Not the victory and defeat screens (0x43, 0x33:
+// a right click there moves on to the next mission): Esc keeps the game's own question there.
+bool MenuBackScreen(int s)
+{
+    switch (s) {
+    case 0x02: case 0x1f: case 0x2f: case 0x30: case 0x35: case 0x3d: case 0x53:
+        return true;
+    default:
+        return false;
+    }
+}
+
 bool Confirm(const char *title, const char *text)
 {
     const int r = Function<ModalDialog_fn>(kModalDialog)(title, text, kYesNo);
@@ -113,9 +138,25 @@ void MainMenu(bool fromPause)
     }
 }
 
+int TextWidth(const char *text, int fontGroup)
+{
+    const int font = reinterpret_cast<ImageGetId_fn>(kImageGetId + g_imageShift)(
+        reinterpret_cast<void *>(kImages + g_imageShift), fontGroup);
+    return Function<TextWidth_fn>(kTextWidth)(text, font);
+}
+
 void Exit(bool fromPause)
 {
-    if (Confirm(Lang(5, 1), Lang(5, 0))) { // the game's own box: title "Leave Emperor?", text "Quit" (0x4770bb)
+    // Title "Quit", text "Leave Emperor?" (as Augustus has them; the game's own box at 0x4770bb has them the other way
+    // round). The short title would make the box and its buttons small, so the text gets spaces on both sides (it is
+    // drawn centred) until it is as wide as the game's own box: "Leave Emperor?" in the title font.
+    const char *title = Lang(5, 0);
+    std::string text = Lang(5, 1);
+    const int wide = TextWidth(text.c_str(), kTitleFont);
+    for (int i = 0; i < 40 && TextWidth(text.c_str(), kTextFont) < wide; ++i) {
+        text = " " + text + " ";
+    }
+    if (Confirm(title, text.c_str())) {
         core_log("game menu: exit");
         *kQuit = 1;
         *kRedrawAll = 1;
@@ -160,7 +201,18 @@ void EscapeNow(void *p)
         return; // posted by the game (lParam 0), or the editor: the game's own Esc
     }
     if ((c.lparam & (1 << 30)) != 0) { // held: repeats do nothing more
-        c.handled = s == 1 || s == 0x48 || s == 0x49 || s == 0x14 || RightClickScreen(s);
+        c.handled = s == 0 || s == 1 || s == 0x48 || s == 0x49 || s == 0x14 || RightClickScreen(s) ||
+                    MenuBackScreen(s);
+        return;
+    }
+    if (s == 0) { // the main menu: the game quits at once; ours asks first (as Augustus does), the same box as Exit game
+        c.handled = true;
+        Exit(false);
+        return;
+    }
+    if (MenuBackScreen(s)) {
+        g_rightClick = true;
+        c.handled = true;
         return;
     }
     if (s == 0x14) { // the China map: its selection let go as its right click does (0x489d20), else back to the city
@@ -204,7 +256,7 @@ void __cdecl InputMouse_detour()
 bool Attach()
 {
     const Site *sites[] = {&kModalDialog, &kLeaveToMenu, &kReplay, &kLoad, &kSave, &kDelete, &kCityCancel, &kInputMouse,
-                           &kMapToCity};
+                           &kMapToCity, &kTextWidth};
     for (const Site *s : sites) {
         if (!Matches(*s)) {
             core_log("game menu: %s at 0x%lx does not match; Esc, the pause menu and the File menu stay the game's",
@@ -221,8 +273,9 @@ bool Attach()
         return false;
     }
     g_attached = true;
-    core_log("game menu: Esc closes windows (as a right click) and opens the pause menu on the city screen; "
-             "confirmations take Esc as No");
+    core_log("game menu: Esc closes windows (as a right click), goes back on the menu screens (as a right click), "
+             "asks before quitting on the main menu and opens the pause menu on the city screen; confirmations take "
+             "Esc as No");
     return true;
 }
 

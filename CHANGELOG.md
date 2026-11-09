@@ -2,23 +2,45 @@
 
 All notable changes to Yongle. Downloads, with the SHA256 of each zip, are on the [Releases](https://github.com/riap0526/yongle/releases) page. To upgrade, replace `ddraw.dll` and `ddraw.syms` in the game folder and keep your `emperor_engine.ini`: new settings take their defaults when they are missing (from 0.2.0 on, the file's descriptions are also brought up to date at the first start, with your values kept).
 
-## 0.2.0 (unreleased)
-
-### Changed
-
-- **Yongle's files where it can always write them.** When a standard user cannot write to the game folder (for example under `C:\Program Files (x86)`), the settings, the log and the screenshots now go to `Documents\My Games\Yongle` (or `%LOCALAPPDATA%\Yongle` when Documents cannot be written to), the same folder whether or not the game runs as administrator. Before, Windows put them in VirtualStore when the game did not run as administrator, so there could be two sets of files. Games installed elsewhere keep them in the game folder, as before. At the first start, the newest existing settings file (game folder or VirtualStore) is copied over. The settings panel shows the folder and has an **Open folder** button.
-- **`emperor_engine.ini` is brought up to date when you upgrade.** Until now an upgraded file kept the descriptions of the version it came with: settings added later had no description (or no line at all), and some descriptions no longer matched their values. At the first start of a new version Yongle now rewrites the file with that version's descriptions, keeping every value you set; settings it did not have yet are written with their defaults, and lines Yongle does not know are kept at the end of their section. The file as it was is kept as `emperor_engine.ini.bak` (comments you added yourself are only there). If `emperor_engine.ini` is missing (deleted by mistake, say), Yongle makes it again: with the values of `emperor_engine.ini.bak` when there is one, otherwise with every setting at its default. Every setting now also marks its default the same way, and notes that only meant something to the developers are gone.
+## 0.2.0 (2026-11-09)
 
 ### Added
 
-- **City zoom with the mouse wheel.** Over the city, the wheel zooms out to see more of it or in to see it larger, in steps of 25 % from 50 % to 150 % (less on small maps, so the view stays within the map), around the point under the cursor; with smooth scrolling on, the zoom is animated. The middle mouse button goes back to 100 %. Over the sidebar the wheel still changes the building category, as in the original. Clicks, building previews, roads and walls, selections, information windows and sounds all follow the zoom, and the scrolling speed on the screen stays the same. *Starting city zoom* (`city_zoom` in `[video]`, also in Options > Video) is the zoom the game starts with; what the wheel sets is not saved, and saved games are unchanged. When the city is zoomed out it is made smaller by averaging, so details do not shimmer while scrolling (`city_zoom_shrink = nearest` for sharper pixels). Not available at the game's own 1024×768 or with its small tiles.
-- **Skip the intro movie**: `intro_movie = skip` in `[ui]` (also in Options > General Settings); takes effect the next time the game starts. The game's own `Emperor.ini` is not changed.
+- **Options window.** A new settings window that looks like the game's own dialogs. It has the game's settings (game speed, scroll speed, autosave, messages, volumes) and Yongle's settings together, on General, Video and Audio pages. Open it with F6, from the Options menu in the city, or from the main menu (Options replaces Visit Website). If you change the resolution or display scale, the game asks "Keep this setting?" and switches back after 15 seconds if you don't answer. The game's own settings are still saved in the game's files.
+- **Key rebinding** in Options > Hotkeys. Almost every key can be changed, with two keys per action. Ctrl, Shift, Alt and the mouse side buttons work too. The default keys are the same as the original game. The "Game paused" message shows your pause key.
+- **Esc closes windows and opens a Pause menu.** Esc now closes any open window, like a right click. This includes confirmation boxes, which before could only be closed with the mouse. In the city, Esc cancels the building tool or the selected company first; if there is nothing to cancel, it opens the Pause menu (Continue, Replay map, Load game, Save game, Delete game, Options, Exit to main menu, Exit game). In the city, Esc no longer asks if you want to quit: **to quit, use Exit game** in the Pause menu or the File menu. On the menu screens (campaigns, Open Play, high scores and so on), Esc goes back, like a right click. On the main menu, Esc asks before quitting instead of quitting right away.
+- **Full city and minimap screenshots.** F10 saves the whole city as one PNG, at the game's normal size and without the interface. Shift+F10 saves the minimap. Both are also in the File menu. A big city gives a picture of about 9000×4500 pixels.
+- **City zoom with the mouse wheel**, from 50 % to 150 %, toward the cursor. A "Zoom" message shows the current level. The middle mouse button goes back to 100 %. Over the sidebar, the wheel still changes the building category. The starting zoom can be set in Options > Video. Saved games are not affected.
+- **Unused nature sounds, on by default.** The game comes with recordings of birds, wind, crickets, frogs and wind chimes that it never actually played. Yongle now plays them now and then in the city, moving slowly around you. To turn them off, use Options > Audio > Unused nature sounds, or set `nature_sounds = off` in `[audio]`.
+- **Master volume and mute** for all music and sounds (Options > Audio). The game's own volume settings are kept.
+- **Skip the intro movie** (Options > General Settings).
+
+### Changed
+
+- **The display scale applies to every screen**, not just the city: menus, briefings and loading screens get bigger too. *Menu screens* now only sets the background around them (city, parchment or original), and so does *Loading screens* (framed or original).
+- **Yongle's messages use the game's message boxes** at the top of the city, with errors in red like the game's.
+- **New default speeds for new players**: 80 % game speed and 30 % scroll speed (the original defaults are 90 % and 60 %). If you have played before, your settings stay the same.
+- **Yongle's files go to Documents when needed.** If the game folder needs administrator rights to write to (for example under `C:\Program Files (x86)`), Yongle's settings, log and screenshots now go to `Documents\My Games\Yongle` instead of Windows' VirtualStore. Your settings are copied there at the first start.
+- **`emperor_engine.ini` is updated when you upgrade.** It gets the new version's descriptions and keeps your values. The old file is saved as `emperor_engine.ini.bak`. If the file is missing, it is created again.
+- **The settings panel is now a debug panel** (Insert), for testing and for fixing the display if something goes wrong. All other settings are in Options.
+- **Ctrl+arrow keys no longer scroll faster**; you can bind Ctrl+arrows to other actions instead. F6, F7 and F8 are no longer passed to the game.
+- **No new ambient sounds while Yongle's windows are open**, the same as with the game's own dialogs.
+
+### Fixed
+
+- Full screen is no longer pushed up by the compatibility setting that GOG installs. Since 0.1.1, Yongle moved the window back each time; now it doesn't get moved at all.
+- Alt+1 to Alt+5 crashed the game above 1024×768, because they also try to save a BMP screenshot the game can't make at larger sizes. The BMP is no longer saved. Calling back your companies works as before.
+- The city no longer jumps forward for a moment after you close a window or the Pause menu.
+
+### For bug reports
+
+- The log now records how Windows shows the game's picture, and F12 reports include the latest changes, to help track down the rare black squares.
 
 ### Upgrade notes
 
-- In `emperor_engine.ini`, `[display]` is now `[video]` and `[sound]` is now `[audio]`, the names of the pages of the new Options window; `intro_movie` moved to `[ui]`. The China map is now called the empire map, as in the game's campaign editor: `china_map`, `china_map_scale` and `china_map_background` are now `empire_map`, `empire_map_scale` and `empire_map_background`, and `original` is no longer one of its choices (it becomes `native`). Your file is changed at the first start, with your values kept (the file as it was is kept as `emperor_engine.ini.bak`).
-- The settings panel (Insert) is now the debug panel: for testing, finding problems and changing the screen settings when something goes wrong. It shows those only; "Show all settings" lists the rest, which are in the game's Options.
-- `present = original` (the game's own ~20 frames a second) is no longer offered in the panel: with it neither Options nor the panel can be used. If your file has it, it becomes `display` at the first start; you can still write it in `[video]` by hand for troubleshooting.
+- In `emperor_engine.ini`, `[display]` is now `[video]` and `[sound]` is now `[audio]`. The China map is now called the empire map (`empire_map` and so on), and some values of `menu_screens` and `loading_screen` were renamed. Your file is converted at the first start and keeps your values.
+- Keys are in the new `[keys]` section. Each action can have two keys, separated by a comma.
+- `present = original` is no longer offered in Options or the debug panel, because neither works with it. If your file has it, it becomes `display`. You can still set it by hand for troubleshooting.
 
 ## 0.1.3 (2026-11-02)
 

@@ -173,12 +173,14 @@ int LimitNow()
 }
 
 // R5d: the wheel and the middle button over the city as shown, on the city screens (resolution_ui_r5.md section 8.1:
-// 1, the building submenu 7, the army screens 0x48 / 0x49). Elsewhere (the sidebar: its building categories, other
-// screens) the game has them as always.
+// 1 and the army screens 0x48 / 0x49). Elsewhere (the sidebar: its building categories, other screens) the game has
+// them as always. Not 7: that is a sidebar panel's dialog over the city (religion, monuments, commerce ...;
+// docs/resolution_ui/r2_screens.md), whose lists scroll with the wheel in the game; R5d had taken it for a city
+// variant, so the wheel zoomed the city behind such a dialog instead of scrolling its list (0.2.0 release test).
 bool CityScreen()
 {
     const char s = *kGameScreen;
-    return s == 1 || s == 7 || s == 0x48 || s == 0x49;
+    return s == 1 || s == 0x48 || s == 0x49;
 }
 
 void MoveTowards(int target, int x, int y, const char *by)

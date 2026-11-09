@@ -2,9 +2,15 @@
 
 **Modern display and quality-of-life improvements for *Emperor: Rise of the Middle Kingdom* (2002).**
 
-Yongle runs the original game at your monitor's resolution and refresh rate, lays its interface out for wide and high-resolution screens, scrolls the city smoothly and keeps the game speed steady in large cities. It is named after the Yongle Emperor of the Ming dynasty, who built the Forbidden City — in the tradition of [Julius](https://github.com/bvschaik/julius), [Augustus](https://github.com/Keriew/augustus) and [Akhenaten](https://github.com/dalerank/Akhenaten) for the other Impressions city builders.
+| Platform | Latest release |
+| -------- | -------------- |
+| Windows 10 / 11 | [![Download](https://img.shields.io/github/v/release/riap0526/yongle?label=Download&color=0a7bbb)](https://github.com/riap0526/yongle/releases/latest) |
 
-> **Status: early (v0.1.3).** Tested on the GOG release of Emperor (version 1.0.1.0) on Windows 11. Expect rough edges; please report what you find (see [Reporting problems](#reporting-problems)).
+On the release page, download **`yongle-<version>.zip`**, not "Source code (zip)": the source code has no `ddraw.dll`. Then see [Installation](#installation).
+
+Yongle lets the original game run at your monitor's resolution and refresh rate, fits the interface to wide and high-resolution screens, adds smooth scrolling and city zoom, and keeps the game speed steady in big cities. Its settings and key bindings are in an Options window that looks like the game's own dialogs. It is named after the Yongle Emperor of the Ming dynasty, who built the Forbidden City — in the tradition of [Julius](https://github.com/bvschaik/julius), [Augustus](https://github.com/Keriew/augustus) and [Akhenaten](https://github.com/dalerank/Akhenaten) for the other Impressions city builders.
+
+> **Status: early (v0.2.0).** Tested on the GOG release of Emperor (version 1.0.1.0) on Windows 11. Expect rough edges; please report what you find (see [Reporting problems](#reporting-problems)).
 
 ![A city at 2560×1440 with Yongle (display scale 100 %)](screenshots/city-1440p.webp)
 *A city at 2560×1440 with Yongle, display scale 100 %. Click any screenshot for full size.*
@@ -24,52 +30,63 @@ See **[docs/ROADMAP.md](docs/ROADMAP.md)** for what is planned next and what com
 
 See **[CHANGELOG.md](CHANGELOG.md)** for what changed in each release.
 
-- **No display mode changes:** a borderless full-screen window at your desktop resolution, scaled sharply.
-- **Smooth frame rate** at your monitor's refresh rate; the game's own timing is unchanged.
-- **Any resolution**, with the sidebar, top bar, city and dialogs laid out for your screen, and a display scale (100–250 % or *Auto*).
-- **Menus, loading screens and the China map** at their own size in a frame, over a blurred picture of your city.
-- **Windowed mode** (F5 or Alt+Enter), resizable, with its size and position remembered.
-- **Pixel-smooth scrolling** of the city, at the game's own average speed.
-- **City zoom** with the mouse wheel (50–150 %, less on small maps), around the point under the cursor; the middle mouse button goes back to 100 %.
-- **Steady game speed** at every resolution, and a predictable 100 % speed.
-- **Music and sounds pause** while you are switched away; ambient sounds at a steady rate.
-- **Settings panel** (Insert) and Yongle's settings in the game's own Display options.
-- **Screenshots** (F11) and **problem reports** (F12).
+- **No display mode changes:** the game runs in a borderless full-screen window at your desktop resolution, scaled up sharply.
+- **Smooth frame rate** at your monitor's refresh rate. The game's own timing doesn't change.
+- **Any resolution:** the sidebar, top bar, city and dialogs fit your screen, and a display scale (100–250 % or *Auto*) makes every screen bigger.
+- **Menus, loading screens and the empire map** are shown in a frame, over a blurred picture of your city.
+- **Windowed mode** (F5 or Alt+Enter). You can resize the window, and its size and position are remembered.
+- **Smooth scrolling** of the city, at the same average speed as the original.
+- **City zoom** with the mouse wheel (50–150 %, less on small maps), toward the cursor. The middle mouse button goes back to 100 %.
+- **Options window** (F6) with the game's settings and Yongle's together.
+- **Key rebinding** for almost every key, with two keys per action.
+- **Esc closes windows** and opens a **Pause menu** in the city.
+- **Steady game speed** at any resolution, and a steady 100 % speed.
+- **Sound:** a master volume, music and sounds that pause while you're switched away, ambient sounds at a steady rate, and the game's unused nature sounds.
+- **Screenshots** (F11), **full city and minimap screenshots** (F10, Shift+F10) and **problem reports** (F12).
 
 ## How it works
 
-Yongle is a single `ddraw.dll` in the game folder. It provides its own DirectDraw (Direct3D 11 or 9 through SDL3) and hooks the original `Emperor.exe` in memory; the game's files and your saves are never modified, and a feature that fails switches itself off and lets the game carry on as the original would. Delete `ddraw.dll` and the game is exactly as before. A full reimplementation that no longer needs `Emperor.exe` is a long-term goal.
+Yongle is a single `ddraw.dll` in the game folder. It replaces the game's DirectDraw with its own (Direct3D 11 or 9 through SDL3) and changes the original `Emperor.exe` in memory only. The game's files and your saves are never modified. If one of Yongle's features runs into an error, it turns itself off and the game carries on as the original would. Delete `ddraw.dll` and the game is exactly as before. A full reimplementation that no longer needs `Emperor.exe` is a long-term goal.
 
 **The original art stays as it is:** everything on screen is drawn from the game's own images. There are no plans for AI-generated or AI-upscaled backgrounds, artwork or other images.
 
 ## Requirements
 
-- *Emperor: Rise of the Middle Kingdom*, version 1.0.1.0. Developed and tested with the **GOG release** (`Emperor.exe` SHA256 `6373328bfc5c4886d9abc9544eb706e89e7d465b18176ea8205fe27aaee53c0e`). On an unknown build the hooks do not install and the game runs as the original.
+- *Emperor: Rise of the Middle Kingdom*, version 1.0.1.0. Developed and tested with the **GOG release** (`Emperor.exe` SHA256 `6373328bfc5c4886d9abc9544eb706e89e7d465b18176ea8205fe27aaee53c0e`). Use an unmodified `Emperor.exe`: on an unknown build Yongle makes none of its game changes and the game runs as the original, only shown in Yongle's window; an exe changed by another tool (a widescreen patch, say) may not work or may cause problems (see the [FAQ](docs/FAQ.md#which-versions-of-emperor-does-yongle-work-with)).
 - Windows 10 or 11 and a graphics card with Direct3D 11.
 
 ## Installation
 
-1. Download the latest release (`yongle-<version>.zip`) and unpack it. `ddraw.dll` is not code-signed, so antivirus or SmartScreen may warn about it; you can check the zip against the SHA256 on the release page.
+1. Download `yongle-<version>.zip` from the [latest release](https://github.com/riap0526/yongle/releases/latest) (not "Source code (zip)") and unpack it. `ddraw.dll` is not code-signed, so antivirus or SmartScreen may warn about it; you can check the zip against the SHA256 on the release page.
 2. Copy `ddraw.dll`, `ddraw.syms` and `emperor_engine.ini` into the game folder (the folder with `Emperor.exe`). If the folder already has a `ddraw.dll` from another tool (cnc-ddraw, dgVoodoo and so on), back it up first: only one can be used.
 3. Start the game as usual.
+
+**Upgrade:** replace `ddraw.dll` and `ddraw.syms` and keep your `emperor_engine.ini`; Yongle brings it up to date at the first start.
 
 **Uninstall:** delete `ddraw.dll`. Which other files Yongle creates, where they are (the game folder, or `Documents\My Games\Yongle` when the game is under Program Files), skipping the intro movie and switching the renderer: see the **[FAQ](docs/FAQ.md)**.
 
 ## Keys
 
-| Key             | Action                                                                                                |
-| --------------- | ----------------------------------------------------------------------------------------------------- |
-| Insert          | Open / close the settings panel (the game pauses while it is open)                                    |
-| F5 or Alt+Enter | Switch between full screen and a window                                                               |
-| F11             | Screenshot to `shots\`                                                                                |
-| F12             | Problem report (when something looks wrong)                                                           |
-| Shift+F7        | Cycle through a few resolutions until the game ends (for trying them out; the setting is not changed) |
-| Mouse wheel     | Over the city: zoom in and out. Over the sidebar: the building category, as in the original           |
-| Middle button   | Over the city: zoom back to 100 %                                                                     |
+Yongle's keys (the defaults):
+
+| Key             | Action                                                                                        |
+| --------------- | --------------------------------------------------------------------------------------------- |
+| Esc             | Close a window or go back. In the city: drop the building tool, or open the Pause menu. On the main menu: quit (asks first) |
+| F6              | Open / close Options                                                                          |
+| F5 or Alt+Enter | Switch between full screen and a window                                                       |
+| F10             | Full city screenshot to `shots\`                                                              |
+| Shift+F10       | Minimap screenshot to `shots\`                                                                |
+| F11             | Screenshot to `shots\`                                                                        |
+| F12             | Problem report (when something looks wrong)                                                   |
+| Insert          | Open / close the debug panel                                                                  |
+| Mouse wheel     | Over the city: zoom in and out. Over the sidebar: the building category, as in the original   |
+| Middle button   | Over the city: zoom back to 100 %                                                             |
+
+The game's own keys work as in the original. Almost all of them, and Yongle's keys above, can be changed in **Options > Hotkeys**, with a second key for each action. Not offered: the multiplayer and developer keys of the game, keys used for typing text, and Esc, Enter, the mouse wheel and the middle button (F5 and Alt+Enter cannot be changed either).
 
 ## Settings
 
-All settings are in `emperor_engine.ini` next to `ddraw.dll`; the file explains each one, and the panel (Insert) shows the same settings with descriptions. A missing file or setting means the default. The panel, screenshot and report keys can be changed there too.
+Most settings are in **Options** (on the main menu, in the city's Options menu, or F6), together with the game's own options. The **debug panel** (Insert) has the settings for testing and for fixing the display when something goes wrong. All of Yongle's settings are also in `emperor_engine.ini`, which explains each one; a missing file or setting means the default.
 
 ## Known issues
 
@@ -93,11 +110,11 @@ See **[CONTRIBUTING.md](CONTRIBUTING.md)** for how to propose changes and the ru
 
 ## Credits
 
-- **[Augustus](https://github.com/Keriew/augustus)** (AGPL-3.0): its speed easing code (`core/speed.c`) is used for smooth scrolling (see `third_party/augustus/`), and its display scale, game speed and configuration designs were the models for ours.
+- **[Augustus](https://github.com/Keriew/augustus)** (AGPL-3.0): its speed easing code (`core/speed.c`) is used for smooth scrolling (see `third_party/augustus/`), and its display scale, game speed, configuration, hotkey and pause menu designs were the models for ours.
 - **[Julius](https://github.com/bvschaik/julius)**: studied for its rendering and timing.
 - **[Akhenaten](https://github.com/dalerank/Akhenaten)**: its description of the `.sg3` image format was the reference for reading the game's own images.
 - **[OpenRCT2](https://github.com/OpenRCT2/OpenRCT2)**: the approach of starting inside the original executable.
-- **[zeus-qol](https://github.com/andrehamon/zeus-qol)**: studied for how its Zeus improvements are structured (no code used).
+- **[zeus-qol](https://github.com/andrehamon/zeus-qol)**: studied for how its Zeus improvements are structured, its map scaling and its city image export (no code used).
 - Libraries: [SDL3](https://github.com/libsdl-org/SDL) (zlib), [Dear ImGui](https://github.com/ocornut/imgui) (MIT), [MinHook](https://github.com/TsudaKageyu/minhook) (BSD-2-Clause), miniz (public domain, the copy in SDL). Their licenses are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 - *Emperor: Rise of the Middle Kingdom* was made by BreakAway Games and Impressions Games and published by Sierra.
 

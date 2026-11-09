@@ -1358,7 +1358,7 @@ void SaveCityBuffer(int report)
         [](void *p) {
             char label[24];
             std::snprintf(label, sizeof(label), "report%d", static_cast<Call *>(p)->report);
-            core::capture::SaveOne(g_city, g_cityPitch, g_cityPitch / 2, g_cityRows, label, "m4city");
+            core::capture::SaveOne(g_city, g_cityPitch, g_cityPitch / 2, g_cityRows, label, "city");
         },
         &c);
 }

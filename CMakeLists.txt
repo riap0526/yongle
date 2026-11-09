@@ -5,7 +5,7 @@ cmake_minimum_required(VERSION 3.25)
 # Yongle: the public name (v0.1.0 onwards). The version is shown in the log, the panel and the DLL's properties.
 project(emperor_engine VERSION 0.2.0 LANGUAGES C CXX RC)
 # Test builds carry a suffix (e.g. "-dev") so their logs are not taken for a release; empty for a release.
-set(YONGLE_VERSION_SUFFIX "-dev")
+set(YONGLE_VERSION_SUFFIX "")
 set(YONGLE_VERSION_STRING "${PROJECT_VERSION}${YONGLE_VERSION_SUFFIX}")
 
 set(CMAKE_C_STANDARD 11)
