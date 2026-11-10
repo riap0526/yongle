@@ -1,4 +1,4 @@
-// Offline test of core/platform/files (docs/testing/v0_2_0_files.md): where our files go.
+// Offline test of core/platform/files: where our files go.
 //   - the decision with fake probes: game folder writable, cannot tell, Documents, Documents not available or not
 //     writable (Controlled folder access) -> LocalAppData, nothing works -> game folder;
 //   - the newest settings file among the candidates;
@@ -151,7 +151,7 @@ int main()
     const std::wstring sub = tmp + L"My Games\\Yongle\\";
     why.clear();
     Check(p.usable(sub, &why), "a new folder below this exe's (two levels): usable");
-    Check(GetFileAttributesW((sub + L"yongle_write_test.tmp").c_str()) == INVALID_FILE_ATTRIBUTES,
+    Check(GetFileAttributesW((sub + L"engine_write_test.tmp").c_str()) == INVALID_FILE_ATTRIBUTES,
           "  the test file is gone");
     why.clear();
     Check(!p.usable(L"Q:\\no such drive\\Yongle\\", &why) && !why.empty(), "a folder that cannot be made: not usable");

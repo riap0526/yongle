@@ -30,7 +30,7 @@ void InitLock()
 // path: the full path of the log file.
 void OpenPath(const wchar_t *path)
 {
-    // O5a (TODO 10): a log over kRotateBytes at start-up becomes <name>.old.log (replacing the previous one) and a new
+    // A log over kRotateBytes at start-up becomes <name>.old.log (replacing the previous one) and a new
     // one starts; never during a run. When the file is open elsewhere (the game that started the editor), the rename
     // fails and this run appends as before.
     constexpr ULONGLONG kRotateBytes = 4ull * 1024 * 1024;

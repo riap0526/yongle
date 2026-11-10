@@ -1,4 +1,4 @@
-// PNG encoding with a chosen compression level (O1b, 2026-10-30). SDL_SavePNG_IO always compresses at miniz level
+// PNG encoding with a chosen compression level. SDL_SavePNG_IO always compresses at miniz level
 // 6; this is the same miniz (third_party/miniz, the copy in SDL 3.4.18) built the way SDL builds it, with the level
 // given. Nothing here knows a game.
 #pragma once

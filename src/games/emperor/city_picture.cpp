@@ -1,4 +1,4 @@
-// See city_picture.h. Evidence for every address: docs/archive/city_export.md sections 9 and 10, docs/symbols.md.
+// See city_picture.h. Evidence for every address: the function and variable names below, from Emperor.exe 1.0.1.0.
 #include "games/emperor/city_picture.h"
 
 #include "core/capture/big_picture.h"
@@ -28,7 +28,7 @@ namespace emperor::city_picture {
 
 namespace {
 
-// minimap_draw(x, y, w, h): __cdecl, the caller pops (tools/recon/callconv.py; city_export.md section 10.2)
+// minimap_draw(x, y, w, h): __cdecl, the caller pops
 const Site kMinimapDraw{"minimap_draw", 0x46e730, {0xa1, 0xdc, 0x6d, 0x15, 0x01, 0x8b, 0x4c, 0x24}};
 
 const Var<BYTE *> kDrawBuffer{0x1156df8}; // draw_buffer
@@ -62,7 +62,7 @@ constexpr int kMinimapStateCount = 12;
 constexpr DWORD kScreenClip = 0x10c7318;    // screen_clip_rect: 4 ints
 constexpr int kViewTableCols = 0xe7, kViewTableRows = 0x1c9;
 
-// The player's city for the file names (sections 11.5 and 11.7) [confirmed: 0x5004be-0x5004cd, city_get 0x481f10
+// The player's city for the file names [confirmed: 0x5004be-0x5004cd, city_get 0x481f10
 // (__thiscall, ecx 0xc058d0, pops its one argument), 0x592360]: its index into the empire's 22 cities is the int at
 // 0x130f960 + 0x2b38, the cities are 0x3c00 bytes each from 0xc07b80. Its name: city_name_get 0x4451c0 (ecx = the
 // city, no stack arguments, returns the text): +7 is the index into EmperorText.eng's group 21 (the city names), or
@@ -76,8 +76,8 @@ using CityNameGet_fn = const char *(__fastcall *)(const void *city); // ecx = ci
 bool g_cityNameOk = false; // kCityNameGet matched at Attach
 
 constexpr std::uint16_t kKey = 0xF81F; // magenta: the minimap's drawing area before it is drawn (cropped to it)
-constexpr int kOverlapRows = 4;        // half rows drawn again by the next strip (section 9.2)
-// No room above the view's top row (section 11.3): the game's maps are desert outside the playable range, so the half
+constexpr int kOverlapRows = 4;        // half rows drawn again by the next strip
+// No room above the view's top row: the game's maps are desert outside the playable range, so the half
 // rows above it show desert the player never sees; the picture starts where the topmost view does.
 constexpr int kTopRows = 0;
 
@@ -128,7 +128,7 @@ void LogText(const char *what, const unsigned char *p, int size)
     core_log("picture: %s \"%s\"%s", what, out, i < size && p[i] == 0 ? "" : " (not ended)");
 }
 
-// The file names' first part (section 11.5): the player's city as the game names it, letters and digits kept, '-' for
+// The file names' first part: the player's city as the game names it, letters and digits kept, '-' for
 // anything else between them; "city" when there is no city or no usable name.
 void CityStem(char *out, size_t size)
 {
@@ -380,7 +380,7 @@ void Save(core::capture::BigPicture *pic, const char *kind, int scale, Kind whic
 
 // [debug] city_picture_seam_check: the same moment drawn a second time in as few strips as the map allows (nothing
 // moves between the two: the animation timers are held still in both), saved as city-fewest_...; the two pictures
-// must be equal (tools/verify/city_picture_compare.py).
+// must be equal.
 bool g_seamCheck = false;
 
 void TakeCity(int orientation)
@@ -417,7 +417,7 @@ void DrawMinimap(MinimapCall &c)
     c.r.Set(kDdWidth.ptr(), c.pitchPx);
     c.r.Set(kDdHeight.ptr(), c.rows);
     c.r.Set(kOverlay.ptr(), 0);
-    // the view's frame below the minimap, in the part of the buffer that is cut away (section 10.3)
+    // the view's frame below the minimap, in the part of the buffer that is cut away
     c.r.Set(kViewDrawnX.ptr(), 0);
     c.r.Set(kViewDrawnY.ptr(), kViewTableRows + 8);
     Function<MinimapDraw_fn>(kMinimapDraw)(c.x0, c.y0, kViewTableCols, kViewTableRows);
@@ -557,7 +557,7 @@ const char *const kScale[] = {"1", "2", "4"};
 const char *const kScaleLabels[] = {"1 (as in the game, the smallest)", "2 (twice as large)",
                                     "4 (four times as large)"};
 
-// Keys the game itself uses (docs/archive/resolution_ui_p1.md section 12.5) and Yongle's own (F5, Alt+Enter,
+// Keys the game itself uses and Yongle's own (F5, Alt+Enter,
 // Shift+F7): shown in the panel when one of them is chosen as one of our keys.
 const char *GameKeyNote(unsigned vk, unsigned mods)
 {
@@ -577,7 +577,7 @@ const char *GameKeyNote(unsigned vk, unsigned mods)
         return "The game also uses this key; it no longer reaches the game.";
     }
     if ((vk == VK_INSERT || vk == VK_DELETE) && mods == 0) {
-        // Only for typing in the game (Insert: insert / overwrite, P1 section 12.5; Delete: deleting, and closing the
+        // Only for typing in the game (Insert: insert / overwrite; Delete: deleting, and closing the
         // editor's number pad, screen 0x0e, game_wndproc -> 0x5eec50): hardly ever used, so nothing to tell.
         return nullptr;
     }
@@ -636,7 +636,7 @@ void RegisterSettings()
         g_seamCheck = std::strcmp(v, "on") == 0;
         return true;
     });
-    core::settings::Retire("debug", "city_picture_name_probe", nullptr); // test builds only (section 11.6)
+    core::settings::Retire("debug", "city_picture_name_probe", nullptr); // test builds only
 }
 
 bool Attach(bool scrollAttached)

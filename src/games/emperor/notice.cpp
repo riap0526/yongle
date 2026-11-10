@@ -10,8 +10,8 @@
 #include <cstdio>
 #include <cstring>
 
-// Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e): docs/archive/game_notices.md section 2 (Ghidra, capstone,
-// 2026-11-08); calling conventions: docs/symbols.md.
+// Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e): the addresses below (Ghidra, capstone,
+// calling conventions next to each address.
 namespace emperor::notice {
 namespace {
 
@@ -112,7 +112,7 @@ int TextWidth(const char *text)
 
 // Our box's width for a text this many pixels wide. The game's own rule (city_warning_show_text) gives 460 above
 // 300 pixels, without the side ornaments; between the 400-pixel box's ornaments there is room for about 330
-// (2026-11-08: a 309-pixel text looked as if it would fit), so ours keep the 400-pixel box up to 320.
+// (a 309-pixel text looked as if it would fit), so ours keep the 400-pixel box up to 320.
 short BoxWidth(int px)
 {
     return px <= 100 ? 200 : px <= 200 ? 300 : px <= 320 ? 400 : 460;

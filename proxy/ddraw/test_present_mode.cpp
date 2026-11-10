@@ -1,4 +1,4 @@
-// Offline test of core/diag/present_mode (not the game; 2026-11-07): the tracker's mode changes, failed queries
+// Offline test of core/diag/present_mode (not the game): the tracker's mode changes, failed queries
 // counted (each HRESULT reported once) without giving up, giving up only after 10 s and 100 failures in a row, the
 // change lines per second, the kept events and their lines, the 60-s line, its reset and the report's copy; Attach with
 // no Direct3D 11 swap chain (lines, the log stays on) and Report; the screen programs list; the window background test

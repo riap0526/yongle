@@ -21,7 +21,7 @@ void core_png_free(void *png)
     mz_free(png);
 }
 
-// City picture (docs/archive/city_export.md section 4.4): the same deflate, fed a little at a time.
+// City picture: the same deflate, fed a little at a time.
 void *core_deflate_begin(unsigned level, core_deflate_sink sink, void *user)
 {
     // miniz's PNG writer (tdefl_write_image_to_png_file_in_memory_ex) uses these probes for each level

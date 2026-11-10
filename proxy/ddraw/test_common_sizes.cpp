@@ -1,4 +1,4 @@
-// Offline test of core/display/common_sizes (not the game; R2b.1-9): the common sizes listed for a screen are those
+// Offline test of core/display/common_sizes (not the game): the common sizes listed for a screen are those
 // that fit it (not larger than its native size, not smaller than the minimum), smallest first, the native size among
 // them, by default only of the screen's aspect; all aspects on request; aspect names; heavy sizes marked.
 #include "core/display/common_sizes.h"

@@ -1,10 +1,10 @@
-// R2c: the China map at modern resolutions (docs/archive/resolution_ui_r2c.md §5).
+// The China map at modern resolutions.
 //
 // The game keeps drawing the map exactly as it always does -- picture at (0, 40), origin (0, 40), scroll offsets 0
 // (they are saved in the savegame and stay untouched) -- but into a buffer of ours. We then show it in the map area
 // (left of the sidebar, below the top bar): the map inside the dialog panel's fret border, scaled to the area
 // (display.china_map = scaled: as large as fits, or display.china_map_scale) or at its own size (native, the
-// default), over the same map blurred and darkened or the city (display.china_map_background, O2c). City markers, names, routes and armies are part of the
+// default), over the same map blurred and darkened or the city (display.china_map_background). City markers, names, routes and armies are part of the
 // map's pixels, so they move and scale with it. The mouse is converted back to the game's own map coordinates only
 // inside the map's input functions; the sidebar, the top bar, panels and dialogs keep the real position.
 //
@@ -22,7 +22,7 @@ void RegisterSettings();
 // Checks the sites and installs the hooks. False (nothing installed) when a site does not match.
 bool Attach();
 
-// For the offline tests (proxy/ddraw/test_restore.cpp).
+// For the offline tests (src/games/emperor/test_restore.cpp).
 const Detour *Detours(int *count);
 void SetModeForTest(int mode, int scalePercent); // mode: 0 scaled, 1 native, 2 original; scalePercent 0: fit
 

@@ -1,6 +1,6 @@
-// Emperor's text as our UTF-8 (CLAUDE.md: text is UTF-8 inside the engine). For now the game's own strings are
+// Emperor's text as our UTF-8 (text is UTF-8 inside the engine). For now the game's own strings are
 // Windows-1252 and are converted; the Chinese translation (roadmap) replaces strings here, by the game's text group
-// and index where they are known, without changing the callers (e.g. the loading screen's status line, R2a).
+// and index where they are known, without changing the callers (e.g. the loading screen's status line).
 #pragma once
 
 #include <cstddef>

@@ -1,5 +1,6 @@
 #include "core/config.h"
 
+#include "core/game.h"
 #include "core/platform/files.h"
 
 #include "core/settings/settings.h"
@@ -13,15 +14,14 @@
 #include <cwchar>
 
 // The core's items in the settings model (core/settings/settings.h) and core_config, their typed view. The ini keys
-// and their meanings are those of M3..P1; only the reading moved into the model (P2).
+// and their meanings stayed the same; only the reading moved into the model.
 namespace {
 
 using core::settings::Effect;
 using core::settings::Item;
 using core::settings::Type;
 
-constexpr wchar_t kFileName[] = L"emperor_engine.ini";
-
+// resolution_w x resolution_h (1024 x 768 here) are set to the game's own size (core/game.h) at registration.
 core_config g_config = {CORE_BACKEND_EMULATED, CORE_SCALING_SHARP_BILINEAR, CORE_PRESENT_DISPLAY,
                         CORE_RESOLUTION_SCALED, 1024, 768, 100, 1, 1, 0x2D /* Insert */, 0, 0,
                         0x7A /* F11 */, 0, 0x7B /* F12 */, 0, 0, 0, 0, 0,
@@ -41,7 +41,7 @@ const char *const kCpuAffinityLabels[] = {"auto (the game on its one processor, 
 const char *const kD3d9PacingLabels[] = {"vsync (each present waits for the refresh)", "timer (our own timer)",
                                          "dwmflush (waits for the desktop's composition)"};
 
-// [debug] renderer (0.1.1) became [display] renderer (O1). Only direct3d, a choice the player made, is carried over:
+// [debug] renderer (0.1.1) became [display] renderer. Only direct3d, a choice the player made, is carried over:
 // direct3d11 was the default of the time (and in the shipped file), and the others are no longer offered.
 int MigrateRenderer(const char *old, core::settings::Migration *out, int max)
 {
@@ -142,15 +142,18 @@ int Add(const Item &item)
 
 void RegisterCoreItems()
 {
+    const core_game_info *game = core_game();
+    g_config.resolution_w = game->native_width;
+    g_config.resolution_h = game->native_height;
     // section, key, label, help, type, default, effect, inPanel, editable, min, max, step, autoWord, choices...
     g_backend = Add(Item{"video", "backend", "DirectDraw", "emulated: our own DirectDraw (no display mode changes, "
                          "scaled with SDL3); system: the real Windows DirectDraw behind the logging wrapper.",
                          Type::Choice, "emulated", Effect::Restart, false, false, 0, 0, 0, nullptr, kBackend,
                          kBackendLabels, 2});
-    // O3 (docs/archive/optimization.md): switched at once, in the panel and in Display options.
+    // Switched at once, in the panel and in Display options.
     g_scaling = Add(Item{"video", "scaling", "Scaling",
                          "How the picture is enlarged when the game's pixels are not the screen's: a display scale "
-                         "other than 100%, 1024x768, scaled menus, a window. sharp_bilinear (default): sharp, each "
+                         "other than 100%, {native}, scaled menus, a window. sharp_bilinear (default): sharp, each "
                          "pixel's edge blended over one screen pixel; nearest: plain pixels, some a screen pixel wider "
                          "than others; linear: smooth but softer. At 100% in full screen every pixel of the game is one "
                          "pixel of the screen: the three look the same.",
@@ -159,17 +162,17 @@ void RegisterCoreItems()
     g_present = Add(Item{"video", "present", "Frame output",
                          "How often frames reach the screen. display: every screen refresh; cap60: at most 60 per "
                          "second. The game's timing is the same with both. (original, the game's own ~20 per second, "
-                         "is only for troubleshooting and only in emperor_engine.ini: this panel and the options "
+                         "is only for troubleshooting and only in {ini}: this panel and the options "
                          "window are not available with it.)",
                          Type::Choice, "display", Effect::Live, true, true, 0, 0, 0, nullptr, kPresent, kPresentLabels,
-                         3, nullptr, nullptr, nullptr, nullptr, 1u << 0}); // original: not offered (2026-11-08)
+                         3, nullptr, nullptr, nullptr, nullptr, 1u << 0}); // original: no longer offered
     // A file of an older version with original (it could be chosen in the panel and the options window until
-    // 2026-11-08) gets display, so the options window can be used; original set in [video] later stays.
+    // gets display, so the options window can be used; original set in [video] later stays.
     core::settings::RenameMovedValue("video", "present", "original", "display");
     g_resolution = Add(Item{"video", "resolution", "Resolution",
                             "The size the game draws, scaled to the screen. Scaled (default): the screen's native "
                             "resolution divided by the display scale -- at 100 % every pixel of the game is one pixel "
-                            "of the screen, the sharpest picture. 1024x768 is the game's own size. Menus and loading "
+                            "of the screen, the sharpest picture. {native} is the game's own size. Menus and loading "
                             "screens are shown as large as the city. Windowed, a fixed size becomes the window's size.",
                             Type::Resolution, "scaled", Effect::Relayout, true, true, 0, 0, 0, nullptr, nullptr,
                             nullptr, 0});
@@ -178,7 +181,7 @@ void RegisterCoreItems()
                        "(small on a large, high-resolution screen). A larger scale makes everything bigger, menus and "
                        "loading screens too, but softer, because the picture is enlarged. Auto: 1080 pixels high on a taller screen (2560x1440: "
                        "1920x1080, 133 %; 4K: 1920x1080), the screen's own size otherwise. Always limited so that the "
-                       "result stays at least 1024x768.",
+                       "result stays at least {native}.",
                        Type::Int, "100", Effect::Relayout, true, true, 100, 250, 5, "auto", nullptr, nullptr, 0, "%"});
     g_window = Add(Item{"video", "window", "Window",
                         "fullscreen: the game covers its monitor, without a border; windowed: a window you can move "
@@ -188,9 +191,11 @@ void RegisterCoreItems()
     g_windowW = Add(Item{"video", "window_width", "Window width",
                          "The windowed client width in pixels (auto: three quarters of the monitor). Kept when you "
                          "size the window.",
-                         Type::Int, "auto", Effect::Live, false, true, 1024, 16384, 1, "auto", nullptr, nullptr, 0});
+                         Type::Int, "auto", Effect::Live, false, true, game->native_width, 16384, 1, "auto", nullptr,
+                         nullptr, 0});
     g_windowH = Add(Item{"video", "window_height", "Window height", "The windowed client height in pixels.",
-                         Type::Int, "auto", Effect::Live, false, true, 768, 16384, 1, "auto", nullptr, nullptr, 0});
+                         Type::Int, "auto", Effect::Live, false, true, game->native_height, 16384, 1, "auto", nullptr,
+                         nullptr, 0});
     g_windowX = Add(Item{"video", "window_x", "Window position x",
                          "The window's left edge (center: centered on its monitor). Kept when you move the window.",
                          Type::Int, "center", Effect::Live, false, true, -32000, 32000, 1, "center", nullptr, nullptr,
@@ -221,7 +226,7 @@ void RegisterCoreItems()
                           Type::Hotkey, "Insert", Effect::Live, true, true, 0, 0, 0, nullptr, nullptr, nullptr, 0});
     g_shotKey = Add(Item{"debug", "screenshot_key", "Screenshot: key",
                          "Saves the game's own picture (its logical resolution, without this panel) as a PNG in "
-                         "shots\\ in Yongle's folder (shown at the bottom of this panel); the file name has the screen "
+                         "shots\\ in {product}'s folder (shown at the bottom of this panel); the file name has the screen "
                          "number, the resolution and the time. Change: press the new key, alone or with Ctrl, Shift "
                          "or Alt.",
                          Type::Hotkey, "F11", Effect::Live, true, true, 0, 0, 0, nullptr, nullptr, nullptr, 0});
@@ -234,11 +239,11 @@ void RegisterCoreItems()
                              "FPS, a graph of the time per main-loop pass and where the time goes (the game's "
                              "simulation and drawing, our copies, the output), in the top left corner while playing.",
                              Type::Bool, "off", Effect::Live, true, true, 0, 0, 0, nullptr, nullptr, nullptr, 0});
-    // O1 (docs/archive/optimization.md §1.4): moved from [debug] (0.1.1). auto is Direct3D 11 also with the Steam overlay
-    // since the B plan (docs/archive/affinity.md section 7.5): the stops with Steam's FPS counter came from the driver's threads
+    // Moved from [debug] (0.1.1). auto is Direct3D 11 also with the Steam overlay
+    // since the thread affinity setting: the stops with Steam's FPS counter came from the driver's threads
     // waiting on the game's processor.
     core::settings::Retire("debug", "renderer", &MigrateRenderer);
-    // 2026-11-08: the sections take the names of the options window's pages. Keys that moved elsewhere are moved by
+    // The sections take the names of the options window's pages. Keys that moved elsewhere are moved by
     // their owners (core::settings::MoveKey).
     core::settings::MoveSection("display", "video");
     core::settings::MoveSection("sound", "audio");
@@ -248,12 +253,12 @@ void RegisterCoreItems()
                           "Direct3D 11. Takes effect after a restart.",
                           Type::Choice, "auto", Effect::Restart, true, true, 0, 0, 0, nullptr, core_renderer_names,
                           kRendererLabels, 3});
-    // O1: for testing auto's fall-back to direct3d11 once; not in the panel.
+    // For testing auto's fall-back to direct3d11 once; not in the panel.
     g_failD3d9 = Add(Item{"debug", "fail_direct3d9", "Fail Direct3D 9 (test)",
                           "on: the Direct3D 9 renderer is made to fail at start, so renderer = direct3d falls back "
                           "to direct3d11 (for testing that path). Takes effect after a restart.",
                           Type::Bool, "off", Effect::Restart, false, false, 0, 0, 0, nullptr, nullptr, nullptr, 0});
-    // O1g (docs/archive/optimization.md): the experiment with Direct3D 9's pacing; not in the panel.
+    // The experiment with Direct3D 9's pacing; not in the panel.
     g_d3d9Pacing = Add(Item{"debug", "d3d9_pacing", "Direct3D 9 pacing (test)",
                             "How the Direct3D 9 output is paced. vsync (default): each present waits for the "
                             "refresh. timer: no vsync; our own high-resolution timer spaces the frames one refresh "
@@ -262,7 +267,7 @@ void RegisterCoreItems()
                             "effect after a restart.",
                             Type::Choice, "vsync", Effect::Restart, false, false, 0, 0, 0, nullptr,
                             core_d3d9_pacing_names, kD3d9PacingLabels, 3});
-    // Black block diagnosis (docs/resolution_ui/sdl_output_comparison.md §8): the present mode log is only in the file.
+    // Black block diagnosis: the present mode log is only in the file.
     g_presentModeLog = Add(Item{"debug", "present_mode_log", "Present mode log",
                                 "on: the log records how Windows shows the game's frames (Direct3D 11 only) and the "
                                 "programs known to draw on the screen, for tracking down flashing black blocks. Takes "
@@ -280,9 +285,9 @@ void RegisterCoreItems()
     g_loadingHold = Add(Item{"debug", "loading_stage_ms", "Loading stage time (ms)",
                              "Each of the five start-up loading screens stays on screen at least this long, to look at "
                              "or screenshot them (they flash by on a fast computer). 0: as fast as the game loads. "
-                             "Only at start-up, so set it in emperor_engine.ini before starting the game.",
+                             "Only at start-up, so set it in {ini} before starting the game.",
                              Type::Int, "0", Effect::Restart, true, false, 0, 5000, 100, nullptr, nullptr, nullptr, 0});
-    // B plan (docs/archive/affinity.md): only in the file (troubleshooting), not in the panel. [debug] cpu_affinity_graphics
+    // Only in the file (troubleshooting), not in the panel. [debug] cpu_affinity_graphics
     // (the 0.1.3 test builds) is part of auto now.
     core::settings::Retire("debug", "cpu_affinity_graphics", nullptr);
     g_cpuAffinity = Add(Item{"compat", "cpu_affinity", "Processor affinity",
@@ -304,9 +309,10 @@ extern "C" void core_config_load(void *module)
 {
     (void)module; // our files' folder (core/platform/files): before it is decided, the folder of this module
     RegisterCoreItems();
-    core_files_bring_over(kFileName);
+    const wchar_t *file = core_game()->ini_file;
+    core_files_bring_over(file);
     wchar_t path[MAX_PATH * 2];
-    std::swprintf(path, sizeof(path) / sizeof(path[0]), L"%ls%ls", core_files_folder(), kFileName);
+    std::swprintf(path, sizeof(path) / sizeof(path[0]), L"%ls%ls", core_files_folder(), file);
     core::settings::Load(path);
 }
 

@@ -1,12 +1,29 @@
-# Emperor engine DLL (32-bit). Configure with the llvm-mingw toolchain:
-#   cmake -S . -B build/engine -G "MinGW Makefiles" -DCMAKE_TOOLCHAIN_FILE=tools/cmake/llvm-mingw-i686.cmake
-# or simply run proxy/ddraw/build.ps1.
+# The engine DLL (32-bit ddraw.dll) for one game. Configure with the llvm-mingw toolchain:
+#   cmake -S . -B build/<game> -G "MinGW Makefiles" -DCMAKE_TOOLCHAIN_FILE=tools/cmake/llvm-mingw-i686.cmake
+#         [-DENGINE_GAME=<game>]
+# or simply run proxy/ddraw/build.ps1 [-Game <game>]. Each game is src/games/<game>/ with a game.cmake (its public
+# name, version, settings file, game layer and the offline tests of that layer); the rest is shared. Without
+# ENGINE_GAME the only game in src/games/ is used.
 cmake_minimum_required(VERSION 3.25)
-# Yongle: the public name (v0.1.0 onwards). The version is shown in the log, the panel and the DLL's properties.
-project(emperor_engine VERSION 0.2.0 LANGUAGES C CXX RC)
-# Test builds carry a suffix (e.g. "-dev") so their logs are not taken for a release; empty for a release.
-set(YONGLE_VERSION_SUFFIX "")
-set(YONGLE_VERSION_STRING "${PROJECT_VERSION}${YONGLE_VERSION_SUFFIX}")
+
+file(GLOB ENGINE_GAME_FILES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}/src/games ${CMAKE_CURRENT_SOURCE_DIR}/src/games/*/game.cmake)
+list(TRANSFORM ENGINE_GAME_FILES REPLACE "/game.cmake$" "")
+if(NOT ENGINE_GAME)
+    list(LENGTH ENGINE_GAME_FILES ENGINE_GAME_COUNT)
+    if(NOT ENGINE_GAME_COUNT EQUAL 1)
+        message(FATAL_ERROR "Choose the game with -DENGINE_GAME=<game> (games here: ${ENGINE_GAME_FILES})")
+    endif()
+    set(ENGINE_GAME ${ENGINE_GAME_FILES})
+endif()
+if(NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/src/games/${ENGINE_GAME}/game.cmake)
+    message(FATAL_ERROR "No game \"${ENGINE_GAME}\" (games here: ${ENGINE_GAME_FILES})")
+endif()
+set(ENGINE_GAME ${ENGINE_GAME} CACHE STRING "The game this build is for (src/games/<game>/)" FORCE)
+include(src/games/${ENGINE_GAME}/game.cmake)
+
+project(${GAME_PROJECT} VERSION ${GAME_VERSION} LANGUAGES C CXX RC)
+set(ENGINE_VERSION_STRING "${PROJECT_VERSION}${GAME_VERSION_SUFFIX}")
+message(STATUS "Building ddraw.dll for ${ENGINE_GAME}: ${GAME_PRODUCT} ${ENGINE_VERSION_STRING}")
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 20)
@@ -15,11 +32,11 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
 
-# SDL3 3.4.18, static (Zlib; docs/third_party.md). Built once by tools/build_sdl3.ps1 into build/sdl3-i686-install.
+# SDL3 3.4.18, static (Zlib). Built once into build/sdl3-i686-install.
 set(SDL3_DIR "${CMAKE_CURRENT_SOURCE_DIR}/build/sdl3-i686-install/lib/cmake/SDL3" CACHE PATH "SDL3 CMake package")
 find_package(SDL3 3.4.18 EXACT REQUIRED CONFIG COMPONENTS SDL3-static)
 
-# MinHook 1.3.4 (third_party/minhook, BSD-2-Clause; docs/third_party.md). Only the x86 sources.
+# MinHook 1.3.4 (third_party/minhook, BSD-2-Clause). Only the x86 sources.
 add_library(minhook STATIC
     third_party/minhook/src/buffer.c
     third_party/minhook/src/hook.c
@@ -29,7 +46,7 @@ add_library(minhook STATIC
 target_include_directories(minhook PUBLIC third_party/minhook/include)
 target_compile_options(minhook PRIVATE -w)
 
-# Dear ImGui v1.92.9b (third_party/imgui, MIT; docs/third_party.md): the core and the SDL_Renderer3 backend only.
+# Dear ImGui v1.92.9b (third_party/imgui, MIT): the core and the SDL_Renderer3 backend only.
 add_library(imgui STATIC
     third_party/imgui/imgui.cpp
     third_party/imgui/imgui_draw.cpp
@@ -43,10 +60,10 @@ target_compile_definitions(imgui PUBLIC IMGUI_DISABLE_DEMO_WINDOWS IMGUI_DISABLE
 target_compile_options(imgui PRIVATE -w -fno-exceptions)
 target_link_libraries(imgui PRIVATE SDL3::SDL3-static)
 
-# ddraw.dll: C proxy entry point (proxy/ddraw) + core (src/core).
-add_library(ddraw SHARED
-    proxy/ddraw/ddraw.c
-    proxy/ddraw/ddraw.def
+# The core (src/core): shared by every game. ddraw.dll is the C proxy entry point (proxy/ddraw), the core and the
+# chosen game's layer (GAME_SOURCES from its game.cmake), in this order.
+set(CORE_SOURCES
+    src/core/game.cpp
     src/core/log.cpp
     src/core/config.cpp
     src/core/startup.cpp
@@ -92,33 +109,12 @@ add_library(ddraw SHARED
     src/core/ui/perf_view.cpp
     src/core/settings/settings.cpp
     src/core/settings/ini_text.cpp
-    src/games/emperor/emperor.cpp
-    src/games/emperor/scroll.cpp
-    src/games/emperor/resolution.cpp
-    src/games/emperor/fullscreen.cpp
-    src/games/emperor/text.cpp
-    src/games/emperor/ui_fixes.cpp
-    src/games/emperor/china_map.cpp
-    src/games/emperor/display_options.cpp
-    src/games/emperor/options_window.cpp
-    src/games/emperor/options_text.cpp
-    src/games/emperor/options_original.cpp
-    src/games/emperor/options_entry.cpp
-    src/games/emperor/sound.cpp
-    src/games/emperor/master_volume.cpp
-    src/games/emperor/intro.cpp
-    src/games/emperor/zoom.cpp
-    src/games/emperor/city_picture.cpp
-    src/games/emperor/notice.cpp
-    src/games/emperor/keys.cpp
-    src/games/emperor/game_menu.cpp
-    src/games/emperor/nature_sounds.cpp
-    src/games/emperor/ambient_rate.cpp
 )
+add_library(ddraw SHARED proxy/ddraw/ddraw.c proxy/ddraw/ddraw.def ${CORE_SOURCES} ${GAME_SOURCES})
 # Augustus code (AGPL-3.0): third_party/augustus/README.md. Compiled as part of the DLL.
 add_library(augustus_core STATIC third_party/augustus/src/core/speed.c)
 target_include_directories(augustus_core PUBLIC third_party/augustus/src)
-# PNG encoding with a chosen level (O1b): miniz from SDL 3.4.18 (third_party/miniz, public domain; docs/third_party.md).
+# PNG encoding with a chosen level: miniz from SDL 3.4.18 (third_party/miniz, public domain).
 add_library(png_encode STATIC src/core/capture/png_encode.c)
 target_include_directories(png_encode PRIVATE src third_party/miniz)
 target_link_libraries(png_encode PRIVATE SDL3::SDL3-static)
@@ -129,13 +125,13 @@ target_compile_options(ddraw PRIVATE
     # DWARF for our own sources (does not change the generated code): ddraw.dbg.dll keeps it, ddraw.syms is made
     # from it (tools/build/make_syms.py), and ddraw.dll is stripped.
     -g
-    # No C++ exception may cross into the game (CLAUDE.md).
+    # No C++ exception may cross into the game.
     $<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions>
 )
 # Static C++ runtime: the DLL depends only on system DLLs (and the UCRT API set).
 target_link_options(ddraw PRIVATE -static -Wl,--subsystem,windows)
 target_link_libraries(ddraw PRIVATE minhook augustus_core png_encode imgui SDL3::SDL3-static dxguid user32 gdi32 winmm)
-# Debug information (docs/hooks.md): ddraw.dbg.dll keeps the DWARF (for llvm-symbolizer), ddraw.syms is the table the
+# Debug information : ddraw.dbg.dll keeps the DWARF (for llvm-symbolizer), ddraw.syms is the table the
 # exception log reads (function and source line for addresses in our DLL; tools/build/make_syms.py), and ddraw.dll
 # itself is stripped of the debug sections (the code is the same).
 find_program(PYTHON_EXE python REQUIRED)
@@ -147,19 +143,20 @@ add_custom_command(TARGET ddraw POST_BUILD
     COMMAND ${LLVM_BIN}/llvm-strip.exe --strip-debug $<TARGET_FILE:ddraw>
     VERBATIM)
 # The version: in the code (log, panel) and as the DLL's version resource.
-target_compile_definitions(ddraw PRIVATE YONGLE_VERSION="${YONGLE_VERSION_STRING}")
+target_compile_definitions(ddraw PRIVATE ENGINE_VERSION="${ENGINE_VERSION_STRING}")
 configure_file(proxy/ddraw/version.rc.in ${CMAKE_CURRENT_BINARY_DIR}/version.rc @ONLY)
 target_sources(ddraw PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/version.rc)
-# Default settings file, copied next to the DLL (copy it into testbed\ together with ddraw.dll).
-configure_file(proxy/ddraw/emperor_engine.ini ${CMAKE_CURRENT_BINARY_DIR}/emperor_engine.ini COPYONLY)
-# The same file embedded in the DLL (games/emperor: core::settings::SetTemplate), so an older file's descriptions are
-# brought up to date at start-up; editing the ini re-runs this (configure_file above makes it a configure input).
-file(READ proxy/ddraw/emperor_engine.ini YONGLE_INI_TEMPLATE)
-string(FIND "${YONGLE_INI_TEMPLATE}" ")yongle_ini\"" YONGLE_INI_DELIM)
-if(NOT YONGLE_INI_DELIM EQUAL -1)
-    message(FATAL_ERROR "emperor_engine.ini contains the raw string delimiter )yongle_ini\"")
+# The game's settings file (GAME_INI_SOURCE), copied next to the DLL (copy both into the game's folder)
+# and embedded in the DLL (core::settings::SetTemplate), so an older file's descriptions are brought up to date at
+# start-up; editing the file re-runs this (configure_file makes it a configure input).
+get_filename_component(GAME_INI_NAME ${GAME_INI_SOURCE} NAME)
+configure_file(${GAME_INI_SOURCE} ${CMAKE_CURRENT_BINARY_DIR}/${GAME_INI_NAME} COPYONLY)
+file(READ ${GAME_INI_SOURCE} GAME_INI_TEMPLATE)
+string(FIND "${GAME_INI_TEMPLATE}" ")engine_ini\"" GAME_INI_DELIM)
+if(NOT GAME_INI_DELIM EQUAL -1)
+    message(FATAL_ERROR "${GAME_INI_NAME} contains the raw string delimiter )engine_ini\"")
 endif()
-configure_file(src/games/emperor/ini_template.h.in ${CMAKE_CURRENT_BINARY_DIR}/generated/ini_template.h @ONLY)
+configure_file(tools/cmake/ini_template.h.in ${CMAKE_CURRENT_BINARY_DIR}/generated/ini_template.h @ONLY)
 target_include_directories(ddraw PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
 
 # Smoke test that loads a ddraw.dll by path and calls DirectDrawCreate (not the game).
@@ -195,17 +192,13 @@ add_executable(test_logical proxy/ddraw/test_logical.cpp src/core/display/logica
 target_include_directories(test_logical PRIVATE src)
 target_link_options(test_logical PRIVATE -static)
 
-# Offline test of core/display/common_sizes (the panel's list of common sizes; R2b.1-9).
+# Offline test of core/display/common_sizes (the panel's list of common sizes).
 add_executable(test_common_sizes proxy/ddraw/test_common_sizes.cpp src/core/display/common_sizes.cpp)
 target_include_directories(test_common_sizes PRIVATE src)
 target_link_options(test_common_sizes PRIVATE -static)
 
-# Offline test of core/display/framing (the framed full-screen picture geometry, fullscreen_art.md 7.5).
+# Offline test of core/display/framing (the framed full-screen picture geometry).
 add_executable(test_framing proxy/ddraw/test_framing.cpp src/core/display/framing.cpp)
-# O4b: games/emperor/ambient_rate (no game, no DLL).
-add_executable(test_ambient proxy/ddraw/test_ambient.cpp src/games/emperor/ambient_rate.cpp)
-target_include_directories(test_ambient PRIVATE src)
-target_link_options(test_ambient PRIVATE -static)
 target_include_directories(test_framing PRIVATE src)
 target_link_options(test_framing PRIVATE -static)
 
@@ -214,13 +207,13 @@ add_executable(test_moved_rect proxy/ddraw/test_moved_rect.cpp src/core/display/
 target_include_directories(test_moved_rect PRIVATE src)
 target_link_options(test_moved_rect PRIVATE -static)
 
-# Offline test of core/display/scaled_rect (the China map's scaling, mouse mapping and backdrop; R2c).
-# Offline test of core/display/city_zoom and the shrinking in core/display/scaled_rect (R5,
-# docs/archive/resolution_ui_r5.md): the zoom limit for map and screen sizes, the cap, averaged and nearest shrinking.
+# Offline test of core/display/scaled_rect (the China map's scaling, mouse mapping and backdrop).
+# Offline test of core/display/city_zoom and the shrinking in core/display/scaled_rect:
+# the zoom limit for map and screen sizes, the cap, averaged and nearest shrinking.
 add_executable(test_city_zoom proxy/ddraw/test_city_zoom.cpp src/core/display/city_zoom.cpp src/core/diag/environment.cpp
     src/core/platform/files.cpp
     src/core/display/scaled_rect.cpp src/core/platform/parallel.cpp src/core/platform/affinity.cpp
-    src/core/diag/guard.cpp src/core/log.cpp)
+    src/core/diag/guard.cpp src/core/log.cpp src/core/game.cpp)
 target_include_directories(test_city_zoom PRIVATE src)
 target_link_options(test_city_zoom PRIVATE -static)
 
@@ -228,23 +221,23 @@ add_executable(test_scaled_rect proxy/ddraw/test_scaled_rect.cpp src/core/displa
 target_include_directories(test_scaled_rect PRIVATE src)
 target_link_options(test_scaled_rect PRIVATE -static)
 
-# Offline test of core/ddraw/surface_memory (spare rows with a canary, guard pages; R2b.1).
+# Offline test of core/ddraw/surface_memory (spare rows with a canary, guard pages).
 add_executable(test_surface_memory proxy/ddraw/test_surface_memory.cpp src/core/ddraw/surface_memory.cpp
     src/core/diag/guard.cpp src/core/log.cpp)
 target_include_directories(test_surface_memory PRIVATE src)
 target_link_options(test_surface_memory PRIVATE -static)
 
-# Offline test of core/diag/report (frame check, window events, report numbers; R2b.1).
+# Offline test of core/diag/report (frame check, window events, report numbers).
 add_executable(test_report proxy/ddraw/test_report.cpp src/core/diag/report.cpp src/core/log.cpp)
 target_include_directories(test_report PRIVATE src)
 target_link_options(test_report PRIVATE -static)
 
-# Offline test of core/diag/perf (where the time goes; R2b.1-3).
+# Offline test of core/diag/perf (where the time goes).
 add_executable(test_perf proxy/ddraw/test_perf.cpp src/core/diag/perf.cpp)
 target_include_directories(test_perf PRIVATE src)
 target_link_options(test_perf PRIVATE -static)
 
-# Offline test of core/platform/affinity (B plan, docs/archive/affinity.md section 7.1): scenarios in child processes put on
+# Offline test of core/platform/affinity: scenarios in child processes put on
 # one processor; the last one starts test_emu.exe (the DLL) on one processor.
 add_executable(test_affinity proxy/ddraw/test_affinity.cpp src/core/platform/affinity.cpp src/core/diag/guard.cpp
     src/core/log.cpp)
@@ -252,9 +245,9 @@ target_include_directories(test_affinity PRIVATE src)
 target_link_options(test_affinity PRIVATE -static)
 add_dependencies(test_affinity ddraw test_emu)
 
-# Offline test of core/diag/environment (O1a, docs/archive/optimization.md): start-up lines, processor time, resources.
+# Offline test of core/diag/environment: start-up lines, processor time, resources.
 add_executable(test_env proxy/ddraw/test_env.cpp src/core/diag/environment.cpp src/core/log.cpp src/core/platform/files.cpp
-    src/core/platform/affinity.cpp src/core/diag/guard.cpp)
+    src/core/platform/affinity.cpp src/core/diag/guard.cpp src/core/game.cpp)
 target_include_directories(test_env PRIVATE src)
 target_link_options(test_env PRIVATE -static)
 
@@ -264,7 +257,7 @@ add_executable(test_stall proxy/ddraw/test_stall.cpp src/core/diag/stall.cpp src
 target_include_directories(test_stall PRIVATE src)
 target_link_options(test_stall PRIVATE -static)
 
-# Offline test of core/diag/present_mode (the bookkeeping, the report; the not-Direct3D-11 path; 2026-11-07), the screen
+# Offline test of core/diag/present_mode (the bookkeeping, the report; the not-Direct3D-11 path), the screen
 # programs list and the window background test color.
 add_executable(test_present_mode proxy/ddraw/test_present_mode.cpp src/core/diag/present_mode.cpp
     src/core/diag/present_mode_tracker.cpp src/core/diag/screen_programs.cpp src/core/diag/window_background.cpp
@@ -273,15 +266,15 @@ target_include_directories(test_present_mode PRIVATE src)
 target_link_options(test_present_mode PRIVATE -static)
 target_link_libraries(test_present_mode PRIVATE dxguid user32 gdi32)
 
-# Offline test of the screenshot writer: the queue limit and the processor time per picture (O1, 2026-10-30).
+# Offline test of the screenshot writer: the queue limit and the processor time per picture.
 add_executable(test_screenshot proxy/ddraw/test_screenshot.cpp src/core/capture/screenshot.cpp src/core/platform/files.cpp
     src/core/capture/big_picture.cpp src/core/capture/png_stream.cpp
-    src/core/diag/environment.cpp src/core/log.cpp src/core/platform/affinity.cpp src/core/diag/guard.cpp)
+    src/core/diag/environment.cpp src/core/log.cpp src/core/platform/affinity.cpp src/core/diag/guard.cpp src/core/game.cpp)
 target_include_directories(test_screenshot PRIVATE src)
 target_link_options(test_screenshot PRIVATE -static)
 target_link_libraries(test_screenshot PRIVATE png_encode SDL3::SDL3-static)
 
-# Offline test of the city picture's parts (docs/archive/city_export.md): the strips, the PNG written a row at a
+# Offline test of the city picture's parts: the strips, the PNG written a row at a
 # time (read back with SDL).
 add_executable(test_city_picture proxy/ddraw/test_city_picture.cpp src/core/display/city_strips.cpp
     src/core/capture/big_picture.cpp src/core/capture/png_stream.cpp src/core/log.cpp)
@@ -289,7 +282,7 @@ target_include_directories(test_city_picture PRIVATE src)
 target_link_options(test_city_picture PRIVATE -static)
 target_link_libraries(test_city_picture PRIVATE png_encode SDL3::SDL3-static)
 
-# Offline test of the log's size limit at start-up (O5a, 2026-10-30).
+# Offline test of the log's size limit at start-up.
 add_executable(test_log proxy/ddraw/test_log.cpp src/core/log.cpp)
 target_include_directories(test_log PRIVATE src)
 target_link_options(test_log PRIVATE -static)
@@ -303,46 +296,20 @@ add_custom_command(TARGET test_guard POST_BUILD
             $<TARGET_FILE:test_guard> ${CMAKE_CURRENT_BINARY_DIR}/test_guard.syms
     VERBATIM)
 
-# Offline test of the failure fallbacks of M4, R1 and P2: the real detours of games/emperor on a copy of the game's
-# address range with fake game functions (docs/archive/resolution_ui_r2b.md §1). The parts of the DLL they call that
-# are not under test (output, panel, virtual display) are stubbed in the test.
-add_executable(test_restore proxy/ddraw/test_restore.cpp
-    src/games/emperor/scroll.cpp src/games/emperor/resolution.cpp src/games/emperor/emperor.cpp
-    src/games/emperor/ui_fixes.cpp src/games/emperor/china_map.cpp src/games/emperor/display_options.cpp
-    src/games/emperor/options_window.cpp src/games/emperor/options_text.cpp
-    src/games/emperor/options_original.cpp src/games/emperor/options_entry.cpp src/core/options/window.cpp
-    src/core/options/menu.cpp src/games/emperor/game_menu.cpp src/games/emperor/nature_sounds.cpp
-    src/core/display/common_sizes.cpp
-    src/games/emperor/sound.cpp src/games/emperor/master_volume.cpp src/games/emperor/ambient_rate.cpp
-    src/games/emperor/intro.cpp
-    src/games/emperor/zoom.cpp src/core/display/city_zoom.cpp
-    src/games/emperor/city_picture.cpp src/games/emperor/notice.cpp src/games/emperor/keys.cpp
-    src/core/display/city_strips.cpp
-    src/core/capture/big_picture.cpp
-    src/core/capture/png_stream.cpp
-    src/core/scroll/smooth_scroll.cpp src/core/diag/guard.cpp src/core/diag/report.cpp src/core/diag/perf.cpp
-    src/core/diag/environment.cpp src/core/diag/stall.cpp src/core/platform/affinity.cpp src/core/log.cpp
-    src/core/diag/present_mode.cpp src/core/diag/present_mode_tracker.cpp src/core/diag/screen_programs.cpp
-    src/core/platform/parallel.cpp src/core/display/logical_size.cpp
-    src/core/display/moved_rect.cpp src/core/display/scaled_rect.cpp src/core/ddraw/surface_memory.cpp
-    src/core/assets/sg3.cpp src/core/config.cpp src/core/settings/settings.cpp src/core/settings/ini_text.cpp
-    src/core/ui/hotkey.cpp src/core/hook/hook.cpp src/core/platform/files.cpp)
-target_include_directories(test_restore PRIVATE src ${CMAKE_CURRENT_BINARY_DIR}/generated)
-target_compile_options(test_restore PRIVATE -fno-exceptions)
-target_link_options(test_restore PRIVATE -static)
-target_link_libraries(test_restore PRIVATE minhook augustus_core imgui png_encode SDL3::SDL3-static winmm)
+# The chosen game's own offline tests (game_add_tests in its game.cmake).
+game_add_tests()
 
-# Offline test of core/assets/sg3 on the player's own image pack (compared with tools/verify/sg3_hash.py).
+# Offline test of core/assets/sg3 on the player's own image pack (compared with a Python reader's hashes).
 add_executable(test_sg3 proxy/ddraw/test_sg3.cpp src/core/assets/sg3.cpp src/core/log.cpp)
 target_include_directories(test_sg3 PRIVATE src)
 target_link_options(test_sg3 PRIVATE -static)
 
-# Offline test of core/platform/files (docs/testing/v0_2_0_files.md): where our files go, with fake and real probes.
-add_executable(test_files proxy/ddraw/test_files.cpp src/core/platform/files.cpp src/core/log.cpp)
+# Offline test of core/platform/files: where our files go, with fake and real probes.
+add_executable(test_files proxy/ddraw/test_files.cpp src/core/platform/files.cpp src/core/log.cpp src/core/game.cpp)
 target_include_directories(test_files PRIVATE src)
 target_link_options(test_files PRIVATE -static)
 
-# Offline test of core/settings/ini_text (changing values in emperor_engine.ini without touching anything else).
+# Offline test of core/settings/ini_text (changing values in the settings file without touching anything else).
 add_executable(test_ini proxy/ddraw/test_ini.cpp src/core/settings/ini_text.cpp)
 target_include_directories(test_ini PRIVATE src)
 target_link_options(test_ini PRIVATE -static)
@@ -350,7 +317,7 @@ target_link_options(test_ini PRIVATE -static)
 # Offline test of the settings model (core/settings + core/config): load, requests, callbacks, saving.
 add_executable(test_settings proxy/ddraw/test_settings.cpp src/core/config.cpp src/core/log.cpp src/core/diag/guard.cpp
     src/core/platform/files.cpp
-    src/core/settings/settings.cpp src/core/settings/ini_text.cpp src/core/ui/hotkey.cpp)
+    src/core/settings/settings.cpp src/core/settings/ini_text.cpp src/core/ui/hotkey.cpp src/core/game.cpp)
 target_include_directories(test_settings PRIVATE src)
 target_link_options(test_settings PRIVATE -static)
 
@@ -365,7 +332,7 @@ add_executable(test_options proxy/ddraw/test_options.cpp src/core/options/window
 target_include_directories(test_options PRIVATE src)
 target_link_options(test_options PRIVATE -static)
 
-# Timer probe: timeGetTime/Sleep granularity and an emulation of Emperor's 50 ms present gate (docs/performance.md).
+# Timer probe: timeGetTime/Sleep granularity and an emulation of Emperor's 50 ms present gate.
 # A development tool, not in the public source export.
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/tools/timer_probe/timer_probe.cpp)
     add_executable(timer_probe tools/timer_probe/timer_probe.cpp)

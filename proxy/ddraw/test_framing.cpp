@@ -1,5 +1,5 @@
 // Offline test of core/display/framing (not the game): the geometry of a framed full-screen picture
-// (docs/resolution_ui/fullscreen_art.md §7.5). The approved v4 mockups (tools/mockups/fsmock3.py) give the
+// (the rules in core/display/framing.h). The approved mockups give the
 // expected numbers; the invariants (picture centred in the frame, frame centred on the screen, the outside fill
 // either at least two border widths or none, even padding) are checked over many screen sizes.
 #include "core/display/framing.h"
@@ -76,12 +76,12 @@ bool Invariants(int W, int H, int pw, int ph, char *why, size_t size)
 
 int main()
 {
-    std::printf("-- the v4 mockups (fullscreen_art.md §7.5)\n");
+    std::printf("-- the v4 mockups\n");
     Expect("main menu 1024x768 on 2560x1440", 2560, 1440, 1024, 768, 1.800, 329, 0, 1901, 1440, false, true);
     Expect("load screen 798x412 on 2560x1440", 2560, 1440, 798, 412, 3.084, 0, 0, 2560, 1440, true, true);
     Expect("load screen 798x412 on 2560x1080", 2560, 1080, 798, 412, 2.432, 270, 0, 2019, 1080, false, true);
 
-    std::printf("-- native (R2d.1): the picture at its own size, centred; as large as fits when it does not fit\n");
+    std::printf("-- native: the picture at its own size, centred; as large as fits when it does not fit\n");
     {
         FrameLayout n{};
         Check(ComputeFrameLayout(2560, 1440, 1024, 768, &n, true) && n.native && n.s == 1.0 && n.frameW == 1056 &&

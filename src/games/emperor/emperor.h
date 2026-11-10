@@ -1,5 +1,5 @@
 // Emperor: Rise of the Middle Kingdom (GOG, Emperor.exe SHA256 6373328b...53c0e) -- the game-specific layer.
-// Everything that knows an Emperor address lives under games/emperor/ (CLAUDE.md); core never does.
+// Everything that knows an Emperor address lives under games/emperor/; core never does.
 #pragma once
 
 #ifdef __cplusplus
@@ -17,7 +17,7 @@ void emperor_attach(void);
 
 /* From the deferred start-up work, after the settings are read: nonzero when the process is the game's separate
    editor, EmperorEdit.exe (the main menu's Campaign Creator starts it and exits). It loads this DLL from the game
-   folder too; it gets only the logging wrapper around the real DirectDraw, so it runs as without the DLL (R2d). */
+   folder too; it gets only the logging wrapper around the real DirectDraw, so it runs as without the DLL. */
 int emperor_editor_exe(void);
 
 #ifdef __cplusplus
@@ -26,7 +26,7 @@ int emperor_editor_exe(void);
 #include "games/emperor/site.h"
 
 namespace emperor {
-// For the offline tests (proxy/ddraw/test_restore.cpp): game_loop_step's and sim_tick_due's detours.
+// For the offline tests (src/games/emperor/test_restore.cpp): game_loop_step's and sim_tick_due's detours.
 const Detour *MainDetours(int *count);
 } // namespace emperor
 #endif

@@ -1,6 +1,6 @@
 // System timer diagnostics. Games of this era pace frames and simulation with timeGetTime, whose granularity is
 // the system clock-interrupt period: 15.625 ms by default, finer while any process has raised it (timeBeginPeriod).
-// Emperor never raises it itself (docs/performance.md), so its timing depends on what else is running.
+// Emperor never raises it itself, so its timing depends on what else is running.
 #pragma once
 
 #ifdef __cplusplus

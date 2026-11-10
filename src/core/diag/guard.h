@@ -1,4 +1,4 @@
-// Exception log and feature guards (CLAUDE.md: a failing feature of ours is switched off and logged; the game runs on).
+// Exception log and feature guards (a failing feature of ours is switched off and logged; the game runs on).
 //
 // Exception log: a vectored exception handler that only records. For access violations and the other hardware
 // exceptions, and for C++ exceptions (the game's own throw), it logs the code, the faulting address as module+offset

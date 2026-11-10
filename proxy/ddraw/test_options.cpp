@@ -205,7 +205,7 @@ int main()
     w.Open(0, 1); // General, Speed
     FakePainter p = Draw(w);
     Check(p.Find("panel") && p.Find("panel")->w == 640 && p.Find("panel")->h == 480, "the window frame 640 x 480");
-    Check(p.FindText("Yongle options") && p.FindText("Yongle options")->font == co::Font::Title, "title");
+    Check(p.FindText("Options") && p.FindText("Options")->font == co::Font::Title, "title (the core's default)");
     Check(p.FindText("General") && p.FindText("General")->font == co::Font::Gold, "selected tab in gold");
     Check(p.FindText("Display") && p.FindText("Display")->font == co::Font::Normal, "other tabs in white");
     Check(p.FindText("Speed") && p.FindText("Speed")->font == co::Font::Gold, "selected category in gold");
@@ -716,7 +716,7 @@ int main()
               "the name: no red line; a line break in the tooltip");
     }
 
-    // K4: the pause menu (core/options/menu.h): Augustus's layout, a click on a button, Esc and right click close.
+    // The pause menu (core/options/menu.h): Augustus's layout, a click on a button, Esc and right click close.
     {
         co::Menu m;
         m.Set("Pause", {"Continue", "Replay map", "Load game", "Save game", "Delete game", "Options",

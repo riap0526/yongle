@@ -1,14 +1,17 @@
 /*
- * Proxy ddraw.dll for Emperor: Rise of the Middle Kingdom -- the DLL's entry point.
+ * Proxy ddraw.dll -- the DLL's entry point, the same for every game.
  *
- * Emperor.exe imports exactly one function from DDRAW.dll: DirectDrawCreate
- * (IAT 0x7a9020, thunk 0x5fb4c0, callers 0x44d307 and 0x52bc45). This DLL is
- * loaded from the game directory instead of the system copy. Depending on
- * emperor_engine.ini it returns our own DirectDraw (src/core/ddraw/ddraw_emu,
- * the default) or loads the real system ddraw.dll behind the logging wrapper
- * (src/core/ddraw/ddraw_wrap). The log is ddraw_proxy.log in our files' folder
- * (src/core/platform/files: the game folder, or Documents\My Games\Yongle when
- * the game folder is protected).
+ * The games this engine is for import exactly one function from DDRAW.dll:
+ * DirectDrawCreate. This DLL is loaded from the game directory instead of the
+ * system copy. Depending on our settings file it returns our own DirectDraw
+ * (src/core/ddraw/ddraw_emu, the default) or loads the real system ddraw.dll
+ * behind the logging wrapper (src/core/ddraw/ddraw_wrap). The log is
+ * ddraw_proxy.log in our files' folder (src/core/platform/files: the game
+ * folder, or Documents\My Games\<the game's folder name> when the game folder
+ * is protected).
+ *
+ * The game this build is for is known only through core/game.h: game_info()
+ * comes from the game layer (src/games/<game>/game.cpp), chosen at build time.
  *
  * The real DLL is loaded lazily on the first call, never inside DllMain
  * (loader lock). DllMain only keeps the log in memory and installs the
@@ -21,12 +24,12 @@
 #include "core/config.h"
 #include "core/ddraw/ddraw_emu.h"
 #include "core/ddraw/ddraw_wrap.h"
+#include "core/game.h"
 #include "core/log.h"
 #include "core/platform/affinity.h"
 #include "core/platform/files.h"
 #include "core/platform/timing.h"
 #include "core/startup.h"
-#include "games/emperor/emperor.h"
 
 static HMODULE g_real;
 static HMODULE g_self;
@@ -71,22 +74,24 @@ static BOOL load_real(void)
    nonzero for the full start-up, 0 for the editor (logging wrapper only). */
 static int deferred_start(int in_loader_lock)
 {
-    core_files_decide(L"Yongle", in_loader_lock);
+    const core_game_info *game = core_game();
+
+    core_files_decide(game->folder, in_loader_lock);
     core_log_open_folder(core_files_folder(), "ddraw_proxy.log");
     core_files_log();
     core_config_load(g_self);
-    /* The game's separate editor (EmperorEdit.exe, the Campaign Creator, which the main menu starts) loads this
-       DLL from the game folder too: the real DirectDraw behind the logging wrapper and nothing else, so it runs
-       as without the DLL (R2d; docs/resolution_ui/r2d.md). */
-    if (emperor_editor_exe()) {
+    /* A game's separate editor (Emperor: EmperorEdit.exe, which the main menu starts) loads this DLL from the game
+       folder too: the real DirectDraw behind the logging wrapper and nothing else, so it runs as without the DLL. */
+    if (game->editor_exe && game->editor_exe()) {
         DisableThreadLibraryCalls(g_self);
         core_config_force_system_backend();
-        core_log("startup: EmperorEdit.exe: only the logging wrapper around the real DirectDraw (no display "
+        core_log("startup: the game's editor: only the logging wrapper around the real DirectDraw (no display "
                  "hooks, no game hooks)");
         return 0;
     }
     core_startup_install_hooks();
-    emperor_attach();
+    if (game->attach)
+        game->attach();
     return 1;
 }
 
@@ -96,7 +101,7 @@ HRESULT WINAPI DirectDrawCreate(GUID *guid, void **dd, IUnknown *outer)
 
     core_startup_ensure(); /* normally done already (the exe's entry point, or DllMain) */
 
-    /* emperor_engine.ini display.backend: our own DirectDraw (default) or the
+    /* Our settings file's video.backend: our own DirectDraw (default) or the
        real one behind the logging wrapper, for comparison. */
     if (core_config_get()->backend == CORE_BACKEND_EMULATED)
         return core_ddraw_emu_create(guid, dd, outer, caller);
@@ -110,15 +115,18 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved)
     switch (reason) {
     case DLL_PROCESS_ATTACH:
         /* Thread notifications stay on: DLL_THREAD_ATTACH puts each new thread on the original processor mask
-           (core/platform/affinity, docs/archive/affinity.md section 3.4). */
+           (core/platform/affinity). */
         /* Our files' folder is decided after the loader lock (shell32, AccessCheck; core/platform/files.h): until
            then the log is kept in memory. */
         g_self = inst;
+        core_game_set(game_info());
         core_log_begin_buffer();
-        core_log("Yongle " YONGLE_VERSION " (ddraw proxy: emulated DirectDraw + SDL3 output thread, or logging "
+        core_log("%s %s (ddraw proxy: emulated DirectDraw + SDL3 output thread, or logging "
                  "wrapper) attached (module %p, pid %lu, exe %s)",
-                 (void *)inst, GetCurrentProcessId(), GetCommandLineA());
-        emperor_register_settings();
+                 core_game()->product, core_game()->version, (void *)inst, GetCurrentProcessId(),
+                 GetCommandLineA());
+        if (core_game()->register_settings)
+            core_game()->register_settings();
         core_startup_attach(inst, deferred_start, reserved != NULL);
         break;
     case DLL_THREAD_ATTACH:

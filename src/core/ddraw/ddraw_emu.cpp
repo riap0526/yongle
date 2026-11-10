@@ -9,11 +9,13 @@
 #include "core/diag/guard.h"
 #include "core/diag/perf.h"
 #include "core/display/virtual_display.h"
+#include "core/game.h"
 #include "core/log.h"
 
 #include <ddraw.h>
 
 #include <atomic>
+#include <cstdio>
 #include <cstring>
 #include <unordered_set>
 
@@ -79,7 +81,7 @@ public:
     {
         // Plain committed memory: the game keeps drawing through the pointer it got from the first Lock after
         // Unlock (dd_create_surfaces stores it), so the bits must never move while the surface lives. Spare rows
-        // with a canary below the last row and guard pages around (core/ddraw/surface_memory.h, R2b.1).
+        // with a canary below the last row and guard pages around (core/ddraw/surface_memory.h).
         if (core::ddraw::AllocSurfaceMemory(mem_, pitch_, h_)) {
             bits_ = mem_.bits;
             core_log("emulated ddraw: Surface#%u memory: %ldx%ld pitch %ld at %p, %d spare rows (%zu bytes, canary) "
@@ -724,8 +726,12 @@ public:
     STDMETHOD(CreateClipper)(DWORD, LPDIRECTDRAWCLIPPER *, IUnknown *) override
     {
         static bool note = false;
-        LogOnce(note, "CreateClipper: the game asked for windowed mode, which the emulated back end does not support "
-                      "(set display.backend=system in emperor_engine.ini to use the real ddraw)");
+        char text[256];
+        std::snprintf(text, sizeof(text),
+                      "CreateClipper: the game asked for windowed mode, which the emulated back end does not support "
+                      "(set display.backend=system in %s to use the real ddraw)",
+                      core_game()->ini_file_utf8);
+        LogOnce(note, text);
         UNIMPLEMENTED("DirectDraw", "CreateClipper");
     }
     STDMETHOD(CreatePalette)(DWORD, LPPALETTEENTRY, LPDIRECTDRAWPALETTE *, IUnknown *) override

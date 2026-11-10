@@ -103,7 +103,7 @@ const IMAGE_SECTION_HEADER *Section(HMODULE m, const char *name)
 
 // The module's .buildid section in hex, as make_syms.py writes it ("" when there is none). Bytes 24-27, the debug
 // directory's PointerToRawData (a file offset that llvm-strip changes), are written as 0 on both sides: the table is
-// made from ddraw.dbg.dll, before ddraw.dll is stripped (found in O1's second test, 2026-10-28).
+// made from ddraw.dbg.dll, before ddraw.dll is stripped (found in testing).
 void BuildId(HMODULE m, char *out, size_t size)
 {
     out[0] = 0;

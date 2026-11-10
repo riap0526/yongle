@@ -1,4 +1,4 @@
-// Our messages in the game's own notice boxes (0.2.0 item 6, docs/archive/game_notices.md): the boxes the game shows at the
+// Our messages in the game's own notice boxes: the boxes the game shows at the
 // top of the city ("Game saved"), with their look, place and time on screen (15 s), through the game's
 // city_warning_show_text 0x547d30. The game's own "Warnings" switch (Help menu) does not hide ours: they answer
 // something the player just did. Shown on the game thread, from the game's notice drawing (city_warnings_draw

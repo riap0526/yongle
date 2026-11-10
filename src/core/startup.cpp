@@ -103,7 +103,7 @@ __attribute__((used)) void core_startup_on_entry(void)
     core_log("exe entry point reached (loader lock released); system timer resolution %u us",
              core_timer_resolution_us());
     core_dpi_apply("exe entry point");
-    // O1a (docs/archive/optimization.md): the modules, power and priority the game starts with; the game runs on this thread.
+    // The modules, power and priority the game starts with; the game runs on this thread.
     core::diag::env::Start();
     core::diag::env::RegisterThread(core::diag::env::Thread::Game);
     core::diag::stall::RegisterThread(core::diag::stall::Thread::Game);
@@ -155,7 +155,7 @@ HWND WINAPI CreateWindowExA_detour(DWORD exStyle, LPCSTR cls, LPCSTR title, DWOR
     core_dpi_apply("first CreateWindowExA (entry hook did not run)");
     // The emulated backend's window covers the monitor: a top-level window goes straight to user32, past a
     // compatibility shim's wrapper (GOG's layer re-centres a window that does not fit the work area after creating
-    // it; 0.2.0 item 9, docs/archive/compat_layer.md). The logging wrapper backend keeps the layer, as the game without us.
+    // it). The logging wrapper backend keeps the layer, as the game without us.
     const bool direct = !parent && g_directCreateWindowExA && core_config_get()->backend == CORE_BACKEND_EMULATED;
     HWND hwnd = (direct ? g_directCreateWindowExA : g_createWindowExA)(exStyle, cls, title, style, x, y, w, h, parent,
                                                                         menu, inst, param);

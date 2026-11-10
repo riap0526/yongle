@@ -1,8 +1,8 @@
 // Reading images from the player's own .sg3/.555 image packs (the format of Impressions' city builders: Caesar 3,
-// Pharaoh, Zeus, Emperor), in memory only: nothing decoded is ever written out (CLAUDE.md: the game's art is the
+// Pharaoh, Zeus, Emperor), in memory only: nothing decoded is ever written out (the game's art is the
 // publisher's; this reads the user's own files on the user's computer, as the game itself does).
 //
-// Layout (tools/mockups/sgimg.py, from which this is ported; field meanings as in Akhenaten's imagepak.cpp, read for
+// Layout (ported from our Python reader of the format; field meanings as in Akhenaten's imagepak.cpp, read for
 // reference only): an 80-byte header (version at +4, last entry index at +16), 300 group ids, bitmap names, then
 // the entries from byte 40680, 64 bytes each (72 from version 214): data offset, length, uncompressed length, -,
 // mirror (5 x int32), width and height (int16 at +20), type (+50), compressed (+51), external (+52). Pixels are

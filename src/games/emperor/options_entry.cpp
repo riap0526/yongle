@@ -12,8 +12,8 @@
 #include <cstring>
 #include <initializer_list>
 
-// Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e): docs/archive/resolution_ui_original_settings.md §12.2, §12.4 and
-// §14.7 (tools/recon/menu_tables.py, Ghidra, capstone, 2026-11-08); calling conventions: docs/symbols.md.
+// Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e): the menu tables below and
+// the menu tables (Ghidra, capstone); calling conventions next to each address.
 namespace emperor::options_entry {
 namespace {
 
@@ -55,7 +55,7 @@ constexpr int kFileGroup = 1, kTextLoad = 3, kTextSaveGame = 4, kTextDelete = 5,
               kTextExit = 6, kTextProverbs = 18;
 constexpr int kTextCityShot = 40, kTextMinimapShot = 41, kTextReplayMap = 42, kTextExitToMainMenu = 43;
 bool g_optionsOn = false, g_fileOn = false; // which of our menus are in
-bool g_shotsOn = false, g_k4On = false;     // the File menu's screenshots (item 6); its K4 order and names
+bool g_shotsOn = false, g_pauseMenuOn = false;     // the File menu's screenshots; its order and names as Augustus's
 // The pause banner: group 13, string 2 "Game paused ('P' key continues)" (FUN_005b6b50 0x5b6ee9 -> 0x535f50 ->
 // lang_text_draw_centered 0x528890 -> lang_set_current_text -> lang_get_string).
 constexpr int kPauseGroup = 13, kTextPaused = 2;
@@ -137,7 +137,7 @@ MenuItem g_itemsNoAutosave[] = {
     {60, kTextHotkeys, &MenuHotkeys, 0, 0},
 };
 // The File menu: the game's items (0x81e0b0: 6; 0x81e110: 7, with Proverbs) copied at Attach. Item 6 adds our two
-// screenshots after Save game. K4 (docs/archive/key_bindings.md section 8) orders it as Augustus's: Replay map, Load, Save,
+// screenshots after Save game. The order is Augustus's: Replay map, Load, Save,
 // (screenshots), Delete, (Proverbs), Exit to main menu (the game's New game), Exit game; Replay map, Exit to main
 // menu and Exit game are ours (games/emperor/game_menu: our confirmations, Esc answers No). Every item 20 pixels below
 // the one before. Returns the number of items.
@@ -153,7 +153,7 @@ int MakeFileMenu(const MenuItem *game, int count, MenuItem *out)
             out[n++] = MenuItem{0, kTextMinimapShot, &MenuMinimapShot, 0, 0};
         }
     };
-    if (!g_k4On) {
+    if (!g_pauseMenuOn) {
         for (int k = 0; k < count; ++k) {
             out[n++] = game[k];
             if (game[k].text == kTextSaveGame) {
@@ -245,7 +245,7 @@ int __cdecl Width_detour(int group)
     if (g_fileOn && group == kFileGroup) {
         if (g_fileWidth == 0) {
             g_fileWidth = Tiles({g_shotsOn ? ot::kMenuCityScreenshot : "", g_shotsOn ? ot::kMenuMinimapScreenshot : "",
-                                 g_k4On ? ot::kMenuReplayMap : "", g_k4On ? ot::kMenuExitToMainMenu : ""});
+                                 g_pauseMenuOn ? ot::kMenuReplayMap : "", g_pauseMenuOn ? ot::kMenuExitToMainMenu : ""});
         }
         return std::max(w, g_fileWidth);
     }
@@ -326,7 +326,7 @@ void OptionsIn()
     }
 }
 
-// The File menu's screenshot items (0.2.0 item 6, docs/archive/game_notices.md section 3.4): when the screenshots are there,
+// The File menu's screenshot items: when the screenshots are there,
 // in the single-player File menus (0x81e0b0, 0x81e110; the other bars' File menus, e.g. multiplayer, stay).
 bool IsSinglePlayerFile(const Menu &m)
 {
@@ -337,15 +337,15 @@ bool IsSinglePlayerFile(const Menu &m)
 bool FileWanted()
 {
     g_shotsOn = emperor::city_picture::Available();
-    g_k4On = emperor::game_menu::Available();
+    g_pauseMenuOn = emperor::game_menu::Available();
     if (!g_shotsOn) {
         core_log("file menu: the screenshots are not available");
     }
-    if (!g_k4On) {
+    if (!g_pauseMenuOn) {
         core_log("file menu: the pause menu's confirmations are not available; the game's New game, Replay mission "
                  "and Exit game stay");
     }
-    if (!g_shotsOn && !g_k4On) {
+    if (!g_shotsOn && !g_pauseMenuOn) {
         core_log("file menu: nothing to change; the game's File menu stays");
         return false;
     }
@@ -376,7 +376,7 @@ void FileIn()
         ++changed;
     }
     core_log("file menu: %s%s (%d menu bar(s))",
-             g_k4On ? "Replay map, Load, Save, Delete, Exit to main menu, Exit game (ours: Replay map, Exit to main "
+             g_pauseMenuOn ? "Replay map, Load, Save, Delete, Exit to main menu, Exit game (ours: Replay map, Exit to main "
                       "menu, Exit game)" : "the game's items",
              g_shotsOn ? "; Save city screenshot and Save minimap screenshot after Save game" : "", changed);
 }

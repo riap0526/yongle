@@ -14,7 +14,7 @@
 #include <cstring>
 #include <vector>
 
-// Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e): docs/archive/resolution_ui_r2c.md §1 (how the game draws
+// Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e): how the game draws
 // the map) and §5 (this design). All five hooked functions are __cdecl with a plain ret.
 namespace emperor::china_map {
 namespace {
@@ -38,18 +38,18 @@ const Site kCampaignDraw{"campaign_map_sidebar_draw", 0x42f900, {0x0f, 0xbe, 0x0
 const Site kCampaignClick{"campaign_map_click", 0x42f7d0, {0x51, 0xa0, 0x70, 0xe0, 0x0d, 0x01, 0x53, 0x55}};
 
 // The map's sidebar (china_map_frame_draw, under 0x5b81c0; __cdecl, ret): its panels end at 768 like the city's, so
-// the leather below them comes from games/emperor/resolution as on the city screen (first R2c test: a gap left of
+// the leather below them comes from games/emperor/resolution as on the city screen (seen in testing: a gap left of
 // the help button, and black below the sidebar after a resolution change on the map).
 const Site kFrameDraw{"china_map_frame_draw", 0x5b81d0, {0xa1, 0xd8, 0xd0, 0xc5, 0x00, 0x83, 0xec, 0x08}};
 // anim_advance_ui (__cdecl id, frame; ret; only china_map_draw calls it): images with animation speed 0 (the allies'
 // flags, group 0x25a: 5 frames, speed 0 in China_Interface.sg3) step on every main-loop pass, so how fast they look
-// depends on how often a frame is shown: about 20 per second in the original, about 100 with our output (first R2c
+// depends on how often a frame is shown: about 20 per second in the original, about 100 with our output (seen in
 // test: the flags flap much faster than in the original). Here speed 0 steps at most every kSpeed0Ms, as at 20 FPS.
 const Site kAnim{"anim_advance_ui", 0x5b9760, {0x53, 0x8b, 0x5c, 0x24, 0x0c, 0x56, 0x57, 0x33}};
 // The city map panels of screen 0x16 ("Consult Spy Map" and the like; __thiscall on the panel object, x, y, w, h;
 // ret 0x10), called by 0x5ca230 with the map window (0, 40, sidebar_x, height - 40). They lay the 231 x 457 grid of
 // view_to_grid centred in that rectangle, 4 x 2 px per cell; but a row before the grid's first (when the rectangle is
-// higher than 914 px) is skipped without moving down, so the city is drawn too high, above its panel (first R2c
+// higher than 914 px) is skipped without moving down, so the city is drawn too high, above its panel (seen in
 // test). The rectangle given to them is cut to 924 x 914 around the same centre; the panel's click test (0x5cc1a0)
 // uses the rectangle they store, so it follows.
 const Site kSpyPanel{"city_map_panel_spy", 0x5cbc30, {0x81, 0xec, 0x90, 0x00, 0x00, 0x00, 0x56, 0x8b}};
@@ -94,14 +94,14 @@ PanelFn o_SpyPanel, o_CityPanel;
 core::diag::Feature g_feature{"China map layout (games/emperor/china_map)"};
 const int kPhase = core::diag::perf::Register("China map layer (ours)", core::diag::perf::Thread::Game);
 
-// kOriginal (the game's own drawing, top left) is no longer a choice (2026-11-08: hardly anyone would pick it; a file
+// kOriginal (the game's own drawing, top left) is no longer a choice (hardly anyone would pick it; a file
 // that has it gets native); it stays for the offline tests and as the way through when the layout is off.
 enum Mode { kScaled, kNative, kOriginal };
 const char *const kModes[] = {"scaled", "native", "original"};
 const char *const kModeLabels[] = {"scaled (larger than its own size)", "native (its own size, centered)"};
 constexpr int kModeChoices = 2;
-int g_mode = kNative; // R2d.1: the picture's own size by default (playtest 2026-10-25)
-int g_scalePercent = 0; // O2c: display.china_map_scale for scaled, 0 = fit (as large as the map area allows)
+int g_mode = kNative; // the picture's own size by default
+int g_scalePercent = 0; // display.china_map_scale for scaled, 0 = fit (as large as the map area allows)
 int g_fitPercent = 0;   // the fit of the map last shown, in percent (0: none shown yet)
 
 // The panel's China map: scale slider ends at what fits now (the last map shown at the current size; 400 before any).
@@ -110,12 +110,12 @@ int FitPercent()
     return g_fitPercent > 0 ? g_fitPercent : 400;
 }
 
-// O2c: what is around the map: the same map blurred and darkened (R2c), or the city as it was when the map opened, as
+// What is around the map: the same map blurred and darkened, or the city as it was when the map opened, as
 // it is (the map like a window over it). That city is what the game leaves in its draw buffer: the map screen does
-// not redraw outside the map (docs/archive/resolution_ui_r2c.md §1; the original shows it, with what popups leave
+// not redraw outside the map (the original shows it, with what popups leave
 // behind). It is kept when the first map frame after a city frame is drawn and put back on every frame, so nothing
 // is left behind. The city is still: the game does not draw it while the map is shown. (Blurring it would take about
-// 0.1 s at 2560x1440, a visible stop when the map opens: not done, docs/archive/optimization.md O2c.)
+// 0.1 s at 2560x1440, a visible stop when the map opens: not done.)
 enum Background { kMapBackground, kCityBackground };
 const char *const kBackgrounds[] = {"map", "city"};
 const char *const kBackgroundLabels[] = {"map (the same map, blurred and darkened)", "city (your city as you left it)"};
@@ -128,7 +128,7 @@ std::vector<WORD> g_canvas; // border + map, (map + 2 border) pixels square
 int g_canvasW = 0, g_canvasH = 0, g_border = 0;
 std::vector<WORD> g_backdrop; // the map area's background
 int g_backdropKey[5] = {};
-std::vector<WORD> g_cityBackdrop; // O2c: the map area of the draw buffer when the map opened
+std::vector<WORD> g_cityBackdrop; // the map area of the draw buffer when the map opened
 int g_cityW = 0, g_cityH = 0;
 int g_cityFrames = -1;            // emperor::fullscreen::CityFramesDrawn() when it was kept
 
@@ -581,13 +581,13 @@ void RegisterSettings()
         "same background.",
         Type::Choice, "native", Effect::Live, true, true, 0, 0, 0, nullptr, kModes, kModeLabels, kModeChoices});
     core::settings::OnChange(i, &ApplyMode);
-    // 2026-11-08: [display] china_map* became [video] empire_map* (the campaign editor's name for the map), and
+    // [display] china_map* became [video] empire_map* (the campaign editor's name for the map), and
     // original is no longer a choice.
     core::settings::MoveKey("display", "china_map", "video", "empire_map");
     core::settings::MoveKey("display", "china_map_scale", "video", "empire_map_scale");
     core::settings::MoveKey("display", "china_map_background", "video", "empire_map_background");
     core::settings::RenameValue("video", "empire_map", "original", "native");
-    // O2c: whole-number scales (R2c) gave only 100% below 4K; a scale of one's own covers it (2026-11-01).
+    // Whole-number scales gave only 100% below 4K; a scale of one's own covers it.
     core::settings::Retire("display", "china_map_integer", nullptr);
     i = core::settings::Register(Item{
         "video", "empire_map_scale", "Empire map: scale",

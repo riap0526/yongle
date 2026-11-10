@@ -8,7 +8,7 @@
 //   scaling = sharp_bilinear ; nearest | sharp_bilinear
 //   present = display      ; original (the game's own ~20 FPS, on the game thread) | display (every refresh) | cap60
 //   resolution = scaled    ; WxH: the logical resolution the game draws (scaled to the screen) | scaled: the
-//                          ; screen's native resolution divided by the display scale (docs/resolution_ui/README.md)
+//                          ; screen's native resolution divided by the display scale
 //   scale = 100            ; display scale for resolution=scaled: auto | 100..250 (percent, steps of 5)
 //
 //   window = fullscreen    ; fullscreen (covering the monitor, no border) | windowed (moved and sized freely; F5)
@@ -19,7 +19,7 @@
 //   window_lock_cursor = off ; on: windowed, the cursor stays inside the window while it is the active one
 //
 //   [gameplay]
-//   smooth_scroll = on     ; on: pixel scrolling with the game's own average speed (M4) | off: the game's tile steps
+//   smooth_scroll = on     ; on: pixel scrolling with the game's own average speed | off: the game's tile steps
 //
 //   [ui]
 //   panel_key = Insert     ; opens and closes our settings panel; syntax in core/ui/hotkey.h (e.g. Ctrl+F12)
@@ -28,7 +28,7 @@
 //   [debug]
 //   screenshot_key = F11   ; saves the game's picture and the screen to shots\ (core/capture/screenshot.h)
 //   report_key = F12       ; problem report: marks the log, saves the pictures and the statistics (core/diag/report.h)
-//   frame_labels = off     ; on: framed pictures drawn in label colours for tools/verify/frame_check.py
+//   frame_labels = off     ; on: framed pictures drawn in label colours for a layout check
 //   loading_stage_ms = 0   ; 0..5000: each start-up loading stage stays on screen at least this long (for looking)
 //   perf_overlay = off     ; on: FPS and where the time goes, in the top left corner while playing
 //   present_mode_log = on  ; how Windows shows our Direct3D 11 frames, in the log (core/diag/present_mode.h)
@@ -46,7 +46,7 @@ extern "C" {
 #endif
 
 enum core_display_backend { CORE_BACKEND_EMULATED = 0, CORE_BACKEND_SYSTEM = 1 };
-enum core_scaling { CORE_SCALING_NEAREST = 0, CORE_SCALING_LINEAR = 1, CORE_SCALING_SHARP_BILINEAR = 2 }; /* O3 */
+enum core_scaling { CORE_SCALING_NEAREST = 0, CORE_SCALING_LINEAR = 1, CORE_SCALING_SHARP_BILINEAR = 2 };
 enum core_present_mode { CORE_PRESENT_ORIGINAL = 0, CORE_PRESENT_DISPLAY = 1, CORE_PRESENT_CAP60 = 2 };
 enum core_resolution_kind { CORE_RESOLUTION_FIXED = 0, CORE_RESOLUTION_SCALED = 1 };
 
@@ -64,19 +64,19 @@ struct core_config {
     int panel_scale_percent;   /* 0: auto; otherwise 100..300 */
     unsigned screenshot_key_vk;   /* screenshot hotkey: virtual-key code ... */
     unsigned screenshot_key_mods; /* ... and modifiers */
-    unsigned report_key_vk;       /* problem report hotkey (R2b.1): virtual-key code ... */
+    unsigned report_key_vk;       /* problem report hotkey: virtual-key code ... */
     unsigned report_key_mods;     /* ... and modifiers */
     int frame_labels;          /* nonzero: framed pictures in label colours (layout check) */
     int loading_stage_ms;      /* each loading stage shown at least this long (0: as fast as the game loads) */
-    int perf_overlay;          /* nonzero: the performance overlay while playing (R2b.1-3, core/ui/perf_view.h) */
-    int renderer;              /* index into core_renderer_names: SDL's renderer for the output (O1: auto) */
+    int perf_overlay;          /* nonzero: the performance overlay while playing (core/ui/perf_view.h) */
+    int renderer;              /* index into core_renderer_names: SDL's renderer for the output */
     int fail_direct3d9;        /* [debug] fail_direct3d9 (hidden): Direct3D 9 fails on purpose (tests auto's fall-back) */
-    int d3d9_pacing;           /* [debug] d3d9_pacing (hidden, O1g): index into core_d3d9_pacing_names */
-    int windowed;              /* R2e: nonzero: a window that can be moved and sized; 0: covering the monitor */
+    int d3d9_pacing;           /* [debug] d3d9_pacing (hidden): index into core_d3d9_pacing_names */
+    int windowed;              /* nonzero: a window that can be moved and sized; 0: covering the monitor */
     int window_w, window_h;    /* the window's client size in pixels; 0: automatic */
     int window_x, window_y;    /* its top left corner (outer); CORE_WINDOW_CENTER: centred on its monitor */
     int window_lock_cursor;    /* nonzero: windowed, the cursor is kept inside the window while it is active */
-    int cpu_affinity;          /* [compat] cpu_affinity (B plan, docs/archive/affinity.md): 0 auto, 1 original */
+    int cpu_affinity;          /* [compat] cpu_affinity: 0 auto, 1 original */
     int present_mode_log;      /* [debug] present_mode_log (hidden): nonzero: core/diag/present_mode.h logs (default on) */
     int window_background_test; /* [debug] window_background_test: nonzero: magenta class brush (live; core_config_live) */
     /* The alternative keys (a key setting may have two, core/ui/hotkey.h; 0: none). */
@@ -91,7 +91,7 @@ struct core_config {
    (SDL's Direct3D 9 renderer), 2 direct3d11. */
 extern const char *const core_renderer_names[3];
 
-/* [debug] d3d9_pacing (O1g, docs/archive/optimization.md): how the Direct3D 9 output is paced. 0 vsync (present waits for the
+/* [debug] d3d9_pacing: how the Direct3D 9 output is paced. 0 vsync (present waits for the
    refresh; the default), 1 timer (vsync off, our own high-resolution timer), 2 dwmflush (vsync off, DwmFlush after
    each present). Direct3D 11 always uses vsync. */
 extern const char *const core_d3d9_pacing_names[3];
@@ -104,14 +104,14 @@ void core_config_load(void *module);
 const struct core_config *core_config_get(void);
 
 /* From DllMain, after core_config_load: the real DirectDraw behind the logging wrapper whatever the file says (an exe
-   the game layer does not know; R2d). Not saved to the file. */
+   the game layer does not know). Not saved to the file. */
 void core_config_force_system_backend(void);
 
 #ifdef __cplusplus
 }
 
 /* Live settings that the output thread reads while the game thread applies a change (panel_scale_percent,
-   perf_overlay; docs/archive/affinity.md §6): read and written whole, so the two threads never see a value in between. */
+   perf_overlay): read and written whole, so the two threads never see a value in between. */
 inline int core_config_live(const int &field)
 {
     return __atomic_load_n(&field, __ATOMIC_RELAXED);

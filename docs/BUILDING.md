@@ -23,7 +23,7 @@ In PowerShell, in the repository folder:
 # 1. Build SDL3 once (static, 32-bit) into build\sdl3-i686-install
 powershell -File tools\build_sdl3.ps1 -Source <SDL3-3.4.18 folder> -Toolchain <llvm-mingw folder> -CMake <cmake.exe>
 
-# 2. Build the DLL and the offline tests into build\engine
+# 2. Build the DLL and the offline tests into build\emperor
 powershell -File proxy\ddraw\build.ps1 -Toolchain <llvm-mingw folder> -CMake <cmake.exe>
 
 # 3. Run the offline tests (they do not need the game)
@@ -34,7 +34,7 @@ Step 1 is only needed once (or after deleting `build\`).
 
 ## Output
 
-In `build\engine\`:
+In `build\emperor\`:
 
 - `ddraw.dll` — the DLL to copy into the game folder;
 - `ddraw.syms` — its symbol table: with it next to the DLL, the exception log shows function names and source lines;

@@ -1,4 +1,4 @@
-// Esc and the pause menu (0.2.0 item 7, K4; docs/archive/key_bindings.md section 8): Esc closes any window as a right click
+// Esc and the pause menu: Esc closes any window as a right click
 // does; on the city screen with no window it opens our pause menu (games/emperor/options_window); the game's
 // confirmation boxes take Esc as their last button (No / Cancel). The File menu's Replay map, Exit to main menu and
 // Exit game, and the pause menu's items, go through here.

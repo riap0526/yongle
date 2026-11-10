@@ -2,7 +2,7 @@
 // first bytes it has in the known build. Every hook is installed only after Matches() confirmed those bytes.
 //
 // Game variables are reached through Var<T> and game functions through Function(site) or Original(...), both
-// relative to the image: in the game the shift is 0; the offline tests (proxy/ddraw/test_restore.cpp) put a copy
+// relative to the image: in the game the shift is 0; the offline tests (src/games/emperor/test_restore.cpp) put a copy
 // of the game's address range in memory of their own and set the shift, so the hooks run on that copy.
 #pragma once
 

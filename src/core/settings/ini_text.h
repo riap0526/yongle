@@ -1,6 +1,6 @@
 // emperor_engine.ini as text: reading "key = value" lines and changing values in place.
 //
-// The file format (since M3): UTF-8, optional BOM; "[section]" lines; "key = value" lines; ';' or '#' starts a
+// The file format: UTF-8, optional BOM; "[section]" lines; "key = value" lines; ';' or '#' starts a
 // comment anywhere on a line; section and key names are case-insensitive; a later line for the same key wins.
 // Changing values keeps everything else exactly as the user wrote it: comments (also one after a value), blank
 // lines, unknown sections and keys, the spelling of the key, the spacing around '=', the line ends (CRLF or LF) and

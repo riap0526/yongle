@@ -1,11 +1,12 @@
-// Offline test of the settings model (core/settings + core/config; no DLL, no game): loading emperor_engine.ini,
+// Offline test of the settings model (core/settings + core/config; no DLL, no game): loading the settings file,
 // checking values, applying requested changes through callbacks, Restart items, and saving changes back without
 // touching anything else in the file (written to a temporary file first; a failed save leaves the file alone).
-// The file used is emperor_engine.ini next to this exe (run_tests.ps1 puts the default back afterwards).
+// The file used is the core's neutral engine.ini next to this exe (no game is set; core/game.h).
 // A callback that faults (core/diag guard): the value goes back, the earlier callbacks get the old value again,
 // nothing is saved, and later changes of that item are refused while the others still apply.
 #include "core/config.h"
 #include "core/diag/guard.h"
+#include "core/game.h"
 #include "core/log.h"
 #include "core/settings/settings.h"
 
@@ -85,7 +86,7 @@ int main()
 {
     DWORD n = GetModuleFileNameW(nullptr, g_path, MAX_PATH);
     while (n > 0 && g_path[n - 1] != L'\\') --n;
-    wcscpy(g_path + n, L"emperor_engine.ini");
+    wcscpy(g_path + n, core_game()->ini_file); // no game set: the core's neutral engine.ini
 
     const std::string original = "; my settings\r\n"
                                  "[video]\r\n"
@@ -107,7 +108,7 @@ int main()
           "loaded: typed values (present, scale, resolution)");
     Check(cfg->panel_key_vk == 0x2D && cfg->panel_scale_percent == 0 && cfg->high_resolution_timer,
           "defaults for keys not in the file (panel_key Insert, panel_scale auto)");
-    Check(cfg->renderer == 0 && Value("video", "renderer") == "auto", "renderer: auto by default (O1)");
+    Check(cfg->renderer == 0 && Value("video", "renderer") == "auto", "renderer: auto by default");
 
     int smooth = cs::Find("gameplay", "smooth_scroll");
     cs::OnChange(smooth, &OnSmooth);
@@ -154,7 +155,7 @@ int main()
     Check(cs::RestartPending(timer), "Live item whose callback refuses: waits for a restart");
 
     // A re-layout waiting for "keep" (save = false) is not written when another item is saved in the same batch, and
-    // a revert leaves the file as it was; "keep" (RequestSave) writes it. (Found in P2's in-game test: restore
+    // a revert leaves the file as it was; "keep" (RequestSave) writes it. (Found in testing: restore
     // defaults saved the unconfirmed resolution together with present.)
     {
         std::string before = ReadAll();
@@ -219,8 +220,8 @@ int main()
     Check(Value("ui", "panel_scale") == "200" && Value("gameplay", "smooth_scroll") == "on" && cfg->smooth_scroll,
           "afterwards that item is refused, other items still apply");
 
-    // A renamed value (O2a: framed -> scaled): taken as its new name and written anew in its place, the comment after
-    // it kept; the file as it was in emperor_engine.ini.bak.
+    // A renamed value (framed -> scaled): taken as its new name and written anew in its place, the comment after
+    // it kept; the file as it was in engine.ini.bak.
     {
         static const char *const looks[] = {"scaled", "scaled_black"};
         cs::Register(cs::Item{"test", "look", "Look", "", cs::Type::Choice, "scaled", cs::Effect::Live, false, false, 0, 0,
@@ -269,7 +270,7 @@ int main()
         cs::RunPending();
     }
 
-    // Moved settings (2026-11-08: [display] -> [video], [sound] -> [audio], china_map -> empire_map): the old lines'
+    // Moved settings ([display] -> [video], [sound] -> [audio], china_map -> empire_map): the old lines'
     // values taken for the new settings (with the new setting's renamed values), the old lines replaced in the file; a
     // new line already in the file wins over an old one; old unknown keys stay where they were.
     {

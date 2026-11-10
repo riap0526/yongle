@@ -1,5 +1,6 @@
 #include "core/diag/environment.h"
 
+#include "core/game.h"
 #include "core/log.h"
 #include "core/platform/affinity.h"
 #include "core/platform/files.h"
@@ -351,7 +352,7 @@ struct Measured {
 constexpr int kThreads = 4;
 Measured g_thread[kThreads]; // [Workers]: its handle is g_workers[0]; the samples are all workers'
 const char *const kName[] = {"game thread", "output thread", "screenshot writer", "parallel workers"};
-// R5e (docs/testing/r5e_laptop.md): the parallel workers measured together (on hybrid processors: whether they run
+// The parallel workers measured together (on hybrid processors: whether they run
 // on performance or efficiency cores).
 std::atomic<HANDLE> g_workers[kMaxWorkers];
 std::atomic<int> g_workerCount{0};
@@ -360,8 +361,8 @@ std::atomic<int> g_workerCount{0};
 bool CpuOf(int t, ULONGLONG *cpu);
 
 // ---------------------------------------------------------------------------------------------
-// Processor affinity (O1, 2026-10-30): GOG's compatibility settings include SingleProcAffinity, which keeps the
-// whole process on one logical processor (docs/archive/optimization.md section 1.7). A thread's mask is always within the
+// Processor affinity: GOG's compatibility settings include SingleProcAffinity, which keeps the
+// whole process on one logical processor. A thread's mask is always within the
 // process's.
 
 int Bits(DWORD_PTR mask)
@@ -485,7 +486,7 @@ void LogResources()
              (ms.ullTotalVirtual - ms.ullAvailVirtual) / mb, ms.ullTotalVirtual / mb, handles, gdi, user);
 }
 
-// Where our files are (core/platform/files decides it; docs/testing/v0_2_0_files.md). Windows' file virtualization is
+// Where our files are (core/platform/files decides it). Windows' file virtualization is
 // reported too: on, a protected game folder would have sent our files to VirtualStore (now it is not used for them).
 void LogFileLocation()
 {
@@ -496,8 +497,8 @@ void LogFileLocation()
         CloseHandle(token);
     }
     static const char *const kWhere[] = {"the game folder", "Documents\\My Games", "LocalAppData"};
-    core_log("env: files: the log, emperor_engine.ini and shots\\ are in %s (%s; file virtualization %s)",
-             core_files_folder_utf8(), kWhere[core_files_where_now()], virt ? "on" : "off");
+    core_log("env: files: the log, %s and shots\\ are in %s (%s; file virtualization %s)",
+             core_game()->ini_file_utf8, core_files_folder_utf8(), kWhere[core_files_where_now()], virt ? "on" : "off");
 }
 
 } // namespace

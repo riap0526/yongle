@@ -61,7 +61,7 @@ bool ShotsFolder(char *out, size_t size)
 
 void Drop(Job *job);
 
-// Encodes the picture as PNG in memory, then writes the file; logs the time of each step (O1b).
+// Encodes the picture as PNG in memory, then writes the file; logs the time of each step.
 // The calling thread's processor time so far (kernel + user), in ms.
 ULONGLONG ThreadCpuMs()
 {
@@ -74,12 +74,12 @@ ULONGLONG ThreadCpuMs()
     return t / 10000;
 }
 
-// miniz level 1 (O1b, 2026-10-30): the whole process runs on one logical processor (GOG's SingleProcAffinity,
-// docs/archive/optimization.md section 1.7), so the writer takes its time from the game; SDL_SavePNG_IO's level 6 took
+// miniz level 1: the whole process runs on one logical processor (GOG's SingleProcAffinity,
+// our threads included), so the writer takes its time from the game; SDL_SavePNG_IO's level 6 took
 // 0.7-0.9 s of processor time per 2560x1440 picture.
 constexpr unsigned kPngLevel = 1;
 
-// A city picture (docs/archive/city_export.md section 4.4): encoded and written a row at a time, its blocks
+// A city picture: encoded and written a row at a time, its blocks
 // freed as they are written.
 void WriteBigJob(Job *job)
 {
@@ -153,7 +153,7 @@ void Write(Job *job)
         core_png_free(data);
     }
     if (ok) {
-        // processor time against the time it took (O1, 2026-10-30): a picture that took long with little
+        // processor time against the time it took: a picture that took long with little
         // processor time waited for a processor; one with as much ran slowly
         core_log("screenshot: saved %s (%dx%d, %ld KB at PNG level %u; %swaited %lu ms, encoded %lu ms, written %lu ms; "
                  "this picture took %lu ms, %lu ms of it on a processor)",
@@ -167,10 +167,10 @@ void Write(Job *job)
 }
 
 // One writer thread for all pictures, one at a time, at normal priority: encoding a large PNG takes seconds, and three
-// at once on their own threads slowed the game on a laptop three times over (O1b, docs/archive/optimization.md section 1.2).
+// at once on their own threads slowed the game on a laptop three times over.
 // A lower priority made each picture slow while the game ran: Windows' background mode 26-200 s for 2560x1440 (second
-// test, 2026-10-28), THREAD_PRIORITY_LOWEST 13-18 s (third test, 2026-10-30), against 0.8 s at normal priority: the
-// whole process runs on one logical processor (section 1.7), so a lower priority only runs while the game waits.
+// THREAD_PRIORITY_LOWEST 13-18 s, against 0.8 s at normal priority: the
+// whole process runs on one logical processor, so a lower priority only runs while the game waits.
 // Started on the first picture; it lives as long as the game.
 SRWLOCK g_queueLock = SRWLOCK_INIT;
 Job *g_queueHead = nullptr, *g_queueTail = nullptr;
@@ -204,7 +204,7 @@ DWORD WINAPI Writer(void *)
 }
 
 // At most this many pictures queued or being written (each holds a copy of the frame, about 15 MB at 2560x1440): a
-// picture asked for beyond it is not saved (logged). 2026-10-29, after F12 pressed many times took the memory
+// picture asked for beyond it is not saved (logged). Without a limit, F12 pressed many times took the memory
 // from 367 to 511 MB.
 constexpr long kMaxQueued = 6;
 
@@ -348,7 +348,7 @@ bool Start(const void *pixels, int pitch, int w, int h, const char *stem, const 
 {
     char what[200];
     std::snprintf(what, sizeof(what), "%s_%s_%dx%d_%s", stem, kind, w, h, time);
-    if (!HasRoom(what)) { // before the frame is copied (O1, 2026-10-30)
+    if (!HasRoom(what)) { // before the frame is copied
         return false;
     }
     char folder[1024];

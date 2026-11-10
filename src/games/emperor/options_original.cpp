@@ -9,8 +9,8 @@
 #include <cstdint>
 #include <string>
 
-// Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e): docs/archive/resolution_ui_original_settings.md §12.1 and §14
-// (S2c); calling conventions: docs/symbols.md.
+// Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e): the game's options and their functions below
+// calling conventions next to each address.
 namespace emperor::options_original {
 namespace {
 

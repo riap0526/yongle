@@ -1,4 +1,4 @@
-// The unused nature sounds (0.2.0 item 10): docs/archive/ambient_layer1.md.
+// The unused nature sounds.
 //
 // Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e; mss32.dll Miles 6.0i):
 //   - sound_manager 0x1156bc8 + 0x178: the digital driver (HDIGDRIVER). sound_init passes its address to
@@ -48,9 +48,9 @@ struct Miles {
     Status_fn status = nullptr;
 } g_miles;
 
-// Left out (after listening, 2026-11-09): the buzzing insects (heard as bees or mosquitoes) and the two gongs
+// Left out (after listening): the buzzing insects (heard as bees or mosquitoes) and the two gongs
 // (synthetic, not a real instrument); and the five that are byte for byte a layer 2 sound the game already plays
-// (tools/recon/ambient_compare.py: Bamboo_Chimes2a, Bird_B, ceramic_chimes2a, crickets, crickets2); and three that
+// (compared by ear and by their data: Bamboo_Chimes2a, Bird_B, ceramic_chimes2a, crickets, crickets2); and three that
 // are another cut of a layer 2 sound (bird_F1 and bird_G1 of garden.wav, cricket of crickets.wav: heard so in the
 // second audition).
 const char *const kLeftOut[] = {"bugs.wav",         "insects1.wav",         "large_gong.wav", "medium_gong.wav",

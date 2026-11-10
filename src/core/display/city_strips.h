@@ -1,4 +1,4 @@
-// City picture (docs/archive/city_export.md sections 4.2, 9.2): the whole city the player can scroll to, drawn by
+// City picture: the whole city the player can scroll to, drawn by
 // the game in horizontal strips and put together. Each strip is one view as wide as the map's range (the game's
 // drawing adds one column, so the whole range is covered at once), drawn into our buffer with the view's origin T
 // pixels below the buffer's top (what stands above the map's top row still shows); only its top S half rows are kept,

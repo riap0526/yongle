@@ -1,4 +1,4 @@
-// Offline test of core/diag/perf (not the game; R2b.1-3): phases add their time to the current sample of their
+// Offline test of core/diag/perf (not the game): phases add their time to the current sample of their
 // thread; a sample ends per thread; averages over the last second, the total's "other", the history (oldest first)
 // and the window for the rate log; registering the same name twice gives the same phase.
 #include "core/diag/perf.h"
@@ -87,7 +87,7 @@ int main()
           "rate log window: averages since the last call");
     perf::TakeWindow(text, sizeof(text));
     Check(text[0] == 0, "nothing timed since: empty");
-    // O1a: the longest sample of each phase and the slow passes in the same window.
+    // The longest sample of each phase and the slow passes in the same window.
     const double passes[] = {12.0, 60.0, 130.0, 8.0};
     for (double ms : passes) {
         perf::Add(pass, Ms(ms));

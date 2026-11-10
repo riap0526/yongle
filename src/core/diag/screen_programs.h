@@ -1,5 +1,5 @@
 // Programs known to draw on the screen over or beside a game (overlays, recorders, streamers, desktop tools), for the
-// present mode log (core/diag/present_mode.h, black block diagnosis, 2026-11-07). Only a fixed list is compared and
+// present mode log (core/diag/present_mode.h, for the black block diagnosis). Only a fixed list is compared and
 // only the names that match are reported; no other process is named or logged. The list is kList in
 // screen_programs.cpp: add entries there.
 #pragma once

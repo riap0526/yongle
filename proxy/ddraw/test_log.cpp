@@ -1,4 +1,4 @@
-// Offline test of core/log's size limit (O5a, 2026-10-30): a log over 4 MB at start-up becomes <name>.old.log and a new
+// Offline test of core/log's size limit: a log over 4 MB at start-up becomes <name>.old.log and a new
 // one starts with a line saying so; a smaller one is appended to. Files next to the exe, deleted after.
 #include "core/log.h"
 

@@ -1,7 +1,7 @@
-// Esc and the pause menu (0.2.0 item 7, K4): docs/archive/key_bindings.md section 8.
+// Esc and the pause menu.
 //
-// Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e): docs/archive/key_bindings.md section 8.2; calling conventions:
-// docs/symbols.md.
+// Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e): the addresses below; calling conventions:
+// next to each address.
 #include "games/emperor/game_menu.h"
 
 #include "core/diag/guard.h"
@@ -80,7 +80,7 @@ const char *Lang(int group, int index)
 }
 
 // Screens that close (or step back) with a right click: the dialogs and pop-ups over the city and the map
-// (docs/resolution_ui/r2_screens.md section 4): Esc does the same.
+// (the screens this layer knows): Esc does the same.
 bool RightClickScreen(int s)
 {
     switch (s) {

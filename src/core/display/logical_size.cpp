@@ -31,7 +31,7 @@ LogicalSize ChooseLogicalSize(int native_w, int native_h, core_resolution_kind k
         return r;
     }
     int p = scale_percent;
-    if (p == 0) { // auto (R4): 1080 rows on a taller screen, at any ratio (2560x1440 -> 1920x1080, 133 %)
+    if (p == 0) { // auto: 1080 rows on a taller screen, at any ratio (2560x1440 -> 1920x1080, 133 %)
         const int w = static_cast<int>(static_cast<long long>(native_w) * kAutoHeight / native_h) & ~1;
         if (native_h > kAutoHeight && w >= min_w && kAutoHeight >= min_h) {
             r.w = w;

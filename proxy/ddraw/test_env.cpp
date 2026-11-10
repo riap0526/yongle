@@ -1,4 +1,4 @@
-// Offline test of core/diag/environment (not the game; O1a, docs/archive/optimization.md): the start-up lines (modules from
+// Offline test of core/diag/environment (not the game): the start-up lines (modules from
 // outside Windows' folder, processors, power, priority), a module loaded later, the processor time of a busy and an
 // idle thread, and the resources line. Writes test_env.log next to the exe and checks its lines.
 #include "core/diag/environment.h"
@@ -47,7 +47,7 @@ void Busy(DWORD ms)
     }
 }
 
-// R5e: a parallel worker busy for 1.5 s.
+// A parallel worker busy for 1.5 s.
 DWORD WINAPI BusyWorker(void *)
 {
     env::RegisterThread(env::Thread::Workers);
@@ -106,7 +106,7 @@ int main()
     Check(output >= 0 && output <= 5, "idle output thread: almost none");
     Check(std::strstr(line, "logical processors") && std::strstr(line, "% busy"), "process and system shares");
 
-    // R5e: two busy parallel workers, measured together (their processor time summed).
+    // Two busy parallel workers, measured together (their processor time summed).
     HANDLE workers[2];
     for (HANDLE &w : workers) {
         w = CreateThread(nullptr, 0, &BusyWorker, nullptr, 0, nullptr);
@@ -132,8 +132,9 @@ int main()
           "start-up: processors, power plan, priority class");
     Check(std::strstr(log, "env: game thread: priority 0") && std::strstr(log, "env: output thread: priority 0"),
           "each thread's priority and power throttling, once");
-    Check(std::strstr(log, "env: files: the log, emperor_engine.ini and shots") != nullptr,
-          "start-up: where our files are (O5c; this folder is not redirected)");
+    // No game is set: the core's neutral settings file name (core/game.h).
+    Check(std::strstr(log, "env: files: the log, engine.ini and shots") != nullptr,
+          "start-up: where our files are (this folder is not redirected)");
     Check(std::strstr(log, "resources: working set") && std::strstr(log, "GDI objects"), "resources line");
     Check(!std::strstr(log, "dbghelp"), "a module from Windows' folder loaded later is not listed");
 
@@ -145,7 +146,7 @@ int main()
               std::strstr(log, "env: game thread: priority -1"),
           "a change of the priority class or a thread's priority is logged");
 
-    // The process's affinity (O1, 2026-10-30): at start, in the cpu line, and a line when it changes (as Task Manager
+    // The process's affinity: at start, in the cpu line, and a line when it changes (as Task Manager
     // does), seen by the game thread within a second.
     Check(std::strstr(log, "env: affinity at start: process 0x") && std::strstr(log, "env: game thread affinity 0x") &&
               std::strstr(log, "env: output thread affinity 0x"),

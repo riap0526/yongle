@@ -1,4 +1,4 @@
-// Where the time goes (R2b.1-3, docs/archive/resolution_ui_r2b1.md): named phases timed with the performance counter, on the
+// Where the time goes: named phases timed with the performance counter, on the
 // game thread (one sample per main-loop pass) and on the output thread (one sample per frame drawn). The last 240
 // samples of each phase are kept for the graph (core/ui/perf_view), the last second for the averages, and the time
 // since the last TakeWindow for the rate log. Nothing here knows a game: the game layer registers its own phases
@@ -63,7 +63,7 @@ int History(int id, float *out, int max);
 int Find(const char *name); // -1 when not registered
 
 // For the rate log: "pass 11.8 ms = simulation 0.9 + city draw 7.1 + ... + other 1.2; output frame: upload 1.5,
-// draw 0.4, present 4.0" averaged since the last call (empty when nothing was timed). maxOut (O1a, optional): the
+// draw 0.4, present 4.0" averaged since the last call (empty when nothing was timed). maxOut (optional): the
 // longest sample of each phase in the same window, and how many passes or frames took more than 50 and 100 ms --
 // the averages hide single long frames.
 void TakeWindow(char *out, std::size_t size, char *maxOut = nullptr, std::size_t maxSize = 0);

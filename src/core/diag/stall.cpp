@@ -104,7 +104,7 @@ DWORD WINAPI Watchdog(void *)
             Watched &w = g_thread[i];
             const DWORD since = w.since.load();
             // The time after since is read: a Begin between the two would otherwise look like a 49-day stall (the
-            // second test logged "4294967280 ms" for a 31 ms frame).
+            // log once showed "4294967280 ms" for a 31 ms frame).
             const DWORD now = GetTickCount();
             if (since == 0 || static_cast<LONG>(now - since) < static_cast<LONG>(kStallMs) ||
                 w.sampled.load() == since) {

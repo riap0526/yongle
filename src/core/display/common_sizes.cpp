@@ -8,7 +8,7 @@ struct Known {
     int w, h;
 };
 
-// From small to large within each aspect (docs/archive/resolution_ui_r2b1.md, R2b.1-9).
+// From small to large within each aspect.
 constexpr Known kSizes[] = {
     // 16:9
     {1366, 768}, {1600, 900}, {1920, 1080}, {2560, 1440}, {3200, 1800}, {3840, 2160},

@@ -11,12 +11,12 @@
 #include <cstdlib>
 #include <cstring>
 
-// Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e): docs/archive/resolution_ui_r3.md §1.
+// Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e): the addresses below.
 namespace emperor::display_options {
 namespace {
 
 // ---------------------------------------------------------------------------------------------
-// Addresses (calling conventions: docs/symbols.md)
+// Addresses (calling conventions below)
 
 const Site kDraw{"display_options_draw", 0x5ba9c0, {0x56, 0x68, 0x14, 0x1e, 0x00, 0x00, 0xb9, 0x30}};
 const Site kPanelDraw{"panel_draw", 0x5363f0, {0x51, 0xa1, 0x1c, 0xf5, 0x15, 0x01, 0x85, 0xc0}};
@@ -62,7 +62,7 @@ constexpr int kGroupText = 42;                    // EmperorText.eng: 0 title, 1
 constexpr int kTextFullScreen = 1, kTextWindowed = 2, kText1024 = 4, kTextCancel = 5; // 3 800x600, 5 Cancel
 constexpr int kFontTitle = 0x1e1c, kFontButton = 0x1e14;
 constexpr int kColorHover = 0xfac1, kColorNormal = 0x02bf; // display_options_draw's two text colours
-// The volume arrows of Sound options (its image buttons, table 0x81df40, drawn by buttons_draw 0x449b40): 24 x 24,
+// The volume arrows of Sound options (its image buttons, table 0x81df40, drawn by image_buttons_draw 0x449b40): 24 x 24,
 // the next image is the pressed one. 0x218 points down, 0x217 up (Sound options: down on the left, up on the right).
 constexpr int kGroupArrowDown = 0x218, kGroupArrowUp = 0x217, kArrowSize = 24;
 constexpr DWORD kArrowPressedMs = 120; // the pressed image after a click
@@ -75,7 +75,7 @@ constexpr int kPanelX = 0x60, kPanelY = 0x50, kPanelCols = 18, kPanelRows = 18;
 constexpr int kLeft = 0x80, kWidth = 0xe0, kTitleY = 0x5e;
 constexpr int kButtonH = 20, kTextDown = 4, kArrowTextDown = 6;
 constexpr int kRowWindow = 0x88, kRow1024 = 0xa0, kStatus1 = 0xbe, kRowScale = 0xd4, kRowAuto = 0xf6;
-constexpr int kRowScaling = 0x112, kRowEnd = 0x13e; // O3: the scaling line between Auto and OK
+constexpr int kRowScaling = 0x112, kRowEnd = 0x13e; // the scaling line between Auto and OK
 constexpr int kScaleTextWidth = kWidth - 2 * kArrowSize - 8; // the scale text, left of the arrows
 
 enum Id { kWindowButton = 1, k1024Button, kMinus, kPlus, k100, kAuto, kScalingButton, kOk, kCancelButton,
@@ -100,7 +100,7 @@ const Layout kLayout[kCount] = {
 int g_pressed = 0; // the arrow shown pressed for a moment after a click
 DWORD g_pressedAt = 0;
 
-// The game's button record (display_options_buttons 0x81ba50; docs/symbols.md): the rectangle (x1, y1, x2, y2,
+// The game's button record (display_options_buttons 0x81ba50): the rectangle (x1, y1, x2, y2,
 // exclusive) relative to dialog_offset; 0x44a710 calls onRelease when the mouse is let go on the button it went
 // down on, onClick on a click event (the original's is the empty 0x40fc20); kind 1 = left button; +0x11 is set
 // when pressed.
@@ -247,7 +247,7 @@ void Press(int id)
         core_log("display options: scale auto");
         SetDisplay("scaled", "auto");
         break;
-    case kScalingButton: { // O3: nearest -> linear -> sharp_bilinear -> nearest; saved at once (as the window line)
+    case kScalingButton: { // nearest -> linear -> sharp_bilinear -> nearest; saved at once (as the window line)
         char now[core::settings::kValueSize];
         Value("scaling", now);
         const char *next = std::strcmp(now, "nearest") == 0  ? "linear"

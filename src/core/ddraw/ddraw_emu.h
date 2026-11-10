@@ -2,7 +2,7 @@
 // plain memory, the display mode is emulated (core/display/virtual_display.h) and frames reach the screen through
 // SDL3 (core/output). Part of core: no game addresses here.
 //
-// Implemented: the methods the game was seen to use (docs/testing/ddraw_wrapper_v1.md, 14 of them) plus IUnknown and
+// Implemented: the methods the game was seen to use (14 of them) plus IUnknown and
 // IDirectDrawSurface::Restore, which the game calls on its surface-lost paths. Only 16-bit RGB565 surfaces.
 // Every other method is logged as UNIMPLEMENTED and returns DDERR_UNSUPPORTED. Surfaces are never lost.
 #pragma once

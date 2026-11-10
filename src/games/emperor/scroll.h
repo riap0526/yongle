@@ -1,4 +1,4 @@
-// M4: pixel (smooth) scrolling of the city view. Design and evidence: docs/m4_smooth_scroll.md.
+// Pixel (smooth) scrolling of the city view. Evidence in the comments of scroll.cpp.
 #pragma once
 
 #include <cstddef>
@@ -33,7 +33,7 @@ void TakeStats(char *out, size_t size);
 // pixel offset still in it) as report<n>_<screen>_city_..., or logs that it has not been used yet.
 void SaveCityBuffer(int report);
 
-// R2b.1 (docs/archive/resolution_ui_r2b1.md, R2b.1-5 / -6): where the city should be seen to, beyond the game's own clip,
+// Where the city should be seen to, beyond the game's own clip,
 // which stays on the tile grid (viewport_init; the city message panel 0x50bf10 is placed from it, and the game's
 // tile drawing needs it on the grid): right = the sidebar's left edge, bottom = the screen's bottom; 0 = the clip
 // (the game's own layouts). Set by the layout (games/emperor/resolution) after each viewport. While the city is
@@ -45,15 +45,15 @@ void SetCityExtent(int right, int bottom);
 // False once smooth scrolling was switched off after an error (core/diag guard).
 bool Working();
 
-// R5d: the screen position is on the city as shown (not the sidebar, not the top bar).
+// The screen position is on the city as shown (not the sidebar, not the top bar).
 bool OnCity(int x, int y);
 
-// R2d.1: called right after the game drew the city (before the interface), with the back buffer and the city's
+// Called right after the game drew the city (before the interface), with the back buffer and the city's
 // rectangle on it (right and bottom exclusive). Game thread; the callback runs its own guard.
 using CityDrawn = void (*)(const BYTE *back, int pitch, int left, int top, int right, int bottom);
 void SetCityDrawn(CityDrawn fn);
 
-// City picture (docs/archive/city_export.md): called at the end of every city_render (after the city was drawn
+// City picture: called at the end of every city_render (after the city was drawn
 // and shown as usual, before the interface), with the drawing's direction argument. Game thread; the callback runs
 // its own guard. One callback.
 using AfterCity = void (*)(int orientation);
@@ -64,7 +64,7 @@ void SetAfterCity(AfterCity fn);
 void PictureDrawing(core::diag::Restore &r, int right, int bottom);
 void DrawCityForPicture(int vx, int vy, int orientation);
 
-// For the offline tests (proxy/ddraw/test_restore.cpp): the detours by site, and the pixel remainder.
+// For the offline tests (src/games/emperor/test_restore.cpp): the detours by site, and the pixel remainder.
 const Detour *Detours(int *count);
 void SetRemainderForTest(int px, int py);
 void Remainder(int *px, int *py);

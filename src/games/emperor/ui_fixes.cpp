@@ -6,7 +6,7 @@
 
 #include <cstring>
 
-// Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e): docs/archive/resolution_ui_r2b1.md, R2b.1-7.
+// Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e): the addresses below.
 namespace emperor::ui_fixes {
 namespace {
 
@@ -20,7 +20,7 @@ const BYTE kChangeButtonBytes[8] = {0x9c, 0xff, 0x20, 0x00, 0xc8, 0x00, 0x3e, 0x
 
 // The button's text is not drawn from the table: messages_draw_background calls lang_text_draw_centered 0x528890
 // (__cdecl; group, id, x, y, width, font, 0; ret) at 0x5496ba with x = window x + 0x40 and width 0xf0. The English
-// text is 285 px wide, wider than 0xf0, and then the game draws it from x without centring (eighth R2b.1 test: it
+// text is 285 px wide, wider than 0xf0, and then the game draws it from x without centring (seen in testing: it
 // ran past the frame's right edge). We call it instead with the frame itself as the area: x = the frame's left,
 // base + 0 = window x + width * 8 - 0x8c, i.e. x + width * 8 - 204 (width in 16-pixel units at 0x1192a58), and
 // width 300, so the game centres the text in the frame whatever its length.

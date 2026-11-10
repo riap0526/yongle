@@ -1,4 +1,4 @@
-// The settings part of our panel (docs/resolution_ui/settings.md §5.2): draws every item of the settings model
+// The settings part of our panel: draws every item of the settings model
 // (core/settings/settings.h) that is shown in the panel, grouped by section, with how a change takes effect.
 //
 // - On/off and lists apply when changed; sliders when released (or with Apply); the custom resolution with Apply.
@@ -23,7 +23,7 @@ bool WantsGameFrames();
 // The panel was closed: an unanswered "keep these settings?" is answered with Revert (and a key change is cancelled).
 void PanelClosed();
 
-// Key settings (city picture, docs/archive/city_export.md section 5.3): "Change" waits for the next key with
+// Key settings (city picture): "Change" waits for the next key with
 // the modifiers held (Ctrl, Shift, Alt); Esc cancels; a key already used by another of our key settings is refused.
 // Any thread: true while the panel waits for a key (the window subclass then gives every key message to the panel),
 // and afterwards until the key that ended the wait is released (so our key polls do not take it for a new press).

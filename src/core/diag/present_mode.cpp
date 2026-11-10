@@ -90,7 +90,7 @@ void WhereAndScreen(HWND hwnd, char *out, std::size_t size)
 }
 
 // The screen programs (core/diag/screen_programs.h) are looked up on a thread of ours: one lookup took 12 ms with 540
-// processes on the development machine (2026-11-07), too long for the drawing thread. The drawing thread asks (at start,
+// processes on the development machine, too long for the drawing thread. The drawing thread asks (at start,
 // on a mode change, on a report; at most every kProgramsMs) and uses the last answer with its age; the thread logs the
 // list whenever it differs from the one before.
 SRWLOCK g_programsLock = SRWLOCK_INIT;

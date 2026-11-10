@@ -1,5 +1,5 @@
-// R1: custom logical resolution (docs/resolution_ui/display_scale.md §6, §8); R2b: the city screen's layout
-// (docs/archive/resolution_ui_r2b.md).
+// Custom logical resolution; the city screen's layout
+// (the city screen's layout).
 #pragma once
 
 #include "core/config.h"
@@ -20,7 +20,7 @@ bool SettingsChanged(const core_config *cfg);
 void OnLoop();
 
 // True while a front-end screen (a full-screen picture: menus, loading, victory and defeat) runs in its 1024x768
-// frame, i.e. from a full-screen picture until the next city screen (R2a frames these, games/emperor/fullscreen.h).
+// frame, i.e. from a full-screen picture until the next city screen (framed by games/emperor/fullscreen.h).
 bool FrontEnd();
 
 // The city's scale on the screen (0.2.0 item 8): screen (or window client) pixels per game pixel at the city's
@@ -28,11 +28,11 @@ bool FrontEnd();
 // screens are shown at their own size times it. Game thread.
 double CityScale();
 
-// The leather below (and right of) the sidebar, as after the city screen's sidebar (R2b), for another screen's
-// sidebar that the game draws only down to 768: the China map's (R2c). Game thread, after that sidebar was drawn.
+// The leather below (and right of) the sidebar, as after the city screen's sidebar, for another screen's
+// sidebar that the game draws only down to 768: the China map's. Game thread, after that sidebar was drawn.
 void DrawSidebarFiller();
 
-// Where the building information window opens ([ui] info_window, R2b): the game's own rule (moved with the centre
+// Where the building information window opens ([ui] info_window): the game's own rule (moved with the centre
 // of the city area), centred in the city area, or beside the cursor. Takes effect from the next window opened.
 enum class InfoMode { Original, Centered, Cursor };
 void SetInfoMode(InfoMode mode);
@@ -50,7 +50,7 @@ POINT InfoPosition(InfoMode mode, const InfoArea &area, int w, int h, int mouseX
 // (leather with the edge only; no band). See resolution.cpp.
 int SidebarBackdropRow(int y, int top);
 
-// For the offline tests (proxy/ddraw/test_restore.cpp): the detours by site; the state Attach would set (without
+// For the offline tests (src/games/emperor/test_restore.cpp): the detours by site; the state Attach would set (without
 // hooks or patches); Shift+F7; China_Interface.sg3 from another place than DATA next to the exe.
 const Detour *Detours(int *count);
 void InstalledForTest(const core_config *cfg);

@@ -7,7 +7,7 @@
 
 #include <cstring>
 
-// Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e): docs/symbols.md config_ini_load 0x475380 and
+// Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e): config_ini_load 0x475380 and
 // play_intro_movie 0x828398.
 namespace emperor::intro {
 namespace {
@@ -59,7 +59,7 @@ void RegisterSettings()
         "does not change the game's own Emperor.ini: if PlayIntroMovie=no is set there, the movie is skipped "
         "either way.",
         Type::Choice, "play", Effect::Restart, true, true, 0, 0, 0, nullptr, kChoices, kLabels, 2});
-    // 2026-11-08: from [display] (now [video]) to [ui], beside the other settings of the options window's General page.
+    // From [display] (now [video]) to [ui], beside the other settings of the options window's General page.
     core::settings::MoveKey("display", "intro_movie", "ui", "intro_movie");
     core::settings::OnChange(i, [](int, const char *v, bool initial) {
         if (initial) {

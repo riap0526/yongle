@@ -1,6 +1,6 @@
 // Offline test of core/assets/sg3 (not the game) on the player's own image pack: decodes images first..first+count-1
 // and prints their sizes and an FNV-1a hash of all their RGB565 pixels (transparent = 0xF81F), to compare with
-// tools/verify/sg3_hash.py (the Python reader the C++ one was ported from). Nothing is written.
+// the Python reader the C++ one was ported from. Nothing is written.
 // Usage: test_sg3.exe <pack.sg3> <first> <count> [expected hash]
 #include "core/assets/sg3.h"
 #include "core/log.h"

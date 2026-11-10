@@ -1,11 +1,11 @@
-// Our own settings panel (docs/resolution_ui/settings.md §5.2), drawn with Dear ImGui over the game's picture.
+// Our own settings panel, drawn with Dear ImGui over the game's picture.
 //
 // Threads: the panel's ImGui state lives on the output thread (core/output, present = display or cap60), which draws
 // it after the game's frame at the window's real resolution, so it is sharp whatever the game's resolution. The
 // game's window messages arrive on the game thread: while the panel is open the window subclass
 // (core/display/virtual_display) hands the input messages to QueueMessage instead of the game; they are translated
 // into ImGui events on the output thread. Modifier keys are read with GetKeyState on the game thread, where that
-// state is valid (the reason the official Win32 backend is not used: third_party.md).
+// state is valid (the reason the official Win32 backend is not used: THIRD_PARTY_NOTICES.md).
 //
 // The game layer decides what "paused" means (Emperor: the main loop's step is skipped while the panel is open) and
 // adds the panel's contents as sections. Nothing here knows a game address.

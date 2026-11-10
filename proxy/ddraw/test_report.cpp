@@ -1,4 +1,4 @@
-// Offline test of core/diag/report (not the game; R2b.1): the frame check counts game frames that hand two or more
+// Offline test of core/diag/report (not the game): the frame check counts game frames that hand two or more
 // frames to the output (with how they were handed over in the log) and only those, not presents outside a game frame,
 // and nested begin/end count once; torn output frames are counted and logged, the log lines stop after 10 of each
 // kind while the counts go on; the window events of interest are logged and the others are not; report numbers go

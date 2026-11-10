@@ -1,13 +1,13 @@
-// Offline test of the failure fallbacks of M4, R1 and P2 (not the game): the real detours of games/emperor run on a
+// Offline test of the failure fallbacks of the game layer (not the game): the real detours of games/emperor run on a
 // copy of the game's address range (emperor::g_imageShift, games/emperor/site.h) where the game's functions are
 // small fakes. A fake faults on purpose; the test then checks that the game state the detour had changed is back
 // to the game's own values, that the feature is switched off, and what the detour does afterwards (the fallback in
-// docs/archive/resolution_ui_r2b.md §1).
+// the failure table of resolution.cpp).
 //
-// R2b: the info windows the game always opens at (0, 0x2a) (Mill, Warehouse, Trading Quay, Trading Station) are shown
+// The info windows the game always opens at (0, 0x2a) (Mill, Warehouse, Trading Quay, Trading Station) are shown
 // elsewhere without moving them in the game (drawn into a copy of the screen, the mouse moved back); the sidebar
 // backdrop's edges below and right of the sidebar, row by row, from the player's own China_Interface pack when
-// TEST_RESTORE_PACK names it (run_tests.ps1 passes testbed\DATA\China_Interface.sg3; skipped otherwise).
+// TEST_RESTORE_PACK names it (run_tests.ps1 passes the game's DATA\China_Interface.sg3; skipped otherwise).
 //
 // Each scenario runs in a child process of its own (a feature switched off stays off for the rest of a process):
 //   test_restore.exe            runs every scenario and prints one line each
@@ -62,7 +62,7 @@ using KeyFilter = bool (*)(UINT, WPARAM, LPARAM);
 void SetKeyFilter(KeyFilter) {}
 using KeyTranslator = bool (*)(UINT, WPARAM, LPARAM);
 void SetKeyTranslator(KeyTranslator) {}
-// What the key bindings sent to the game (scenario k2_keys), with key_ctrl_down at that moment.
+// What the key bindings sent to the game (scenario key_bindings), with key_ctrl_down at that moment.
 struct Sent {
     UINT m;
     WPARAM w;
@@ -244,7 +244,7 @@ void Fault()
 }
 
 // ---------------------------------------------------------------------------------------------
-// The game's variables used below (docs/symbols.md)
+// The game's variables used below
 
 constexpr DWORD aViewX = 0x101d0ac, aViewY = 0x101d0b0, aOriginX = 0xadf8f0, aOriginY = 0xadf8ec,
                 aCols = 0xadf8c4, aRows = 0xadf8c0, aTileW = 0xadf8b8, aTileHalfH = 0xadf8ac,
@@ -259,7 +259,7 @@ constexpr DWORD aViewX = 0x101d0ac, aViewY = 0x101d0b0, aOriginX = 0xadf8f0, aOr
                 aTradePopup = 0x1e50a3c;
 
 // ---------------------------------------------------------------------------------------------
-// R2c (games/emperor/china_map): fakes of the China map's functions
+// The China map (games/emperor/china_map): fakes of the China map's functions
 
 constexpr DWORD aMapOriginX = 0x82b7b0, aMapOriginY = 0x82b7b4, aMapScrollX = 0xc05900, aMapScrollY = 0xc058fc,
                 aMapW = 0x82b7a8, aMapH = 0x82b7ac, aMapNumber = 0xc058d4;
@@ -365,10 +365,10 @@ struct Seen {
 Seen g_render, g_convert, g_clamp, g_drag, g_viewport, g_draws, g_info, g_loop;
 int g_simDueInside = -1;
 
-void __cdecl FakeMessagePanel();                 // below (R2b.1)
-void __cdecl FakeFillRect(int, int, int, int, int); // below (R2b.1)
+void __cdecl FakeMessagePanel();                 // below
+void __cdecl FakeFillRect(int, int, int, int, int); // below
 
-// Pixels the fake city_render draws (R2b.1-5 / -6: what is shown of the city past its clip).
+// Pixels the fake city_render draws (what is shown of the city past its clip).
 struct Mark {
     int x, y;
     WORD v;
@@ -459,7 +459,7 @@ void __cdecl FakeNothing() {}
 
 void __fastcall FakeDragStart(int *) {}
 
-// R5c: what drag_select_draw sees of its limits and of grid_to_screen (the hooked one, as the game calls it).
+// What drag_select_draw sees of its limits and of grid_to_screen (the hooked one, as the game calls it).
 using GridToScreen_fn = void(__cdecl *)(int, int, int *, int *);
 GridToScreen_fn g_dragGts = nullptr;
 int g_dragLimits[2] = {}, g_dragGtsSeen[2] = {};
@@ -809,13 +809,13 @@ core_config Config1920()
 }
 
 // ---------------------------------------------------------------------------------------------
-// M4
+// Smooth scrolling
 
 using Render_fn = void(__cdecl *)(int, int, int);
 using Convert_fn = int(__cdecl *)(int, int);
 using Drag_fn = void(__fastcall *)(int *);
 
-void M4RenderOk()
+void RenderOk()
 {
     emperor::scroll::SetRemainderForTest(5, 6);
     BYTE *back = At<BYTE *>(aDrawBuffer);
@@ -834,7 +834,7 @@ void M4RenderOk()
     Check(emperor::scroll::Working(), "smooth scrolling still on");
 }
 
-void M4RenderFault()
+void RenderFault()
 {
     emperor::scroll::SetRemainderForTest(5, 6);
     BYTE *back = At<BYTE *>(aDrawBuffer);
@@ -857,7 +857,7 @@ void M4RenderFault()
           "log: switched off, the 6 changed values put back");
 }
 
-void M4ConvertFault()
+void ConvertFault()
 {
     emperor::scroll::SetRemainderForTest(5, 6);
     g_fault = "screen_to_grid";
@@ -871,7 +871,7 @@ void M4ConvertFault()
     Check(g_render.calls == 1 && g_render.buffer == At<BYTE *>(aDrawBuffer), "city_render passes through");
 }
 
-void M4DirectionFault()
+void DirectionFault()
 {
     using Fn = int(__cdecl *)();
     Fn cityCall = reinterpret_cast<Fn>(0x538503 + g_imageShift);
@@ -897,7 +897,7 @@ void M4DirectionFault()
     Check(cityCall() == 3, "afterwards the game's own scrolling");
 }
 
-void M4DragFault()
+void DragFault()
 {
     int drag[16] = {0, 0, 300, 400}; // the game's drag structure (0xa59a68) reaches +0x30
     using Fn = void(__fastcall *)(int *);
@@ -914,9 +914,9 @@ void M4DragFault()
 }
 
 // ---------------------------------------------------------------------------------------------
-// R5c: conversions while the city is zoomed (docs/archive/resolution_ui_r5.md section 10)
+// Conversions while the city is zoomed
 
-void R5cZoom()
+void ZoomConversions()
 {
     // The city on the screen: (0, 40) to (1678, 1080), 1678 x 1040; at 150% the buffer part shown is 2518 x 1561.
     emperor::scroll::SetCityExtent(1678, 1080);
@@ -963,7 +963,7 @@ void R5cZoom()
           "afterwards: sidebar_x, dd_height and the start corner are the game's again");
     g_dragGts = nullptr;
     Check(emperor::scroll::Working(), "smooth scrolling still on");
-    // R5e: a drag pressed on the city: the smallest frame is 8 screen px (in buffer pixels, rounded up, + 2).
+    // A drag pressed on the city: the smallest frame is 8 screen px (in buffer pixels, rounded up, + 2).
     Check(drag[11] == static_cast<int>(std::ceil(8 * fx)) + 2 && drag[12] == static_cast<int>(std::ceil(8 * fy)) + 2,
           "drag from the city: the smallest frame is 8 screen px (buffer pixels)");
     int sidebarDrag[16] = {};
@@ -984,11 +984,11 @@ void R5cZoom()
     At<int>(aMouseX) = 100;
     At<int>(aMouseY) = 140;
 
-    // R5e: the "Game paused" banner is centred on the city's width on the screen, not the zoomed buffer's.
+    // The "Game paused" banner is centred on the city's width on the screen, not the zoomed buffer's.
     using Width_fn = int(__cdecl *)();
     Check(Scroll<Width_fn>("city_view_width_px")() == 1678, "zoomed city_view_width_px: the city's width on the screen");
 
-    // R5e: during a military drag selection (mouse mode 0x4d) a cursor on the sidebar is kept to the city's edge for
+    // During a military drag selection (mouse mode 0x4d) a cursor on the sidebar is kept to the city's edge for
     // mouse_to_grid, so the frame's corner stays on the city; the game's mouse is put back afterwards.
     At<unsigned char>(0x10de041) = 0x4d;
     At<int>(aMouseX) = 1700;
@@ -1003,7 +1003,7 @@ void R5cZoom()
     Check(Scroll<MouseToGrid_fn>("mouse_to_grid")(0) == 0 && g_mouse.calls == calls + 1,
           "no drag selection: the sidebar is no tile, as before");
 
-    // R5e: drag_select_draw's grid_to_screen (returning to 0x44bbb5) gives the cursor's pixel (kept to the city, as the
+    // drag_select_draw's grid_to_screen (returning to 0x44bbb5) gives the cursor's pixel (kept to the city, as the
     // buffer pixel it shows) plus the cursor tile's height x 40, which the game takes off again. A stub at 0x44bb9c
     // pushes (gx 1, gy 2, &sx, &sy) and calls the detour from 0x44bbb0, as the game does.
     static int cornerX = 0, cornerY = 0;
@@ -1045,9 +1045,9 @@ void R5cZoom()
 }
 
 // ---------------------------------------------------------------------------------------------
-// R1
+// The logical resolution
 
-void R1SwitchFault()
+void SwitchFault()
 {
     core_config c = Config1920();
     emperor::resolution::InstalledForTest(&c);
@@ -1066,7 +1066,7 @@ void R1SwitchFault()
     Check(!emperor::resolution::SettingsChanged(&c), "a new resolution from the panel is refused");
 }
 
-void R1ModeFault()
+void ModeFault()
 {
     core_config c = Config1920();
     emperor::resolution::InstalledForTest(&c);
@@ -1104,11 +1104,11 @@ void __cdecl FakeFillRect(int, int, int, int, int)
     ++g_fills;
 }
 
-// R2b.1-5 / -6: the sidebar against the right edge; the city shown past its clip (which stays on the tile grid) to
+// The sidebar against the right edge; the city shown past its clip (which stays on the tile grid) to
 // the sidebar and the screen's bottom, through our city buffer or (bottom only) straight into the back buffer.
 void FillScreen(WORD v); // below
 
-void R2b1Extent()
+void CityExtent()
 {
     using Fn = void(__cdecl *)();
     core_config c = Config1920();
@@ -1163,9 +1163,9 @@ void R2b1Extent()
     Check(LogContains("scroll: the city is shown past its clip to (1694,1066)"), "log: the extent, once");
 }
 
-// 0.1.3-rc2: the cursor tile and clicks only from the city as shown. With a pixel remainder the game's own bounds
+// The cursor tile and clicks only from the city as shown. With a pixel remainder the game's own bounds
 // (origin moved by the remainder, viewport one column and a row pair larger) reached into the sidebar and the top
-// bar: holding a road, a click on the sidebar built under it (playtest 2026-11-01).
+// bar: holding a road, a click on the sidebar built under it (seen in play).
 void Rc2CityInput()
 {
     using Fn = void(__cdecl *)();
@@ -1218,7 +1218,7 @@ void Rc2CityInput()
           "afterwards origin and viewport are the game's");
 }
 
-// 0.1.3-rc2: menu_screens = native_city keeps the city around the menus, but not before a mission or in the editors
+// menu_screens = native_city keeps the city around the menus, but not before a mission or in the editors
 // (parchment there); the player's own menu_background picture everywhere.
 void Rc2CityAround()
 {
@@ -1236,7 +1236,7 @@ void Rc2CityAround()
 
 // The city message panel laid out in the extent, the city inside it still drawn on the grid; city_draw_background's
 // bottom strip not cleared while the city reaches the screen's bottom (only that call; other fills pass).
-void R2b1MessagePanel()
+void MessagePanel()
 {
     using Fn = void(__cdecl *)();
     core_config c = Config1920();
@@ -1281,7 +1281,7 @@ void R2b1MessagePanel()
     Check(g_fills == 1, "fill_rect from anywhere else: as always");
 }
 
-void R1LayoutFault()
+void LayoutFault()
 {
     using Fn = void(__cdecl *)();
     g_fault = "viewport_init";
@@ -1295,7 +1295,7 @@ void R1LayoutFault()
     Check(At<int>(aSidebarX) == 798 && At<int>(aSidebarX2) == 918, "sidebar at the 1024 layout's 798 meanwhile");
 }
 
-void R1Info()
+void InfoWindow()
 {
     using Fn = void(__cdecl *)();
     using emperor::resolution::InfoMode;
@@ -1330,7 +1330,7 @@ void R1Info()
           "only the info window part is off (the resolution stays)");
 }
 
-void R1InfoPositions()
+void InfoWindowPositions()
 {
     using emperor::resolution::InfoArea;
     using emperor::resolution::InfoMode;
@@ -1354,7 +1354,7 @@ void R1InfoPositions()
     Check(true, "cursor: inside the city area for every cursor position");
 }
 
-void R1BarsAndFiller()
+void BarsAndFiller()
 {
     using Fn = void(__cdecl *)();
     Res<Fn>("city_frame_bars")();
@@ -1367,7 +1367,7 @@ void R1BarsAndFiller()
     Res<Fn>("city_frame_bars")();
     Check(g_draws.calls == before && LogContains("feature \"top bar ("),
           "fault: top bar no longer drawn");
-    // The filler (no DATA pack next to the test: drawn with image_draw, as R1 did).
+    // The filler (no DATA pack next to the test: drawn with image_draw).
     Res<Fn>("sidebar_draw_panels")();
     Check(g_draws.calls > before, "filler drawn");
     g_fault = "image_draw";
@@ -1378,7 +1378,7 @@ void R1BarsAndFiller()
     Check(!LogContains("feature \"resolution switching"), "the resolution stays");
 }
 
-void R1ClampFault()
+void ClampFault()
 {
     using Fn = int(__cdecl *)(int, int, int, int, int, int);
     Fn draw = Res<Fn>("image_draw");
@@ -1409,9 +1409,9 @@ void R1ClampFault()
 }
 
 // ---------------------------------------------------------------------------------------------
-// P2
+// The draw-only pause
 
-void P2DrawOnly()
+void DrawOnly()
 {
     using Fn = int(__cdecl *)();
     Fn loop = Main<Fn>("game_loop_step"), simDue = Main<Fn>("sim_tick_due");
@@ -1434,7 +1434,7 @@ void P2DrawOnly()
 }
 
 // ---------------------------------------------------------------------------------------------
-// R2b: windows the game always opens at (0, 0x2a), shown elsewhere
+// Windows the game always opens at (0, 0x2a), shown elsewhere
 
 using WindowDraw_fn = void(__fastcall *)(void *, void *, int, int, int, int, int);
 using Void_fn = void(__cdecl *)();
@@ -1448,7 +1448,7 @@ void FillScreen(WORD v)
     }
 }
 
-void R2bFixedWindow()
+void FixedWindow()
 {
     using emperor::resolution::InfoMode;
     BYTE *back = At<BYTE *>(aDrawBuffer);
@@ -1523,7 +1523,7 @@ void R2bFixedWindow()
     Check(LogContains("feature \"info window position"), "log: the info window part switched off");
 }
 
-void R2bUnknownClass()
+void UnknownClass()
 {
     g_fixedKind = true;
     g_unknownClass = true;
@@ -1538,7 +1538,7 @@ void R2bUnknownClass()
           "a fixed kind whose window draw is not one of ours stays where the game has it (nothing moved)");
 }
 
-void R2bFixedOriginal()
+void FixedOriginal()
 {
     BYTE *back = At<BYTE *>(aDrawBuffer);
     g_fixedKind = true;
@@ -1594,7 +1594,7 @@ void WriteBmp(const char *file, int x0, int y0, int w, int h)
     std::fclose(f);
 }
 
-void R2bSidebarEdges()
+void SidebarEdges()
 {
     const char *pack = std::getenv("TEST_RESTORE_PACK");
     if (!pack || !*pack) {
@@ -1643,7 +1643,7 @@ void R2bSidebarEdges()
     Check(blue == 0, "no blue band below the sidebar's panels or at the bottom");
 }
 
-// R2b.1-7 (games/emperor/ui_fixes): the Mill's list top in drawing and clicks moves by the same amount; the build
+// games/emperor/ui_fixes: the Mill's list top in drawing and clicks moves by the same amount; the build
 // submenu's names and costs move down; the messages screen's second-row button (frame and text) is centred while
 // there is no third button and the game's own again with it.
 struct TextCall {
@@ -1667,7 +1667,7 @@ void Plant(DWORD address, std::initializer_list<BYTE> bytes)
     }
 }
 
-void R2b17UiFixes()
+void UiFixes()
 {
     Plant(0x556b0b, {0x8d, 0x59, 0x73, 0x89, 0x5c, 0x24, 0x28, 0x0f});
     Plant(0x556983, {0x8d, 0x6a, 0x73, 0x8b, 0x54, 0x24, 0x20, 0xc1});
@@ -1719,7 +1719,7 @@ void R2b17UiFixes()
 }
 
 
-// R2c (games/emperor/china_map): the map drawn into our layer, shown scaled or at its own size over the backdrop in the
+// games/emperor/china_map: the map drawn into our layer, shown scaled or at its own size over the backdrop in the
 // map area; the top bar's piece drawn afterwards on the screen; the mouse converted only inside the map's input.
 template <typename F> F MapDetour(const char *name)
 {
@@ -1752,7 +1752,7 @@ WORD Screen(int x, int y)
     return g_mapScreen[static_cast<size_t>(y) * At<int>(aDdW) + x];
 }
 
-void R2cChinaMap()
+void ChinaMap()
 {
     Thunk(0x5b9c40, reinterpret_cast<void *>(&FakeMapDraw));
     Thunk(0x489d20, reinterpret_cast<void *>(&FakeMapInput));
@@ -1814,7 +1814,7 @@ void R2cChinaMap()
     input();
     Check(g_map.mouseX == 300 && g_map.mouseY == 240, "native: the mouse in the game's map coordinates");
 
-    // A scale of one's own (O2c): 100% at 2560x1440 is the same as native.
+    // A scale of one's own: 100% at 2560x1440 is the same as native.
     MapScreen(2560, 1440, 2334);
     emperor::china_map::SetModeForTest(0, 100);
     draw();
@@ -1915,9 +1915,9 @@ void R2cChinaMap()
     Check(g_map.mouseX == 100, "fault: the real mouse from then on");
 }
 
-// R3: the display scale steps and the status lines of our Display options dialog (pure parts).
+// The display scale steps and the status lines of our Display options dialog (pure parts).
 // ---------------------------------------------------------------------------------------------
-// O1: the simulation pace while falling behind (games/emperor/emperor.cpp, DueBody)
+// The simulation pace while falling behind (games/emperor/emperor.cpp, DueBody)
 
 // sim_tick_due as game_frame calls it: from a call whose return address is 0x536ba8 (kDueFromFrame).
 int CallDueFromFrame()
@@ -1931,7 +1931,7 @@ int CallDueFromFrame()
     return reinterpret_cast<Fn>(call)();
 }
 
-void O1FallingBehind()
+void FallingBehind()
 {
     At<int>(0x10de0dc) = 90;           // game_speed 90 %: tick_interval_table[1] + 2 ms
     At<int>(0x855214 + 4) = 20;        // 22 ms a tick
@@ -1955,13 +1955,13 @@ void O1FallingBehind()
           "fast again: no longer behind, the ticks dropped meanwhile logged");
 }
 
-void R3DisplayOptions()
+void DisplayOptions()
 {
     namespace o = emperor::display_options;
     Check(o::MaxScale(2560, 1440, 1024, 768) == 185, "2560x1440: the largest scale is 185% (1383x778)");
     Check(o::MaxScale(1920, 1080, 1024, 768) == 140, "1920x1080: the largest scale is 140% (1371x771)");
     Check(o::MaxScale(1024, 768, 1024, 768) == 100, "1024x768: only 100%");
-    Check(o::MaxScale(3840, 2160, 1024, 768) == 250, "3840x2160: up to 250% (1536x864; R4 test C, offline)");
+    Check(o::MaxScale(3840, 2160, 1024, 768) == 250, "3840x2160: up to 250% (1536x864, offline)");
     Check(o::StepScale(250, 1, 3840, 2160, 1024, 768) == 250, "+ at 250% on 4K stays");
     Check(o::StepScale(0, 1, 2560, 1440, 1024, 768) == 135, "+ from auto (133% at 1440p) -> 135%");
     Check(o::StepScale(0, -1, 2560, 1440, 1024, 768) == 130, "- from auto -> 130%");
@@ -1981,10 +1981,10 @@ void R3DisplayOptions()
           "status: a fixed size");
 }
 
-// 0.2.0 item 7 K2 (games/emperor/keys): on a city screen a bound key becomes the game's own key (its character eaten);
+// The key bindings (games/emperor/keys): on a city screen a bound key becomes the game's own key (its character eaten);
 // a game key bound to nothing is kept from the game; a Ctrl action sends key_ctrl_down 1 and puts it back; R's poll
 // says "pressed" once; other screens get the keys as they are, F7 never reaches the game.
-void K2Keys()
+void KeyBindings()
 {
     namespace cs = core::settings;
     namespace k = emperor::keys;
@@ -2043,20 +2043,20 @@ struct Scenario {
     void (*run)();
 };
 const Scenario kScenarios[] = {
-    {"m4_render_ok", &M4RenderOk},       {"m4_render_fault", &M4RenderFault},
-    {"m4_convert_fault", &M4ConvertFault}, {"m4_direction_fault", &M4DirectionFault},
-    {"m4_drag_fault", &M4DragFault},     {"r1_switch_fault", &R1SwitchFault},
-    {"r1_mode_fault", &R1ModeFault},     {"r1_layout_fault", &R1LayoutFault},
-    {"r2b1_extent", &R2b1Extent},       {"r2b1_message_panel", &R2b1MessagePanel},
+    {"render_ok", &RenderOk},       {"render_fault", &RenderFault},
+    {"convert_fault", &ConvertFault}, {"direction_fault", &DirectionFault},
+    {"drag_fault", &DragFault},     {"switch_fault", &SwitchFault},
+    {"mode_fault", &ModeFault},     {"layout_fault", &LayoutFault},
+    {"city_extent", &CityExtent},       {"message_panel", &MessagePanel},
     {"rc2_city_input", &Rc2CityInput},  {"rc2_city_around", &Rc2CityAround},
-    {"r1_info", &R1Info},                {"r1_info_positions", &R1InfoPositions},
-    {"r1_bars_filler", &R1BarsAndFiller}, {"r1_clamp_fault", &R1ClampFault},
-    {"p2_draw_only", &P2DrawOnly},       {"r2b_fixed_window", &R2bFixedWindow},
-    {"r2b_fixed_original", &R2bFixedOriginal}, {"r2b_sidebar_edges", &R2bSidebarEdges},
-    {"r2b_unknown_class", &R2bUnknownClass}, {"r2b17_ui_fixes", &R2b17UiFixes},
-    {"r2c_china_map", &R2cChinaMap},   {"r3_display_options", &R3DisplayOptions},
-    {"o1_falling_behind", &O1FallingBehind}, {"r5c_zoom", &R5cZoom},
-    {"k2_keys", &K2Keys},
+    {"info_window", &InfoWindow},                {"info_window_positions", &InfoWindowPositions},
+    {"bars_filler", &BarsAndFiller}, {"clamp_fault", &ClampFault},
+    {"draw_only", &DrawOnly},       {"fixed_window", &FixedWindow},
+    {"fixed_original", &FixedOriginal}, {"sidebar_edges", &SidebarEdges},
+    {"unknown_class", &UnknownClass}, {"ui_fixes", &UiFixes},
+    {"china_map", &ChinaMap},   {"display_options", &DisplayOptions},
+    {"falling_behind", &FallingBehind}, {"zoom_conversions", &ZoomConversions},
+    {"key_bindings", &KeyBindings},
 };
 
 } // namespace

@@ -1,4 +1,4 @@
-// The unused nature sounds (0.2.0 item 10, player feedback; docs/archive/ambient_layer1.md): the game ships 24 recordings in
+// The unused nature sounds, asked for by players: the game ships 24 recordings in
 // Audio\Ambient\Layer1 (birds, wind, crickets, chimes ...) and reads their settings from Audio\sound_fxU.txt, but never
 // plays them (they were meant for its 3D channels, which nothing starts). We play 12 of them (the buzzing insects,
 // the two gongs and those the game already plays as layer 2 sounds left out) on one Miles voice of our own, in the

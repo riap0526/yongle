@@ -1,5 +1,5 @@
-// R3: the game's own Display options dialog (game_screen 0x0a) with our display settings
-// (docs/archive/resolution_ui_r3.md; addresses and evidence: docs/symbols.md).
+// The game's own Display options dialog (game_screen 0x0a) with our display settings
+// (addresses and evidence: the comments below).
 //
 // The original dialog has four buttons: Full screen / Windowed screen, 800 x 600, 1024 x 768 and Cancel. Ours, drawn
 // with the game's own panel, button frames and fonts in the same place:
@@ -12,7 +12,7 @@
 //   [ OK ] [ Cancel ]               OK keeps the changes (saved to emperor_engine.ini); Cancel puts back the resolution
 //                                   and scale the dialog opened with. Closing it any other way (Esc) is a Cancel.
 // The changes apply while the dialog is open (the game is laid out again behind it); they are only saved with OK.
-// 800 x 600 is gone (playtest 2026-10-25: never 800x600; docs/archive/simulation.md §9.1).
+// 800 x 600 is gone (never wanted at 800x600 in testing).
 //
 // How: display_options_draw 0x5ba9c0 is hooked (our layout), and the three places in screen_handle_input that hand
 // the dialog's button table (display_options_buttons 0x81ba50, 4 entries) to the game's button functions get ours

@@ -345,12 +345,12 @@ void ScreenshotTests(HWND hwnd, bool expectPanel, int screenW, int screenH)
         Check(w == 1024 && h == 768 && std::strstr(game, "_game_1024x768_"), "game frame: 1024x768, named _game_1024x768_", w);
         PngSize(screen, &w, &h);
         char expect[48];
-        std::snprintf(expect, sizeof(expect), "_screen-d3d11_%dx%d_", screenW, screenH); // O3: the renderer (auto)
+        std::snprintf(expect, sizeof(expect), "_screen-d3d11_%dx%d_", screenW, screenH); // the renderer (auto)
         Check(w == screenW && h == screenH && std::strstr(screen, expect),
               "screen: the window's size, named _screen-d3d11_WxH_", w);
         Check(std::strcmp(std::strrchr(game, '_'), std::strrchr(screen, '_')) == 0, "both files have the same time", 0);
     }
-    // The problem report key (debug.report_key, default F12; R2b.1, core/diag/report.h).
+    // The problem report key (debug.report_key, default F12; core/diag/report.h).
     std::printf("-- problem report (F12)\n");
     made = TakeShot(hwnd, game, screen, VK_F12);
     Check(made && std::strstr(game, "shots\\report1_") && std::strstr(screen, "shots\\report1_"),
@@ -380,7 +380,7 @@ void PanelTests(HWND hwnd, bool expectPanel)
                 g_ctrlF12 ? "Ctrl+F12" : "Insert");
     POINT before{};
     GetCursorPos(&before);
-    // Wrong modifiers: Ctrl+Insert for Insert, Shift+F12 for Ctrl+F12 (plain F12 is the report key, R2b.1). Not the
+    // Wrong modifiers: Ctrl+Insert for Insert, Shift+F12 for Ctrl+F12 (plain F12 is the report key). Not the
     // hotkey: reaches the game.
     SetCtrl(!g_ctrlF12);
     SetShift(g_ctrlF12);

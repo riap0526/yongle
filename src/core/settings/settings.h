@@ -1,4 +1,4 @@
-// The settings model (docs/resolution_ui/settings.md §5.1): a data-driven table of items, separate from any UI.
+// The settings model: a data-driven table of items, separate from any UI.
 //
 // Each item declares where it lives in emperor_engine.ini, its type and range, its default, a name and help text
 // (UTF-8) and how a change takes effect. The model loads the file, checks every value, keeps the current values,

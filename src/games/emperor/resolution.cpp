@@ -1,5 +1,5 @@
-// R1: custom logical resolution (docs/resolution_ui/display_scale.md §6, §8; addresses and evidence: docs/symbols.md).
-// R2b: the city screen's layout (docs/archive/resolution_ui_r2b.md).
+// Custom logical resolution (addresses and evidence in the comments below).
+// The city screen's layout.
 //
 // The game knows three modes (screen_mode_get_size 0x52b910: 1 = 640x480, 2 = 800x600, 3 = 1024x768). Mode 3 is
 // made to return our logical resolution; screen_mode stays 3, so Emperor.inf keeps a value the original game
@@ -14,15 +14,15 @@
 //   city_viewport_small/large 0x53ca20/0x53ca80: the city viewport (viewport_init 0x469820) gets as many columns
 //                                     and rows as fit, with the formulas that give the original values at 640/800/1024;
 //   city_frame_bars 0x5beb60, sidebar_draw_panels 0x53b3a0: the top bar and the space below and right of the
-//                                     sidebar are filled (R2b: the sidebar backdrop's leather; no bottom edge, the
+//                                     sidebar are filled (the sidebar backdrop's leather; no bottom edge, the
 //                                     city reaches the screen's bottom);
 //   info_window_place 0x5a1430: the building information window at any height; where it goes is a setting
-//                                     ([ui] info_window: original / centered / cursor, R2b);
+//                                     ([ui] info_window: original / centered / cursor);
 //   fullscreen_art_load 0x526040: front-end screens (fixed 1024x768 frames) run at 1024x768 (OnLoop).
 // Shift+F7 (the game treats it as F7) cycles through a few settings at run time.
 //
-// Failure (CLAUDE.md; the table is docs/archive/resolution_ui_r2b.md §1): the game has laid itself out for the
-// resolution, so R1 is not switched off as a whole. Each part runs under its own guard and only the failing part
+// Failure: the game has laid itself out for the
+// resolution, so the resolution is not switched off as a whole. Each part runs under its own guard and only the failing part
 // goes:
 //   switching (mode size, changing it, Shift+F7, front-end frame) -> the game's own 1024x768 from now on (one mode
 //      change on the next loop, the way the game's own F7 does it);
@@ -134,7 +134,7 @@ constexpr int kViewCols = 231, kViewRows = 457;    // view_to_grid
 constexpr int kTopBar = 40;                        // the city viewport starts below the top bar (y 0x28)
 constexpr int kBottomEdge = 8; // the game's bottom edge (group 0x2d6, 8 px; drawn at 1024 only): its 768 rule
 
-// Guards (core/diag): each part of R1 is switched off on its own.
+// Guards (core/diag): each part is switched off on its own.
 core::diag::Feature g_switching{"resolution switching (games/emperor/resolution)"};
 core::diag::Feature g_layout{"city layout at this resolution (games/emperor/resolution)"};
 core::diag::Feature g_bars{"top bar (games/emperor/resolution)"};
@@ -161,7 +161,7 @@ int g_lastW = 0, g_lastH = 0;
 const Setting kFrontEnd{CORE_RESOLUTION_FIXED, 1024, 768, 0};
 bool g_frontEnd = true; // until the first city screen
 
-// R2e: windowed, the game is laid out for the window: its client area at rest divided by the display scale (as
+// Windowed, the game is laid out for the window: its client area at rest divided by the display scale (as
 // Augustus does; with a fixed resolution setting, scale 100%), never below 1024x768 (NativeSize is the client area).
 Setting g_windowedSetting{CORE_RESOLUTION_SCALED, 0, 0, 100};
 
@@ -263,7 +263,7 @@ int LargeColumns(int w)
     return (w - kSidebarWidth + 2) / 80;
 }
 
-// Where the city is to be seen to (R2b.1-5 / -6, games/emperor/scroll SetCityExtent), after the viewport or the
+// Where the city is to be seen to (games/emperor/scroll SetCityExtent), after the viewport or the
 // sidebar changed: with our layout the sidebar's left edge (large tiles; small tiles have no sidebar: the screen's
 // right edge) and the screen's bottom; the game's own layouts and our fallback: just the clip. After the viewport
 // (not the sidebar, which the game sets before it: the clip is still the last mode's then) also the spare rows the
@@ -310,7 +310,7 @@ void LayoutFallBack(const char *what)
     ToGameSize(what);
 }
 
-// The sidebar against the screen's right edge (R2b.1-6; before: where the city's clip ends, columns x 80 - 2, which
+// The sidebar against the screen's right edge (before: where the city's clip ends, columns x 80 - 2, which
 // left up to 79 px of filler on its right at sizes that are not 224 + a multiple of 80). The city's clip stays on
 // the tile grid (whole columns, LargeColumns); the gap between it and the sidebar is drawn by our city render
 // (games/emperor/scroll, SetCityExtent), and filled with leather by SidebarDraw_detour when that is off.
@@ -353,7 +353,7 @@ void SetViewport(int cols, int rows, int tileW, int tileH)
     // Logged when it changes: a window with a small city view (0x5a25c0) sets the viewport again every frame.
     static int logged[7] = {-1, -1, -1, -1, -1, -1, -1};
     const int key[7] = {cols, rows, tileW, *kScreenWidth, *kScreenHeight, mapCols, mapRows};
-    if (!emperor::zoom::Moving() && std::memcmp(key, logged, sizeof(key)) != 0) { // R5d: not every wheel frame
+    if (!emperor::zoom::Moving() && std::memcmp(key, logged, sizeof(key)) != 0) { // not every wheel frame
         std::memcpy(logged, key, sizeof(key));
         core_log("resolution: city viewport %d x %d (tiles %dx%d) for %dx%d; current map view range %d x %d%s", cols,
                  rows, tileW, tileH, *kScreenWidth, *kScreenHeight, mapCols, mapRows,
@@ -379,8 +379,8 @@ void Viewport(ViewportCall c, ViewportCall at1024)
     LayoutFallBack("the city viewport could not be set");
 }
 
-// The game's own sizes, laid out by the game itself. Not the width alone (before O1): a window 1024 wide and taller
-// than 768 got the game's 1024x768 viewport, and the city ended at row 760 with black below (playtest 2026-10-28).
+// The game's own sizes, laid out by the game itself. Not the width alone, as an earlier build did: a window 1024 wide and taller
+// than 768 got the game's 1024x768 viewport, and the city ended at row 760 with black below.
 bool StandardSize(int w, int h)
 {
     return (w == 640 && h == 480) || (w == 800 && h == 600) || (w == 1024 && h == 768);
@@ -389,7 +389,7 @@ bool StandardSize(int w, int h)
 void __cdecl ViewportSmall_detour() // 58x30 tiles: 640/800/1024 -> 10x31, 13x39, 17x50
 {
     int w = *kScreenWidth, h = *kScreenHeight;
-    emperor::zoom::ResetView(); // R5: the large tiles only
+    emperor::zoom::ResetView(); // the large tiles only
     if (StandardSize(w, h) || w < 1024) {
         Original(o_ViewportSmall, kViewportSmall)();
     }
@@ -403,12 +403,12 @@ void __cdecl ViewportLarge_detour() // 78x40 tiles: 800 -> 7x29, 1024 -> 10x37 (
 {
     int w = *kScreenWidth, h = *kScreenHeight;
     if (StandardSize(w, h) || w < 1024) {
-        emperor::zoom::ResetView(); // R5: our layout only
+        emperor::zoom::ResetView(); // our layout only
         Original(o_ViewportLarge, kViewportLarge)();
         UpdateCityExtent(true);
         return;
     }
-    // R5: the zoomed view (docs/archive/resolution_ui_r5.md section 8.7) for the city as shown on the screen, from
+    // The zoomed view for the city as shown on the screen, from
     // the top bar to the bottom and to the sidebar; capped to the map's range by games/emperor/zoom.
     int cols = LargeColumns(w), rows = (h - kTopBar) / 20 + 1;
     emperor::zoom::ViewFor(*kSidebarX, h - kTopBar, 0x4e + 2, 0x28 / 2, &cols, &rows);
@@ -416,7 +416,7 @@ void __cdecl ViewportLarge_detour() // 78x40 tiles: 800 -> 7x29, 1024 -> 10x37 (
     UpdateCityExtent(true);
 }
 
-// R5 (games/emperor/zoom): the city view laid out again after the scale or the map changed.
+// For games/emperor/zoom: the city view laid out again after the scale or the map changed.
 void RelayoutCity()
 {
     if (*kSmallTiles == 1) {
@@ -476,7 +476,7 @@ Void_fn o_FrameBars, o_SidebarDraw, o_InfoPlace;
 // any other width. Wider: only the top bar, tiled from the sidebar to the left edge. No bottom edge: the city's clip
 // ends at the screen's bottom here (viewport_init: (rows - 1) x 20 + 40 >= the height; at 1024x768 it is 760, the
 // edge's top), so the edge would only cover the city -- and only until a dialog screen, which does not redraw the
-// top bar, lets the city draw over it (playtest 2026-10-24: a thin frame at the bottom the original does not have; at
+// top bar, lets the city draw over it (seen in play: a thin frame at the bottom the original does not have; at
 // 800x600 the original has none either). The strip 0x5b5a40 blanks at the bottom (full width x 6 rows) is drawn
 // over by the city every frame and by the sidebar filler.
 void __cdecl FrameBars_detour()
@@ -502,13 +502,13 @@ void __cdecl FrameBars_detour()
 
 // The sidebar backdrop of China_Interface (entry 2045, 226x768, the light leather panel from playtests), read from the
 // player's own pack in memory (core/assets/sg3) so that rows can be drawn on their own (the game's image_draw only
-// draws whole images). Its rows [docs/archive/resolution_ui_r2b.md §2.1, from the pixels]: 0..14 the blue-white fret
+// draws whole images). Its rows (from the pixels): 0..14 the blue-white fret
 // band (as on the top bar), 15..37 leather without the edge, 38..39 the corner where the left edge starts, 40..767
 // leather with the sidebar's own left edge (column 0 dark, 1 light, 2 highlight -- the same as the sidebar panels).
-// Below the sidebar: rows 40.. only (no band; playtest 2026-10-24: not drawn), and the lower panel's own last 7 rows
+// Below the sidebar: rows 40.. only (no band: not wanted in play), and the lower panel's own last 7 rows
 // (y 761..767, where its edge turns into a corner) get the edge columns too, so the line runs on to the bottom.
 // Right of the sidebar: rows 0..39 (the band continues the top bar's), then rows 40.., from column 3 (plain leather:
-// no edge line next to the sidebar; playtest 2026-10-24, the original has none there).
+// no edge line next to the sidebar: the original has none there).
 constexpr wchar_t kInterfacePack[] = L"DATA\\China_Interface.sg3"; // next to Emperor.exe
 constexpr int kBackdropEntry = 2045, kEdgeFirst = 40, kEdgeCols = 3;
 constexpr int kLowerPanelCorner = 768 - 7; // the lower panel (group 0x274, 226x310 at y 458) ends its edge here
@@ -590,7 +590,7 @@ void DrawBackdrop(int x0, int x1, int sx0, int top, int h)
     }
 }
 
-// The filler drawn whole with the game's image_draw (when the pack cannot be read: R1's way).
+// The filler drawn whole with the game's image_draw (when the pack cannot be read: the earlier way).
 int g_fillerId = -1;
 int g_fillerW = 0, g_fillerH = 0;
 
@@ -614,7 +614,7 @@ void FindFiller()
              g_fillerH, bw, bh, cw, ch);
 }
 
-// city: the city screen's sidebar (sidebar_draw_panels); otherwise another screen's (the China map's, R2c), which
+// city: the city screen's sidebar (sidebar_draw_panels); otherwise another screen's (the China map's), which
 // never has the city's gap left of the sidebar.
 void DrawFiller(bool city)
 {
@@ -626,7 +626,7 @@ void DrawFiller(bool city)
             DrawBackdrop(x, x + kSidebarWidth, 0, 768, h);
         }
         // Right of the sidebar: plain leather, without the backdrop's edge columns (dark, light, highlight). Since
-        // R2b.1-6 the sidebar is against the right edge, so nothing is left here at our sizes.
+        // the sidebar is against the right edge, so nothing is left here at our sizes.
         DrawBackdrop(x + kSidebarWidth, w, kEdgeCols, 0, h);
         // Left of the sidebar, between the city's clip and the sidebar: drawn by our city render; leather only when
         // that is off after an error (else this would show for a frame under the city on every background redraw).
@@ -676,7 +676,7 @@ InfoMode g_infoMode = InfoMode::Original;
 
 // The four kinds of building the game always opens at (0, 0x2a): info_window_place's second special case,
 // FUN_005d3690 (types 0x35 Mill, 0x36 Warehouse, 0x38 Trading Quay, 0x3a Trading Station; names from
-// EmperorText.eng group 0x1c). Their window code relies on that position in places (docs/archive/resolution_ui_r2b.md
+// EmperorText.eng group 0x1c). Their window code relies on that position in places
 // §3.2): the storage window draws its employee panel at y (rows - 4) x 16 and the trade window at (rows - 1) x 16,
 // without the window's y; their goods lists are laid out once and kept. So for these the game keeps its own position
 // and the window is moved only on screen: drawn into a copy of the screen and its rectangle copied to where it is
@@ -689,7 +689,7 @@ const Site kMillDraw{"mill_window_draw", 0x556e50, {0x83, 0xec, 0x0c, 0x53, 0x55
 // The mill window's foreground (vtable 0x7b72c8 slot 0x180, called every frame by info_window_draw 0x5a2391 with the
 // game's x, y, cols, rows; __thiscall, ret 0x10) draws the food list itself (text 0x528ed0, Accept / Get buttons) at
 // the places laid out by the window draw. The storage (0x5d6cb0) and trade (0x5e0bd0) foregrounds only update their
-// lists and draw nothing (archive/resolution_ui_r2b.md §3.4), so only this one is moved as well.
+// lists and draw nothing, so only this one is moved as well.
 const Site kMillForeground{"mill_window_foreground", 0x556a80, {0x81, 0xec, 0xd0, 0x01, 0x00, 0x00, 0x53, 0x55}};
 // The window classes of the four kinds (factory FUN_005d3580): Mill 0x554d40 (vtable 0x7b72c8, draw 0x556e50),
 // Trading Quay 0x5e1730 / Trading Station 0x5e1420 (draw 0x5e0610), Warehouse 0x5d61e0 (vtable 0x7be1bc, draw
@@ -698,7 +698,7 @@ const Site kMillForeground{"mill_window_foreground", 0x556a80, {0x81, 0xec, 0xd0
 const Site kTradePopup{"trade_popup_draw", 0x5dd810, {0xa1, 0x14, 0xe0, 0x0d, 0x01, 0x53, 0x8b, 0xd9}};
 const Site kInfoInput{"info_window_input", 0x5a23a0, {0xa1, 0x1c, 0x2b, 0x31, 0x01, 0xb9, 0x34, 0x76}};
 const Site kButtonsDraw{"buttons_draw", 0x449c10, {0x8b, 0x44, 0x24, 0x10, 0x85, 0xc0, 0x0f, 0x8e}};
-// R2b.1-5 / -6 (docs/archive/resolution_ui_r2b1.md): the city message panel (screen 0x05) and city_draw_background's strip.
+// The city message panel (screen 0x05) and city_draw_background's strip.
 // city_message_panel_layout 0x50bf10 (__cdecl, no arguments, ret): sizes the panel to the city clip's width (in 16 px
 // steps), centres it in the clip and puts it on the clip's bottom; it also draws the city (city_draw_view) and then,
 // on a redraw, city_draw_background. fill_rect 0x5296f0 (__cdecl x, y, w, h, colour; ret): city_draw_background
@@ -748,7 +748,7 @@ bool Shifted()
 // info_window_place sets the window's position only for heights 600 and 768 (at 768: x 188 (78x40 tiles) or 248
 // (58x30 tiles), y at the bottom (760 - rows x 16) while the cursor is in the upper part of the city, else 42); any
 // other height keeps its defaults (8, 32), the top left corner. Original: the same rule at any height, x moved with
-// the centre of the city area (R1). Centered / cursor: InfoPosition; for the fixed-position kinds the game keeps
+// the centre of the city area. Centered / cursor: InfoPosition; for the fixed-position kinds the game keeps
 // (0, 0x2a) and the window is shifted on screen.
 void PlaceInfo(core::diag::Restore &r)
 {
@@ -760,7 +760,7 @@ void PlaceInfo(core::diag::Restore &r)
     const bool fixed = *kInfoKind == 2 && *kInfoX == kFixedX && *kInfoY == kFixedY &&
                        (Function<int(__cdecl *)(int)>(kSpecialPlace)(*kInfoBuilding) & 0xff) != 0;
     if (g_infoMode != InfoMode::Original) {
-        // Opened on the China map (the trade window from the sidebar's Order button, R2d): in the middle of the map
+        // Opened on the China map (the trade window from the sidebar's Order button): in the middle of the map
         // area, whatever the setting (beside the cursor it would sit at the sidebar's edge).
         const char from = *kInfoPrevScreen;
         const bool map = from == 0x14 || from == 0x16 || from == 0x1e;
@@ -1037,7 +1037,7 @@ struct PanelCall {
     core::diag::Restore r;
 };
 
-// R2d: the help window's contents panels (topic kind 0, e.g. Help -> Table of contents) are put at x = 10 by the
+// The help window's contents panels (topic kind 0, e.g. Help -> Table of contents) are put at x = 10 by the
 // game (0x50c17c `mov ecx, 10`, also at 1024x768); every other kind is placed in the 640x480 dialog frame. Above
 // 1024 wide the immediate becomes the x that centres the panel in the city area (left of the sidebar). The width is
 // the topic's (0x10c7622 + topic x 0x50, in 16 px blocks; the topic is 0x10bf504, set by help_window_open 0x50b370).
@@ -1104,7 +1104,7 @@ void __cdecl MessagePanel_detour()
 // rectangle of 0x10c733c x 0x10c7338 starting at fullscreen_art_offset (0x5cd8a0 -> 0x4194c0, no checks). Its
 // callers size that rectangle from the screen or the map window, which is larger than the picture on a larger
 // screen: the China map clamps the width to the picture but not the height (dd_height - 40 > 746 rows above 786),
-// and the first R1 test crashed in 0x4194c0. The rectangle is clamped to the picture here.
+// and a test crashed in 0x4194c0. The rectangle is clamped to the picture here.
 constexpr int kGroupFullscreenArt = 0x1a01;
 const Var<int> kArtOffsetX{0x10c7334}; // fullscreen_art_offset_x
 const Var<int> kArtOffsetY{0x10c7330};
@@ -1229,7 +1229,7 @@ void CycleSetting()
     ChangeMode();
 }
 
-// Modes 1 (640x480) and 2 (800x600) have no use with our resolutions (playtest 2026-10-25: always 1024x768, i.e. mode 3,
+// Modes 1 (640x480) and 2 (800x600) have no use with our resolutions (in play it is always 1024x768, i.e. mode 3,
 // which carries our size). The game falls back to mode 1 when DirectDraw refuses 1024x768 and 800x600 (dd_init), so
 // a run of the original can leave it in Emperor.inf; F6 and the Display options button "800 x 600" ask for mode 2.
 // Videos still switch modes for themselves (FUN_00420ae0) and switch back.
@@ -1262,7 +1262,7 @@ bool ModeKey(UINT message, WPARAM key, LPARAM)
 
 // F5 (and the Display options button "Windowed screen", which posts F5) and Alt+Enter: our window mode instead of the
 // game's
-// (R2e, docs/resolution_ui/r2e.md). The game never sees it, so screen_fullscreen stays 1 and Emperor.inf only ever
+// The game never sees it, so screen_fullscreen stays 1 and Emperor.inf only ever
 // holds the original's own value; the change goes through the setting (saved, applied on the game thread).
 bool WindowKey(UINT message, WPARAM key, LPARAM l)
 {

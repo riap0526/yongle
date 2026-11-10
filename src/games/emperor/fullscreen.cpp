@@ -1,11 +1,11 @@
-// R2a: framed full-screen pictures. Design: docs/resolution_ui/fullscreen_art.md §7.5; screens:
-// docs/resolution_ui/r2_screens.md §4.1; addresses and evidence: docs/symbols.md.
+// Framed full-screen pictures; screens:
+// the game_screen values below; addresses and evidence in the comments.
 //
 //   fullscreen_art_load 0x526040 (hooked in resolution.cpp, which calls OnArtLoaded): loads a picture into slot
 //      0x1a01 and draws it at (x, y). Indices 0xb..0xf are the loading pictures (800x600 at ((w-800)/2, (h-600)/2),
 //      shown in five stages by 0x5b7490 from the start-up loader 0x475b60); their real area is found here, once per
 //      picture, on the back buffer right after it was drawn (rows and columns at the edges with fewer than 2% of
-//      pixels brighter than 24 are bands; the rule of tools/mockups/fsmock3.py).
+//      pixels brighter than 24 are bands; a rule measured on the game's pictures).
 //   screen_text_gdi 0x52b460 (cdecl, one string): the loader's status line, drawn by the game with GDI straight on the
 //      screen at the centre + 250 px. Replaced: the line goes to the output (core::output::SetCaption), which draws it
 //      on a dark strip over the framed picture's bottom; it is cleared by the next picture that is not a loading one.
@@ -13,7 +13,7 @@
 //      0x84, 0x8f; top edge 1..10, bottom 0x85..0x8e; left 0xc + 12 r, right 0x17 + 12 r; inside 0xd + 12 r + c).
 //      Group 0x20b is entry 348 of China_Interface.sg3 on. The 144 tiles are read from the player's own
 //      DATA\China_Interface.sg3/.555 with core/assets/sg3, in memory only, independent of the game's loading order
-//      and drawing state (the game's own image_draw faulted during the start-up loader: R2a tests 2 and 3).
+//      and drawing state (the game's own image_draw faulted during the start-up loader in testing).
 //   Every entry point runs under core/diag's guard: on an exception the feature is switched off, the game's own
 //      behaviour comes back (scaled frame with black bars, GDI status line) and the game goes on.
 #include "games/emperor/fullscreen.h"
@@ -70,7 +70,7 @@ constexpr int kInsetTiles = 49;
 constexpr wchar_t kFontPack[] = L"DATA\\China_Fonts.sg3";
 constexpr int kFontFirst = 3283; // group 0x1e15 of China_Fonts: the font inside the message box's inset panel
 const BYTE *const kCharMap = reinterpret_cast<const BYTE *>(0x8549ac); // font_char_map: byte -> glyph (0: none)
-// The loading screen's block below the picture (docs/archive/resolution_ui_r2a.md §10, mockup v5): parchment, the inset panel with
+// The loading screen's block below the picture: parchment, the inset panel with
 // the status line, parchment.
 constexpr int kGapAbove = 8, kInsetHeight = 40, kGapBelow = 8;
 constexpr int kBelow = kGapAbove + kInsetHeight + kGapBelow;
@@ -154,7 +154,7 @@ bool LoadTiles()
 }
 
 // ---------------------------------------------------------------------------------------------
-// The background for a layout (tools/mockups/fsmock3.py: frame_image, parchment)
+// The background for a layout (frame image, parchment)
 
 int Luminance(WORD p)
 {
@@ -349,12 +349,12 @@ bool DrawGameText(Image &im, const char *text, int x0, int y0, int w, int h)
 }
 
 // ---------------------------------------------------------------------------------------------
-// R2d.1 (docs/resolution_ui/r2d1.md): how the two kinds of front-end screens are shown
+// How the two kinds of front-end screens are shown
 
-// 0.2.0 item 8 (docs/archive/display_scale_all.md): every look shows the picture at its own size times the city's
+// Every look shows the picture at its own size times the city's
 // scale (resolution::CityScale), or as large as fits when that is too large; the settings only choose the design around
 // it. kNative: the fret border, parchment around (the loading screens: black around); kNativeCity: the fret border, the
-// player's city blurred around; kOriginal (O2a): the game's whole 1024x768 frame, black around and no border, as the
+// player's city blurred around; kOriginal: the game's whole 1024x768 frame, black around and no border, as the
 // game looks on a wide screen without us, the loading screens' status line where the game draws it. The scaled looks
 // (the whole frame as large as fits, on parchment or with black bars) are gone: original at a large display scale
 // gives the black-bar one.
@@ -369,9 +369,9 @@ const Look kMenuLook[] = {kNativeCity, kNative, kOriginal};
 Look g_loadingLook = kNative;
 Look g_menuLook = kNativeCity;
 
-// The city background: a picture of the player's city, blurred and darkened (playtest 2026-10-25: sigma 2, first 75%,
-// then 65% after the first test: too bright). O2b: display.background_blur / background_brightness (the menus only:
-// the China map's city background is the city as it is, O2c).
+// The city background: a picture of the player's city, blurred and darkened (sigma 2, first 75%,
+// then 65% after testing: too bright). display.background_blur / background_brightness (the menus only:
+// the China map's city background is the city as it is).
 int g_citySigma = 2;
 int g_cityPercent = 65;
 int g_citySettings = 0; // counts changes of the pair (game thread)
@@ -563,7 +563,7 @@ char g_composedText[256] = "";
 bool g_textDrawn = false; // the last background has the status line in it
 
 // Background for a framed block of pw x (ph + below) units: the picture, and when `below` > 0 the loading screen's
-// status panel under it with `text` (the game's bytes) in the game's font. Outside the frame (R2d.1): parchment;
+// status panel under it with `text` (the game's bytes) in the game's font. Outside the frame: parchment;
 // black for a loading screen at its own size; for kNativeCity the city background with the border along the screen
 // edges, parchment until that background is ready; for kOriginal black everywhere, no border.
 // The outer fill's size in units for this layout: the city background is made at that size (one unit = one screen
@@ -793,11 +793,11 @@ void Update()
     const bool whole = look == kOriginal; // the whole frame, also for a loading picture (the game's own bands)
     f.scale = emperor::resolution::CityScale(); // own size times the city's scale (0.2.0 item 8)
     f.picture = loading && !whole ? g_picture : RECT{0, 0, mode.cx, mode.cy};
-    f.below = loading && !whole ? kBelow : 0; // the status panel under a loading picture (docs/archive/resolution_ui_r2a.md §10)
+    f.below = loading && !whole ? kBelow : 0; // the status panel under a loading picture
     f.gameCaption = whole;
     if (on && g_menuLook == kNativeCity && !f.labels && core::diag::Enabled(g_cityFeature)) {
         // Made ahead, from the first front-end picture on (the start-up loading screens): the menus then show the
-        // city at once instead of parchment for the time the picture takes to read and blur (R2d.1 follow-up).
+        // city at once instead of parchment for the time the picture takes to read and blur.
         const SIZE units = OuterUnits(core::display::ClientSize(), f.picture.right - f.picture.left,
                                       f.picture.bottom - f.picture.top + f.below, f.scale);
         RequestBackdrop(units.cx, units.cy);
@@ -904,7 +904,7 @@ template <size_t N> const char *LookName(const char *const (&names)[N], const Lo
     return "?";
 }
 
-// [display] fullscreen_pictures (R2a: framed | black) became loading_screen and menu_screens (R2d.1). Only black, a
+// [display] fullscreen_pictures (framed | black) became loading_screen and menu_screens. Only black, a
 // choice the player made, is carried over; framed was the default of the time, so the new defaults apply.
 int MigrateFullscreenPictures(const char *old, core::settings::Migration *out, int max)
 {
@@ -961,7 +961,7 @@ void RegisterSettings()
         }
         return true;
     });
-    // O2b (docs/archive/optimization.md): the menus' city background's blur and brightness (native_city). Made again on a
+    // The menus' city background's blur and brightness (native_city). Made again on a
     // worker thread.
     i = core::settings::Register(Item{
         "video", "background_blur", "City background: blur",

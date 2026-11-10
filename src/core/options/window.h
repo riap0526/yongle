@@ -1,4 +1,4 @@
-// The options window (docs/archive/resolution_ui_original_settings.md §13, §14): one window in the game's own style that
+// The options window: one window in the game's own style that
 // takes the place of the original Options menu. Pages (tabs) hold categories (the list on the left; a page with a
 // single unnamed category has no list), categories hold rows. Changes are drafts until Apply or OK; Cancel drops
 // them. Everything is laid out in window coordinates (640 x 480, the size of the game's dialogs) and drawn through
@@ -115,7 +115,7 @@ enum class Action {
 
 // What the window shows around its pages: the options window, or the Hotkeys window (no Hotkeys button, no Apply).
 struct Look {
-    std::string title = "Yongle options";
+    std::string title = "Options"; // the game layer sets its own (e.g. its product name and "options")
     bool hotkeysButton = true;
     bool applyButton = true;
     bool plainHeaders = false; // section titles in gold at the left, no lines (Augustus's hotkey list)
@@ -192,7 +192,7 @@ public:
     bool TipShown() const { return tipShown_; }
     std::string TipText(); // what the tooltip shows now ("" none)
 
-    // Layout (window coordinates), from the third round of mockups.
+    // Layout (window coordinates), from the mockups.
     static constexpr int kTabY = 50, kContentY = 82, kContentH = 344, kButtonY = kHeight - 42;
     static constexpr int kCategoryX = 16, kCategoryW = 176, kListX = 196;
     // The tooltip almost at once (the game's own show at once; a short pause keeps them from flashing while the mouse

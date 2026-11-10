@@ -1,4 +1,4 @@
-// Offline test of the city picture's parts (docs/archive/city_export.md; not the game):
+// Offline test of the city picture's parts (not the game):
 //   core/display/city_strips: every picture row comes from exactly one strip, inside the strip's drawing (above its
 //     clip's bottom, below the rows the drawing leaves out), views within the clamp and even, for map sizes of the
 //     game, small and large strips, the room above the top row;
@@ -156,7 +156,7 @@ bool RoundTrip(int w, int h, int scale, bool transparent, const char *name)
 
 int main()
 {
-    // the game's maps (resolution_ui_r5.md section 8.2) with and without the bottom margin
+    // the game's maps with and without the bottom margin
     Strips(54, 112, 3, 64, 4, 8);
     Strips(68, 140, 0, 64, 4, 8);
     Strips(84, 168, 5, 64, 4, 8);
@@ -164,7 +164,7 @@ int main()
     Strips(112, 224, 0, 1000, 4, 8); // as few strips as the map allows
     Strips(112, 224, 6, 8, 4, 8);    // the seam check: many strips
     Strips(84, 168, 5, 4, 2, 0);     // the smallest strips, no room above
-    // as the game layer draws now: no room above the view's top row (city_export.md section 11.3)
+    // as the game layer draws now: no room above the view's top row
     Strips(84, 168, 2, 64, 4, 0);
     Strips(112, 224, 2, 64, 4, 0);
     Strips(112, 224, 0, 1000, 4, 0);

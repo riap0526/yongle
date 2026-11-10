@@ -1,5 +1,5 @@
-// See keys.h. Evidence for every key: docs/archive/key_bindings.md section 2 (game_wndproc 0x4766c0, its WM_CHAR table
-// 0x477c7c / 0x477bf4, city_alt_keys 0x43cfa0, the R poll 0x5db570; Ghidra and capstone, 2026-11-08).
+// See keys.h. Evidence for every key: game_wndproc 0x4766c0, its WM_CHAR table
+// 0x477c7c / 0x477bf4, city_alt_keys 0x43cfa0, the R poll 0x5db570; Ghidra and capstone).
 #include "games/emperor/keys.h"
 
 #include "core/diag/guard.h"
@@ -200,7 +200,7 @@ const Def kDefs[] = {
 constexpr int kCount = static_cast<int>(sizeof(kDefs) / sizeof(kDefs[0]));
 
 // The game's own screenshot (Alt+1..5 in the city, city_alt_keys 0x43d03c: shot1.bmp..shot5.bmp) writes past its
-// buffer at our resolutions (0x52ad1a, the K2a test's crash; it assumes the game's own sizes): not run. __cdecl(file
+// buffer at our resolutions (0x52ad1a, a crash in testing; it assumes the game's own sizes): not run. __cdecl(file
 // name), the caller pops (0x43d041 add esp, 4).
 const Site kBmpShot{"bmp_screenshot", 0x52abc0, {0x83, 0xec, 0x38, 0x53, 0x33, 0xdb, 0x68, 0x60}};
 using BmpShot_fn = void(__cdecl *)(const char *file);
@@ -326,7 +326,7 @@ void TranslateNow(void *p)
     if (vk == VK_SHIFT || vk == VK_CONTROL || vk == VK_MENU) {
         return; // the game keeps track of the modifiers itself
     }
-    if (vk == VK_ESCAPE && c.m == WM_KEYDOWN) { // K4: closes a window, or opens the pause menu (games/emperor/game_menu)
+    if (vk == VK_ESCAPE && c.m == WM_KEYDOWN) { // closes a window, or opens the pause menu (games/emperor/game_menu)
         c.handled = g_eatChar = emperor::game_menu::Escape(c.l);
         return;
     }

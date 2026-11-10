@@ -1,4 +1,4 @@
-// Where our own files go: the log, the settings file, screenshots and the menu backdrop (docs/testing/v0_2_0_files.md).
+// Where our own files go: the log, the settings file, screenshots and the menu backdrop.
 //
 // A 32-bit program without a manifest that writes to a folder a standard user cannot write to (C:\Program Files (x86))
 // is redirected by Windows to %LOCALAPPDATA%\VirtualStore -- but only when it does not run as administrator, so the

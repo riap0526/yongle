@@ -1,6 +1,6 @@
-// Work split across our own threads while the caller waits (R5: the city zoom's scaling, docs/resolution_ui/
-// resolution_ui_r5.md section 9.2). The game thread is the one that limits the frame rate (docs/archive/optimization.md
-// section 1.8), and what it waits for here must be done before it goes on (the game draws its interface over the
+// Work split across our own threads while the caller waits (the city zoom's scaling).
+// The game thread is the one that limits the frame rate
+// and what it waits for here must be done before it goes on (the game draws its interface over the
 // scaled city next), so the work is cut into pieces of rows that the caller and up to kMaxWorkers threads of ours
 // take one by one; ForRows returns when every piece is done. The workers are ours for the processor affinity
 // (core/platform/affinity: on the processors apart from the game's); with no processor apart (cpu_affinity =

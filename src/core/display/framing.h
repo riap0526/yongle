@@ -1,4 +1,4 @@
-// Geometry of a framed full-screen picture (docs/resolution_ui/fullscreen_art.md §7.5, R2a): the picture plus a
+// Geometry of a framed full-screen picture: the picture plus a
 // border of one tile row on all four sides, at one scale, as large as the screen allows and centred; background
 // everywhere else. If the background left outside the border on an axis would be thinner than twice the border per
 // side, the border goes to the screen edge on that axis instead and the extra space becomes padding inside the
@@ -6,7 +6,7 @@
 //
 // Units are the picture's own pixels (the border is kTile units thick). The same function serves the background's
 // composition (in units), the output (screen pixels) and the mouse mapping, so the three always agree. It is the
-// layout() of tools/mockups/fsmock3.py, which produced the approved v4 mockups.
+// layout() of the mockup script that produced the approved mockups.
 //
 // Two layers are drawn from it (each resampled once):
 //   background: the outer fill (outerW x outerH units, drawn at (0,0) scaled by s and cropped by the screen) and the
@@ -34,7 +34,7 @@ struct FrameLayout {
 };
 
 // screenW x screenH: the output in pixels; pictureW x pictureH: the picture in units. False when either is empty.
-// maxScale > 0 (R2d.1; 0.2.0 item 8: the picture's own size times the display scale): at most that scale -- centred,
+// maxScale > 0 (the picture's own size times the display scale): at most that scale -- centred,
 // the same border and snapping rule -- when the picture and its border fit on the screen at it; otherwise (and with 0)
 // as large as the screen allows.
 bool ComputeFrameLayout(int screenW, int screenH, int pictureW, int pictureH, FrameLayout *out, double maxScale = 0);

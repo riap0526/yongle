@@ -1,4 +1,4 @@
-// Offline test of core/ddraw/surface_memory (not the game; R2b.1): the memory of an emulated surface has spare rows
+// Offline test of core/ddraw/surface_memory (not the game): the memory of an emulated surface has spare rows
 // with a canary below the last row and guard pages before and after. For the game's sizes (and odd widths): the rows
 // the game sees are all writable and leave the canary alone; a write into the spare rows is reported with the right
 // rows and byte count, and the pattern is written again; the report sees pixels of any value (zeros, the pattern's
@@ -125,7 +125,7 @@ int main()
     Check(!core::ddraw::AllocSurfaceMemory(bad, 6, 10) && !core::ddraw::AllocSurfaceMemory(bad, 0, 10) &&
               !core::ddraw::AllocSurfaceMemory(bad, 8, 0),
           "a pitch that is not a multiple of 4, or an empty size, is refused");
-    { // Allowance (R2b.1-5): rows the game draws into on purpose are not reported; the rows below them are.
+    { // Allowance: rows the game draws into on purpose are not reported; the rows below them are.
         core::ddraw::SurfaceMemory m;
         const int pitch = 1920 * 2, h = 1066;
         core::ddraw::CanaryDamage d;

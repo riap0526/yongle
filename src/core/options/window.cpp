@@ -14,8 +14,8 @@ constexpr int kBottomW[] = {160, 96, 80, 96}; // Restore defaults, Cancel, OK, A
 constexpr int kBottomGap = 8, kHotkeysW = 112;
 constexpr int kChoiceW = 200, kArrow = 24;
 constexpr int kTipW = 230, kTipLine = 14;
-// The tooltip beside the cursor, as tooltip_draw 0x50f800 places the game's: 20 to the right and 40 below the cursor
-// (the cursor's picture is about 32 high); left of it, or above it, when it would leave the window.
+// The tooltip beside the cursor, where Emperor places the game's own tooltips (its tooltip_draw): 20 to the right
+// and 40 below the cursor (its picture is about 32 high); left of it, or above it, when it would leave the window.
 constexpr int kTipDx = 20, kTipDy = 40, kTipAbove = 8;
 constexpr int kLabelSlack = 16; // a name is hit this much past its end (its "*")
 constexpr int kTipRedLine = 16, kTipRedW = 320; // the restart line's height (the red font is the normal size)
@@ -362,7 +362,7 @@ std::vector<Window::Placed> Window::Layout()
 void Window::SliderGeometry(int rowY, int &arrowL, int &trackX, int &trackW, int &arrowR, int &y)
 {
     // The track is whole tiles; what is left over goes to the left, so the right arrow lines up with the choices'
-    // right arrows (right - kArrow; until 2026-11-09 it sat up to 15 px left of them).
+    // right arrows (right - kArrow; it once sat up to 15 px left of them).
     const int w = Right() - Left() - 48;
     trackW = (w - 2 * kArrow - 4) / kTile * kTile;
     arrowR = Right() - kArrow;
@@ -940,7 +940,7 @@ void Window::Rows(Painter &p)
             break;
         }
         case Kind::Header: {
-            if (look_.plainHeaders) { // no lines (a line between sections was too crowded: K3's test)
+            if (look_.plainHeaders) { // no lines (a line between sections was too crowded in testing)
                 p.Text(label, left, y + 4, Font::Gold);
                 break;
             }

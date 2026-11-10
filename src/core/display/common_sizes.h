@@ -1,4 +1,4 @@
-// Common screen sizes for the panel's resolution choice (R2b.1-9, docs/archive/resolution_ui_r2b1.md): 16:9, 16:10, 21:9,
+// Common screen sizes for the panel's resolution choice: 16:9, 16:10, 21:9,
 // 4:3, 5:4 and 3:2 sizes up to 4K, of which the panel lists those that fit the screen (not larger than its native
 // size, not smaller than the game's minimum), by default only those with the screen's aspect. Nothing here knows a
 // game: the minimum is the caller's.

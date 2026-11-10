@@ -13,8 +13,8 @@
 #include <cstdlib>
 #include <cstring>
 
-// Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e): docs/archive/resolution_ui_r5.md section 8, names and
-// calling conventions in docs/symbols.md.
+// Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e): the addresses below, names and
+// calling conventions next to each address.
 namespace emperor::zoom {
 namespace {
 
@@ -26,13 +26,13 @@ const Var<int> kMapRowMin{0x115f6e0};
 const Var<int> kMapRowMax{0x115f6dc};
 const Var<char> kGameScreen{0x10de045};
 const Var<char> kRedraw{0x10de036};
-// view_clamp's bottom margin (resolution_ui_r5.md section 9.1): map_bottom_margin 0x53d700 (__fastcall, ecx = 0xbebf38)
+// view_clamp's bottom margin: map_bottom_margin 0x53d700 (__fastcall, ecx = 0xbebf38)
 // reads this + 0x19628 + (0 for direction 0, 1 for 2, 2 for 4, 3 for any other) -- the highest tile along the edge at
 // the bottom of the screen (0x535960). view_clamp's bottom limit is the map's minus (margin + 4) when it is not 0.
 const Var<unsigned char> kBottomMargin{0xbebf38 + 0x19628}; // 4 bytes
 const Var<int> kDirection{0x101d0d0};                       // 0, 2, 4, 6
 // The game's mouse mode: drag_select_start 0x44bb00 sets 0x4d ('M') for a military drag selection (0x44bb0d), the
-// drag is drawn while it is 0x4d (0x54b46f) and drag_select_finish clears it (0x44c107). R5e's first test: the wheel
+// drag is drawn while it is 0x4d (0x54b46f) and drag_select_finish clears it (0x44c107). In testing: the wheel
 // zoomed during a drag although wheel messages with MK_LBUTTON are not taken (why MK_LBUTTON was not set then is not
 // known).
 const Var<unsigned char> kMouseMode{0x10de041};
@@ -41,10 +41,10 @@ const Var<int> kViewX{0x101d0ac};
 const Var<int> kViewY{0x101d0b0};
 // The view as city_render last drew it (its arguments), which mouse_to_grid adds to the cursor's view tile for the
 // view_to_grid lookup. viewport_init sets it to the map's middle (its first two arguments halved, 0xe4 -> 0x72 and
-// 0xe4), so after a relayout it is written again with the current view (resolution_ui_r5.md section 11.6).
+// 0xe4), so after a relayout it is written again with the current view.
 const Var<int> kViewDrawnX{0xadf8d8};
 const Var<int> kViewDrawnY{0xadf8d4};
-constexpr int kZoomCap = 150; // larger views cost too much speed (R5b's first test)
+constexpr int kZoomCap = 150; // larger views cost too much speed (seen in testing)
 
 using Void_fn = void(__cdecl *)();
 Void_fn o_ViewClamp;
@@ -55,7 +55,7 @@ int g_requested = 100;
 bool g_average = true;
 void (*g_relayout)() = nullptr;
 
-// R5d (resolution_ui_r5.md section 11): the wheel and the middle button move g_requested towards g_target, a little
+// The wheel and the middle button move g_requested towards g_target, a little
 // each frame (games/emperor/scroll calls Advance before the city is drawn), with the city point under g_anchor kept
 // under the cursor. Not saved: city_zoom in emperor_engine.ini is the scale at start-up.
 int g_target = 100;
@@ -92,9 +92,9 @@ int Margin()
     return kBottomMargin.ptr()[MarginIndex()];
 }
 
-// The half rows view_clamp can hold now: its bottom limit minus its top one (resolution_ui_r5.md section 9.1). The
+// The half rows view_clamp can hold now: its bottom limit minus its top one. The
 // margin is kept as the game has it: without it, the rows below raised ground at the bottom edge show leftovers of
-// earlier frames (nothing is drawn there; R5b's second test, r5b_city_zoom.md section 5).
+// earlier frames (nothing is drawn there; seen in testing).
 int ClampRows()
 {
     const int m = Margin();
@@ -172,10 +172,10 @@ int LimitNow()
     return g_now.limit > 0 ? g_now.limit : core::display::kZoomMax;
 }
 
-// R5d: the wheel and the middle button over the city as shown, on the city screens (resolution_ui_r5.md section 8.1:
+// The wheel and the middle button over the city as shown, on the city screens (game_screen
 // 1 and the army screens 0x48 / 0x49). Elsewhere (the sidebar: its building categories, other screens) the game has
 // them as always. Not 7: that is a sidebar panel's dialog over the city (religion, monuments, commerce ...;
-// docs/resolution_ui/r2_screens.md), whose lists scroll with the wheel in the game; R5d had taken it for a city
+// the screens this layer knows), whose lists scroll with the wheel in the game; an earlier version had taken it for a city
 // variant, so the wheel zoomed the city behind such a dialog instead of scrolling its list (0.2.0 release test).
 bool CityScreen()
 {
@@ -223,7 +223,7 @@ void TakeMouse(MouseCall &c)
     }
     c.taken = true;
     if (*kMouseMode == kMouseModeDragSelect) {
-        g_wheel = 0; // R5e: not during a military drag selection (its start corner is in the scale it began in)
+        g_wheel = 0; // not during a military drag selection (its start corner is in the scale it began in)
         return;
     }
     const int low = core::display::kZoomMin;
@@ -295,7 +295,7 @@ bool Attach()
         return false;
     }
     Install(kViewClamp, &ViewClamp_detour, o_ViewClamp);
-    core::display::SetMouseFilter(&MouseFilter); // R5d: the wheel and the middle button over the city
+    core::display::SetMouseFilter(&MouseFilter); // the wheel and the middle button over the city
     g_attached = true;
     core_log("zoom: city zoom installed (asked %d%%, shrinking %s)", g_requested, g_average ? "average" : "nearest");
     return true;
@@ -329,7 +329,7 @@ int ViewFor(int showW, int showH, int colPx, int halfH, int *cols, int *rows)
         *rows = g_now.rows;
     }
     const int key[7] = {g_now.percent, g_requested, g_lastMapCols, g_lastMapRows, g_lastClampRows, showW, showH};
-    if (!Animating() && std::memcmp(key, g_logged, sizeof(key)) != 0) { // R5d: once the wheel's movement ends
+    if (!Animating() && std::memcmp(key, g_logged, sizeof(key)) != 0) { // once the wheel's movement ends
         std::memcpy(g_logged, key, sizeof(key));
         // The buffer the drawing will use (games/emperor/scroll): the view plus one column and a row pair, a little
         // margin; 2 bytes a pixel.

@@ -1,4 +1,4 @@
-// Memory of an emulated DirectDraw surface (R2b.1, docs/archive/resolution_ui_r2b1.md): the rows the game sees, then spare
+// Memory of an emulated DirectDraw surface: the rows the game sees, then spare
 // rows filled with a canary pattern, with a guard page (reserved, never committed) before and after:
 //
 //   [guard page][rows 0 .. rows-1][spare rows (canary) ... to the page end][guard page]
@@ -42,7 +42,7 @@ struct CanaryDamage {
 bool CheckCanary(const SurfaceMemory &m, CanaryDamage *damage);
 
 // The spare rows a game draws into on purpose (e.g. a city clip that passes the screen's bottom by a few rows: the
-// original game's small tiles, 775 > 768 at 1024x768; R2b.1-5): writes there are expected, so the canary is checked
+// original game's small tiles, 775 > 768 at 1024x768): writes there are expected, so the canary is checked
 // only below them. Any thread; 0 (the default) checks all spare rows.
 void SetCanaryAllowance(int rows);
 int CanaryAllowance();

@@ -1,4 +1,4 @@
-// Screen output through SDL3 into the game's own window (CLAUDE.md: in the hook phase SDL3 only takes over the
+// Screen output through SDL3 into the game's own window (in the hook phase SDL3 only takes over the
 // picture; the window, its messages and all input stay with the game's Win32 code).
 //
 // The SDL window wraps the existing HWND; the window procedure is given straight back to its previous owner (SDL
@@ -9,7 +9,7 @@
 //
 // Two ways to present (emperor_engine.ini display.present):
 //
-//   original  Present() on the calling (game) thread, vsync off: exactly the frames the game presents (M3).
+//   original  Present() on the calling (game) thread, vsync off: exactly the frames the game presents.
 //
 //   display / cap60  An output thread of our own owns SDL (it calls SDL_Init, so it is SDL's video thread). The game
 //      thread only hands frames over with Submit(), which copies the picture into a triple buffer and returns: it
@@ -22,7 +22,7 @@
 //      FrameWanted() tells the game layer when the output thread is ready for a new frame (set after each present),
 //      so frames are copied at most once per refresh, not once per game loop iteration.
 //
-// Framed full-screen pictures (R2a, core/display/framing.h): a frame can carry a Framing. Then only its picture box
+// Framed full-screen pictures (core/display/framing.h): a frame can carry a Framing. Then only its picture box
 // is drawn, straight from the frame's own pixels into its place in the framed layout for the output size (one
 // resample), over the background layers the game layer composed for that layout (SetBackground; black until they
 // match). A status line (SetCaption) is drawn over the picture's bottom edge. Without framing the whole frame is
@@ -42,10 +42,10 @@ struct Framing {
     RECT picture{};      // the picture in frame pixels
     int below = 0;       // units of the framed block below the picture (e.g. a loading screen's status panel, drawn
                          // in the background): the layout is for the picture's width x (its height + below)
-    bool labels = false; // debug: the block is drawn plain white (for the layout check, tools/verify)
-    double scale = 0;    // > 0: the block at most at this scale (its own size times the display scale; R2d.1, 0.2.0
+    bool labels = false; // debug: the block is drawn plain white (for the layout check)
+    double scale = 0;    // > 0: the block at most at this scale (its own size times the display scale);
                          // item 8); 0: as large as fits (ComputeFrameLayout's maxScale)
-    bool gameCaption = false; // O2a: the status line (SetCaption) where the game's GDI line went inside the picture,
+    bool gameCaption = false; // the status line (SetCaption) where the game's GDI line went inside the picture,
                               // white on black, instead of on a dark strip over the picture's bottom
 };
 
@@ -76,11 +76,11 @@ void HoldNextFrame(DWORD holdMs);
 // Frames presented by the game (Present or Submit calls) and frames actually shown, since the last call.
 void TakeCounts(long *presented, long *shown);
 
-// Settings (P2): switches between display and cap60 while running (the output thread changes its vsync interval
+// Settings: switches between display and cap60 while running (the output thread changes its vsync interval
 // before its next frame). Returns false for a switch to or from original, which needs a restart.
 bool SetPresentMode(core_present_mode mode);
 
-// Settings (O3): nearest, linear or sharp bilinear from the next frame on (any thread). Direct3D 9 has no sharp
+// Settings: nearest, linear or sharp bilinear from the next frame on (any thread). Direct3D 9 has no sharp
 // bilinear of its own: there it is drawn in two passes (core/display/scaled_rect.h TwoPassFactor).
 void SetScaling(core_scaling scaling);
 
@@ -89,15 +89,15 @@ int RefreshHz();
 
 // Game thread, when the game shows its main screen (the city) for the first time: from then on the output measures
 // the frames per second it presents (once now, and again after each vsync change or rebuild) and logs the figure.
-// Before (O1 test 2026-10-28) it measured on the loading screens, where the figure says nothing.
+// Before, it measured on the loading screens, where the figure says nothing.
 void MeasureFromNow();
 
 // Game thread (the window's subclass): the user started (true) or ended (false) moving or sizing the window with the
 // mouse (WM_ENTERSIZEMOVE, WM_EXITSIZEMOVE). While it lasts the output is not rebuilt for the new size; it is once,
-// at the end (O1, docs/archive/optimization.md §1.5).
+// at the end.
 void SetSizing(bool on);
 
-// For the rate log (one caller): the intervals between the frames presented since the last call (O1g): count, mean,
+// For the rate log (one caller): the intervals between the frames presented since the last call: count, mean,
 // median, 95th percentile and maximum in ms, the share over 1.5 times the steady interval (the larger of the
 // output's limit -- one refresh, or N for cap60 -- and the median), and the share by whole refresh periods. "" when
 // no frame was presented.

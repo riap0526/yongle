@@ -1,7 +1,7 @@
 // The logical resolution a game draws, from the screen's native resolution and the settings
-// (docs/resolution_ui/display_scale.md §6.1, Augustus's display scale model):
+// (Augustus's display scale model):
 //   - fixed WxH: that size (the output scales it to the screen, black bars where the aspect differs);
-//   - scaled: native / scale (100..250 %, steps of 5), used as given. scale = auto (R4): a screen taller than 1080 px
+//   - scaled: native / scale (100..250 %, steps of 5), used as given. scale = auto: a screen taller than 1080 px
 //     is drawn exactly 1080 high at its own aspect (2560x1440 -> 1920x1080, 4K -> 1920x1080), at any ratio, not only
 //     the 5 % steps (scale_percent is then the ratio rounded); a smaller screen at its own size.
 // Either way the result is kept at least as large as the game's minimum (a scale is lowered to the largest step

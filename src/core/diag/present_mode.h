@@ -1,4 +1,4 @@
-// Present mode log (docs/resolution_ui/sdl_output_comparison.md §8; trial step 2026-11-07, second step 2026-11-07):
+// Present mode log:
 // how Windows puts our Direct3D 11 frames on the screen, to follow the black blocks that flash in full screen. Only
 // logs; changes nothing in the output.
 //

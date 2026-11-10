@@ -1,7 +1,7 @@
-// [debug] window_background_test (black block diagnosis, 2026-11-07): the game window's class background brush
+// [debug] window_background_test (black block diagnosis): the game window's class background brush
 // (GCLP_HBRBACKGROUND) becomes magenta (RGB 255,0,255) while the setting is on, and the original brush comes back when
 // it is switched off. The window's WM_ERASEBKGND goes to DefWindowProc, which fills the window's redirection surface
-// with the class brush (docs/symbols.md, game_wndproc), so if the blocks that flash are that surface they flash
+// with the class brush (game_wndproc), so if the blocks that flash are that surface they flash
 // magenta instead of black. Only the running class changes (nothing is saved anywhere); a failure switches the
 // feature off (core/diag/guard.h) and leaves the original brush.
 #pragma once

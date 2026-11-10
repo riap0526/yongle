@@ -1,8 +1,8 @@
-// The options window's texts for players (docs/archive/resolution_ui_original_settings.md §14.3): for each setting a short
+// The options window's texts for players: for each setting a short
 // description (the tooltip of its name) and, for choices, one description per choice (the tooltip of the value).
 // The registry's own help (core/settings) stays as it is for the panel and the settings file; these are shorter,
 // because each choice is explained only when it is the one shown. American English; checked for internal notes by
-// tools/verify/ini_template_check.py.
+// a text check.
 #pragma once
 
 namespace emperor::options_text {
@@ -36,11 +36,11 @@ extern const char *const kMenuGeneral, *const kMenuVideo, *const kMenuAudio, *co
 extern const char *const kCategoryMessages; // the options window's General > Messages (the message list opens it)
 
 // The Hotkeys window and "keep this setting?" (core/options Window::Texts; %s / %d as there).
-extern const char *const kHotkeysTitle, *const kColumnAction, *const kColumnKey, *const kColumnAlternative,
+extern const char *const kOptionsTitle, *const kHotkeysTitle, *const kColumnAction, *const kColumnKey, *const kColumnAlternative,
     *const kSectionGlobal, *const kPressKey, *const kKeyNotChanged, *const kKeyNotUsable, *const kKeyInUse,
     *const kKeyReserved, *const kKeyClearHint, *const kKeyTip, *const kKeepTitle, *const kKeepCountdown, *const kKeep, *const kRevert;
 
-// Our notices in the game's notice boxes (games/emperor/notice; docs/archive/game_notices.md). Our box is 400 pixels
+// Our notices in the game's notice boxes (games/emperor/notice). Our box is 400 pixels
 // wide for a text up to 320 pixels (with its side ornaments), 460 for a longer one. Errors are shown in red.
 extern const char *const kNoticeCitySaved, *const kNoticeMinimapSaved, *const kNoticeNotSaved, *const kNoticeBusy,
     *const kNoticeOnlyCity, *const kNoticeUnavailable, *const kNoticeNoMemory, *const kNoticeClosePanel;
@@ -53,7 +53,7 @@ extern const char *const kPausedOneKey, *const kPausedTwoKeys, *const kPausedNoK
 
 // The File menu's items for the screenshots (options_entry).
 extern const char *const kMenuCityScreenshot, *const kMenuMinimapScreenshot;
-// K4: the File menu's renamed items (also the titles of their confirmations) and the pause menu.
+// The File menu's renamed items (also the titles of their confirmations) and the pause menu.
 extern const char *const kMenuReplayMap, *const kMenuExitToMainMenu;
 extern const char *const kPauseTitle, *const kPauseContinue, *const kPauseOptions;
 

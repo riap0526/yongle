@@ -1,11 +1,11 @@
-// M4: pixel (smooth) scrolling of the city view (docs/m4_smooth_scroll.md).
+// Pixel (smooth) scrolling of the city view.
 //
 // The game's camera is view_x (tiles) / view_y (half rows, even). We add a pixel remainder (g_px, g_py).
 //
 // Drawing: the game's tile blitters (0x4527d0 and the others selected by 0x5cd8a0) only handle a tile cut exactly in
 // half at a clip edge; the city clip rectangle (viewport_init: left/top = origin, right/bottom = origin + whole
 // tiles) is always on that grid, so they never see anything else. Moving the origin by an arbitrary number of pixels
-// breaks that (the first M4 build wrote past the back buffer and crashed at 0x452931). So city_render draws exactly
+// breaks that (an early build wrote past the back buffer and crashed at 0x452931). So city_render draws exactly
 // as the game expects -- origin and clip on the tile grid -- but into our own buffer with the clip one column and one
 // row pair larger on the right and bottom, and the view rectangle is then copied to the back buffer offset by
 // (g_px, g_py). Everything city_render draws (tiles, figures, markers, the construction preview 0x46cb40) moves
@@ -28,13 +28,13 @@
 // and 4 half rows vertically every ((100-scroll_speed)/10)*12+2 ms (scroll_step_due 0x53a210), plus half a main-loop
 // iteration because the game only steps on the first iteration after that time.
 //
-// City zoom (R5, docs/archive/resolution_ui_r5.md sections 9-10): the game's view is the zoomed buffer's; the city
+// City zoom: the game's view is the zoomed buffer's; the city
 // is drawn into our buffer of that size and scaled onto the screen (RenderZoomed). Screen positions given to the
 // conversions are first turned into the buffer pixel they show, positions worked out outside the drawing are turned
 // back to the screen, the drag selection works in buffer pixels with only its frame put on the screen, and the
 // camera's speed is scaled so the screen scrolls as fast as at 100%.
 //
-// Failure (CLAUDE.md, docs/archive/resolution_ui_r2b.md §1): every call that changes game state for us runs under
+// Failure: every call that changes game state for us runs under
 // core/diag's guard with the changes in a Restore list (moved origin, larger viewport and clip, our buffer as
 // draw_buffer, the camera of this frame). On an exception the list is put back, smooth scrolling is switched off
 // for the rest of the run (remainder 0: the view snaps to its whole tile) and the call is made again the game's own
@@ -65,7 +65,7 @@ namespace emperor::scroll {
 namespace {
 
 // ---------------------------------------------------------------------------------------------
-// Addresses (docs/symbols.md)
+// Addresses
 
 const Site kCityRender{"city_render", 0x46a220, {0xa1, 0x1c, 0x3a, 0xb5, 0x00, 0x8b, 0x4c, 0x24}};
 const Site kScreenToGrid{"screen_to_grid", 0x469e50, {0x51, 0x53, 0x8b, 0x5c, 0x24, 0x0c, 0x55, 0x56}};
@@ -79,11 +79,11 @@ const Site kDragDraw{"drag_select_draw", 0x44bb90, {0x83, 0xec, 0x0c, 0x8b, 0x15
 const Site kDragFinish{"drag_select_finish", 0x44bea0, {0x83, 0xec, 0x24, 0xa1, 0xac, 0xd0, 0x01, 0x01}};
 const Site kViewClamp{"view_clamp", 0x53cbd0, {0x51, 0x53, 0x8b, 0x1d, 0xe0, 0xf6, 0x15, 0x01}};
 const Site kSoundViewDecay{"sound_view_decay", 0x4456a0, {0xb9, 0x14, 0xf6, 0xa4, 0x00, 0x8d, 0x51, 0x08}};
-// line_draw(x1, y1, x2, y2, colour): __cdecl, ret (the caller pops; tools/recon/callconv.py). R5c: the drag
-// selection's frame is worked out in zoomed-buffer pixels and drawn on the screen (resolution_ui_r5.md section 10.2).
+// line_draw(x1, y1, x2, y2, colour): __cdecl, ret (the caller pops; checked by disassembly). The drag
+// selection's frame is worked out in zoomed-buffer pixels and drawn on the screen.
 const Site kLineDraw{"line_draw", 0x5292d0, {0x8b, 0x44, 0x24, 0x10, 0x8b, 0x4c, 0x24, 0x08}};
 // city_view_width_px(): __cdecl, no arguments, ret; (tile width + 2) x viewport columns. Its only caller is the
-// "Game paused" banner (0x5b6e93: x = (width - 0x1c0) / 2). R5e: zoomed, the city's width on the screen.
+// "Game paused" banner (0x5b6e93: x = (width - 0x1c0) / 2). Zoomed, the city's width on the screen.
 const Site kCityWidth{"city_view_width_px", 0x46a1b0, {0xa1, 0xb8, 0xf8, 0xad, 0x00, 0x83, 0xc0, 0x02}};
 
 // Return addresses of the scroll_get_direction calls whose result goes to view_scroll_step (the city view); the
@@ -122,7 +122,7 @@ const Var<int> kScreenPitch{0x10de000};  // bytes per row
 const Var<int> kDdWidth{0x10de008};
 const Var<int> kDdHeight{0x10de004};
 const Var<int> kSidebarX{0x13f8e0c};
-const Var<unsigned char> kMouseMode{0x10de041}; // 0x4d during a military drag selection (docs/symbols.md)
+const Var<unsigned char> kMouseMode{0x10de041}; // 0x4d during a military drag selection
 constexpr unsigned char kMouseModeDragSelect = 0x4d;
 const Var<int> kCursorTile{0x101d0b4};             // the cursor's tile index (cursor_tile_update 0x405500)
 const Var<signed char> kTileHeights{0xbebf38 + 2}; // map_tile_height 0x408cf0: this + 2 + tile, 228 x 228
@@ -130,7 +130,7 @@ constexpr int kMapTiles = 228 * 228;
 
 core::diag::Feature g_feature{"smooth scrolling (games/emperor/scroll)"};
 
-// R5c (docs/archive/resolution_ui_r5.md section 10): while the city is zoomed, the game works in the zoomed buffer's
+// While the city is zoomed, the game works in the zoomed buffer's
 // pixels and the screen shows that buffer scaled. A screen position goes to the game as the buffer pixel it shows
 // (ZoomToBuffer), a position the game works out outside the drawing comes back to the screen (ZoomToScreen); the
 // smooth-scrolling remainder is the origin shift below, as before.
@@ -171,7 +171,7 @@ void FallBack()
         logged = true;
         core_log("scroll: smooth scrolling is off after an error: the game's whole-tile scrolling from now on");
     }
-    // R5: the zoomed view must not reach the game's own drawing (straight into the back buffer): 100% first.
+    // The zoomed view must not reach the game's own drawing (straight into the back buffer): 100% first.
     emperor::zoom::Off("smooth scrolling was switched off after an error");
 }
 
@@ -255,7 +255,7 @@ bool Shifts()
 
 // Moves the origin by the remainder for one conversion call (screen-to-grid also gets a viewport one column and
 // a row pair larger, unless city_render has made it larger already); mouse: the game's mouse as the buffer pixel it
-// shows (R5c, mouse_to_grid). Every change goes into r.
+// shows (mouse_to_grid). Every change goes into r.
 void BeginShift(core::diag::Restore &r, bool grow, bool mouse)
 {
     r.Set(&g_depth, 1);
@@ -285,7 +285,7 @@ Shown ShownCity()
         return g_renderShown;
     }
     ZoomMap m;
-    if (ZoomNow(&m)) { // R5c: the viewport is the buffer's then, larger than the city on the screen
+    if (ZoomNow(&m)) { // the viewport is the buffer's then, larger than the city on the screen
         return {m.left, m.top, m.showRight, m.showBottom};
     }
     const int left = *kClipLeft, top = *kClipTop;
@@ -298,7 +298,7 @@ Shown ShownCity()
 // Screen-to-grid only takes a point inside origin + viewport (mouse_to_grid 0x469c60, screen_to_grid 0x469e50).
 // With the origin moved by the remainder and the viewport a column and a row pair larger (BeginShift), that reached
 // up to a column into the sidebar and up to the remainder into the top bar, so the cursor tile and clicks went
-// through them to the city (playtest 2026-11-01, since M4). A point outside the city as shown is no tile (0, what the
+// through them to the city (seen in testing, since smooth scrolling). A point outside the city as shown is no tile (0, what the
 // game returns outside its bounds, without calling it). With the game's own layout and no remainder the game decides
 // as always.
 bool OffShownCity(int x, int y)
@@ -442,7 +442,7 @@ HeldKey g_left{kKeyLeft, VK_LEFT}, g_right{kKeyRight, VK_RIGHT}, g_up{kKeyUp, VK
 
 int g_lastFrame = -1;
 
-// R5d: the scale's factors now (buffer pixels per screen pixel; 1 at 100%) and where the city starts on the screen.
+// The scale's factors now (buffer pixels per screen pixel; 1 at 100%) and where the city starts on the screen.
 bool Factors(ZoomMap *m)
 {
     if (ZoomNow(m)) {
@@ -457,7 +457,7 @@ bool Factors(ZoomMap *m)
 
 double g_zoomShiftX = 0, g_zoomShiftY = 0; // the anchor's shift not moved yet (fractions; whole tiles when not smooth)
 
-// R5d (resolution_ui_r5.md section 11.2): the scale one step towards the wheel's target, laid out, and the view moved
+// The scale one step towards the wheel's target, laid out, and the view moved
 // so the city point under the anchor (the cursor at the last notch) stays under it. At the map's edges view_clamp has
 // the last word (the point then moves a little, as in Augustus).
 void ZoomStep()
@@ -497,7 +497,7 @@ void ZoomStep()
     g_lastViewX = *kViewX; // also when only the layout's clamp moved it: not "someone else" (SyncView)
     g_lastViewY = *kViewY;
     // viewport_init (the relayout) set the drawn view's copy to the map's middle; mouse_to_grid looks tiles up from
-    // it until city_render writes it again, so the cursor tile (the building preview) jumped meanwhile (R5d's first
+    // it until city_render writes it again, so the cursor tile (the building preview) jumped meanwhile (seen in
     // test). The view as city_render will draw it.
     *kViewDrawnX = *kViewX;
     *kViewDrawnY = *kViewY;
@@ -521,7 +521,7 @@ void SmoothFrame()
     double stepMs = idx * 12 + 2 + g_frameMs / 2;
     double vx = (*kTileWidth + 2) / stepMs, vy = (4 * *kTileHalfHeight) / stepMs;
     ZoomMap m;
-    if (ZoomNow(&m)) { // R5c: the camera moves in buffer pixels; on the screen as fast as at 100%
+    if (ZoomNow(&m)) { // the camera moves in buffer pixels; on the screen as fast as at 100%
         vx *= m.fx;
         vy *= m.fy;
     }
@@ -532,7 +532,7 @@ void SmoothFrame()
     Move(dx, dy);
 }
 
-// Once per game_frame, before the city is drawn: the wheel's zoom step (R5d), then smooth scrolling. r: the camera,
+// Once per game_frame, before the city is drawn: the wheel's zoom step, then smooth scrolling. r: the camera,
 // view_scrolling and the key flags as they were before the frame (put back if the frame is abandoned; kept when it
 // completes).
 void Frame(core::diag::Restore &r)
@@ -602,7 +602,7 @@ struct RenderCall {
     core::diag::Restore r;
 };
 
-// Where the time goes (R2b.1-3, core/diag/perf.h): the game drawing the city (city_render's own work) and our copies
+// Where the time goes (core/diag/perf.h): the game drawing the city (city_render's own work) and our copies
 // to and from the city buffer.
 const int kCityDrawPhase = core::diag::perf::Register("city drawn by the game", core::diag::perf::Thread::Game);
 const int kCityCopyPhase = core::diag::perf::Register("city buffer copies (ours)", core::diag::perf::Thread::Game);
@@ -629,14 +629,14 @@ void DrawPlain(RenderCall &c, bool offGrid, int right, int bottom)
     c.r.Undo();
 }
 
-// R5 (docs/archive/resolution_ui_r5.md section 8.7): the game's view is the zoomed one (games/emperor/zoom via
+// The game's view is the zoomed one (games/emperor/zoom via
 // games/emperor/resolution), bufW x bufH pixels of city for the showW x showH pixels on the screen. The game draws it
 // into our buffer, on the tile grid as always, with one more column and two more half rows for the remainder; while
 // it draws, draw_buffer, screen_pitch, dd_width and dd_height are our buffer's (the blitters address rows with
 // screen_pitch, and image_draw_core / image_clip_x cull against dd_width), and all are put back after. The visible
 // part (from the remainder) is then shrunk (average or nearest) or enlarged (sharp bilinear) onto the screen.
 // Before drawing, the view is checked against the map's range again (zoom::Recheck); a view that does not fit is not
-// drawn at all (never larger than the map: resolution_ui_r5.md section 8.2).
+// drawn at all (never larger than the map).
 int g_zoomPitchPx = 0, g_zoomRows = 0; // the buffer's last layout (cleared when it changes)
 int g_zoomRight2 = 0, g_zoomBottom2 = 0;
 bool g_loggedZoomSkip = false;
@@ -674,7 +674,7 @@ bool RenderZoomed(RenderCall &c)
     }
     int pitchPx = (right2 + 2 + 15) & ~15;
     int totalRows = bottom2 + 2 * rowPx; // spare rows below the clip, as the back buffer has
-    // R5d: while the wheel moves the scale, the layout changes every frame. The buffer then keeps the largest scale's
+    // While the wheel moves the scale, the layout changes every frame. The buffer then keeps the largest scale's
     // pitch and rows, so it is not cleared whole every frame (36 MB at 150%); only what a larger layout adds is
     // cleared. When the movement ends the layout is the exact one again and the buffer is cleared once.
     const bool moving = emperor::zoom::Moving();
@@ -762,10 +762,10 @@ bool RenderZoomed(RenderCall &c)
     return true;
 }
 
-// city_render with the pixel remainder (see the top of this file) and the extent (R2b.1). While the game draws,
+// city_render with the pixel remainder (see the top of this file) and the extent. While the game draws,
 // draw_buffer, the clip's right and bottom and the viewport size are ours (all in c.r, put back after the draw or
 // when it is abandoned). The clip stays on the tile grid (whole columns, whole half rows): the game's quick tile
-// drawing only handles tiles cut in half (m4_smooth_scroll.md §8). The grid clip is worked out from the viewport as
+// drawing only handles tiles cut in half. The grid clip is worked out from the viewport as
 // viewport_init does (right = left + cols x (tile width + 2) - 2, bottom = top + (rows - 1) x half height), not
 // read from the clip itself: while the city message panel is laid out (games/emperor/resolution, 0x50bf10) the
 // clip holds the extent, which is not on the grid.
@@ -909,7 +909,7 @@ void __cdecl CityRender_detour(int vx, int vy, int orientation)
     }
 }
 
-// R5c: a screen position as the zoomed buffer pixel it shows (unchanged at 100% and in the drag's buffer mode).
+// A screen position as the zoomed buffer pixel it shows (unchanged at 100% and in the drag's buffer mode).
 void ToBuffer(int *x, int *y)
 {
     ZoomMap m;
@@ -931,13 +931,13 @@ int __cdecl ScreenToGrid_detour(int x, int y)
     return r;
 }
 
-// R5e: during a military drag selection the cursor's tile (0x405500, from mouse_to_grid) is the frame's moving corner.
+// During a military drag selection the cursor's tile (0x405500, from mouse_to_grid) is the frame's moving corner.
 // Edge scrolling puts the cursor on the sidebar or the top bar, where there is no tile (0): the corner then lies far
 // away, drag_select_box_valid 0x44c120 says no and the frame is not drawn until the cursor is back on the city (the
-// original does the same; R5e's second test). While the drag lasts, the mouse is kept to the city as shown for
+// original does the same; seen in testing). While the drag lasts, the mouse is kept to the city as shown for
 // mouse_to_grid, so the corner stays at the city's edge and the frame stays (scrolling reads the raw cursor).
 // A drag is a frame only from the city, and once the cursor is more than kDragPx away from where it was pressed on
-// both axes (R5e's fifth test): a press on the sidebar (the game starts a drag for any press that hits no soldier,
+// both axes (seen in testing): a press on the sidebar (the game starts a drag for any press that hits no soldier,
 // 0x54b496) or a small drag stays a click as in the original -- released, a click with no frame orders the selected
 // company to the cursor's tile (0x407300), none off the city. The game's own threshold is 4 (0x44c310: frame wider
 // and taller than 2), which with tile-snapped corners meant "into another tile".
@@ -995,10 +995,10 @@ int __cdecl ScreenToGridRaw_detour(int x, int y, int unused)
     return r;
 }
 
-// R5e: the drag frame's corners follow the cursor pixel by pixel. drag_select_start / drag_select_draw take a corner
+// The drag frame's corners follow the cursor pixel by pixel. drag_select_start / drag_select_draw take a corner
 // from grid_to_screen of the cursor's tile (0x101d0b8 / 0x101d0bc) less the tile's height x 40 (0x44bb38.., 0x44bbc4..):
 // the frame then jumps by tiles (a column sideways is also half a row up or down) and an edge tile's position can lie
-// off the city, so the frame is dropped at the left and top edges (drag_select_box_valid 0x44c120; R5e's third test).
+// off the city, so the frame is dropped at the left and top edges (drag_select_box_valid 0x44c120; seen in testing).
 // For those two calls the result is the cursor (kept to the city as shown, in the game's coordinates: the buffer pixel
 // it shows while zoomed) plus the height the game takes off again.
 constexpr DWORD kDragStartCorner = 0x44bb29; // return addresses of their grid_to_screen calls
@@ -1010,7 +1010,7 @@ bool DragCorner(int *sx, int *sy)
         return false; // a drag from the sidebar or the top bar: the game's own (no frame, as in the original)
     }
     // While drag_select_draw runs zoomed, dd_height is the buffer's (DragBody): the city as shown comes from the
-    // drag's own map, taken before (with ShownCity the corner stopped at the buffer's height below 100%: R5e's fourth
+    // drag's own map, taken before (with ShownCity the corner stopped at the buffer's height below 100%: in a
     // test).
     ZoomMap m;
     const bool zoomed = g_dragLines ? (m = g_dragMap, true) : ZoomNow(&m);
@@ -1049,13 +1049,13 @@ void __cdecl GridToScreen_detour(int gx, int gy, int *sx, int *sy)
     const bool outer = g_depth == 0;
     Converted(false, call);
     ZoomMap m;
-    if (outer && !g_bufferMode && sx && sy && ZoomNow(&m)) { // R5c: back to the screen
+    if (outer && !g_bufferMode && sx && sy && ZoomNow(&m)) { // back to the screen
         *sx = ScreenX(m, *sx);
         *sy = ScreenY(m, *sy);
     }
 }
 
-// R5c: the drag selection's frame, worked out in buffer pixels (buffer mode), drawn on the screen.
+// The drag selection's frame, worked out in buffer pixels (buffer mode), drawn on the screen.
 using Line_fn = void(__cdecl *)(int, int, int, int, int);
 Line_fn o_Line;
 int g_dragScreenH = 0; // dd_height as the screen's while drag_select_draw has it as buffer pixels
@@ -1070,8 +1070,8 @@ void __cdecl Line_detour(int x1, int y1, int x2, int y2, int colour)
     x2 = ScreenX(g_dragMap, x2);
     y1 = ScreenY(g_dragMap, y1);
     y2 = ScreenY(g_dragMap, y2);
-    // line_draw's pixels (0x5292a0) are dropped at dd_width / dd_height: the screen's for screen positions (R5e's
-    // first test: at 50% the frame's lower part was cut off at the buffer's height). Put back by DragBody's Restore
+    // line_draw's pixels (0x5292a0) are dropped at dd_width / dd_height: the screen's for screen positions (seen in
+    // test at 50% the frame's lower part was cut off at the buffer's height). Put back by DragBody's Restore
     // too, if this faults.
     const int bufferH = *kDdHeight;
     *kDdHeight = g_dragScreenH;
@@ -1079,8 +1079,8 @@ void __cdecl Line_detour(int x1, int y1, int x2, int y2, int colour)
     *kDdHeight = bufferH;
 }
 
-// R5e: the "Game paused" banner is centred on the city's width: the city as shown, up to the sidebar. The game's is
-// whole columns (2320 of 2334 px at 2560x1440: 7 px left of the middle), zoomed the buffer's (R5e's second test).
+// The "Game paused" banner is centred on the city's width: the city as shown, up to the sidebar. The game's is
+// whole columns (2320 of 2334 px at 2560x1440: 7 px left of the middle), zoomed the buffer's (seen in testing).
 // The game's own layouts (no extent) keep the game's width.
 using CityWidth_fn = int(__cdecl *)();
 CityWidth_fn o_CityWidth;
@@ -1138,11 +1138,11 @@ void __cdecl ScrollStep_detour(int dir)
 // moved by whole tiles when the view scrolls during the drag. With a pixel remainder the start corner must also move
 // by the change of the remainder since the drag started.
 //
-// R5c, zoomed: the three functions work in buffer pixels (the corners come from grid_to_screen, less the ground's
+// Zoomed: the three functions work in buffer pixels (the corners come from grid_to_screen, less the ground's
 // height x 40; the start moves by whole tiles x tile_width; the selection steps through the frame by tile_width and
 // asks screen_to_grid_unbounded) -- buffer mode, so none of their positions is converted to the screen and back.
 // Only the frame drawn (drag_select_draw: line_draw) goes to the screen, with sidebar_x and dd_height, its limits,
-// as buffer pixels meanwhile (resolution_ui_r5.md section 10.2, point 4).
+// as buffer pixels meanwhile.
 struct DragCall {
     int *drag;
     Drag_fn original;
@@ -1154,7 +1154,7 @@ void DragBody(DragCall &c)
 {
     c.r.Set(&g_bufferMode, true);
     // The start corner follows the view by (view_x moved) x tile_width (0x44bc3c), but a column is tile_width + 2: 2 px
-    // per column scrolled (R5e) besides the remainder's change.
+    // per column scrolled besides the remainder's change.
     const int dx = g_px - g_dragPx0 + (c.start ? 0 : 2 * (*kViewX - c.drag[0])), dy = g_py - g_dragPy0;
     if (!c.start && (dx != 0 || dy != 0)) {
         c.r.Set(&c.drag[2], c.drag[2] - dx); // the start corner, for this call
@@ -1181,7 +1181,7 @@ bool DragPlain(const int *drag)
 void __fastcall DragStart_detour(int *drag)
 {
     const Drag_fn original = Original(o_DragStart, kDragStart);
-    // R5e: where the drag was pressed (the frame follows the cursor only from the city), before the game takes its
+    // Where the drag was pressed (the frame follows the cursor only from the city), before the game takes its
     // corner (grid_to_screen, DragCorner).
     g_dragStartX = *kMouseX;
     g_dragStartY = *kMouseY;
@@ -1346,7 +1346,7 @@ void SetCityExtent(int right, int bottom)
 void SaveCityBuffer(int report)
 {
     if (!g_city || g_cityPitch <= 0 || g_cityRows <= 0) {
-        core_log("report #%d: the M4 city buffer has not been used yet (no pixel offset drawn since the start)", report);
+        core_log("report #%d: the smooth scrolling city buffer has not been used yet (no pixel offset drawn since the start)", report);
         return;
     }
     static core::diag::Feature save{"report: city buffer (games/emperor/scroll)"};

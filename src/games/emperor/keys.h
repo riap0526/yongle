@@ -1,4 +1,4 @@
-// Key bindings (0.2.0 item 7, docs/archive/key_bindings.md): every key the game uses in the city, and ours, as actions with
+// Key bindings: every key the game uses in the city, and ours, as actions with
 // up to two keys each ([keys] in emperor_engine.ini, changed in the Hotkeys window). On the city screens a key press
 // that belongs to an action becomes the key the game itself expects for it (sent to the game's window procedure); a
 // game key that belongs to no action any more is kept from the game; other keys go through. Other screens (saving,
@@ -38,7 +38,7 @@ const char *PauseText();
 int ActionCount();
 const ActionInfo &Action(int i);
 
-// Offline tests (proxy/ddraw/test_restore.cpp): the translator and the key-state filter as installed.
+// Offline tests (src/games/emperor/test_restore.cpp): the translator and the key-state filter as installed.
 bool TranslateForTest(UINT message, WPARAM wparam, LPARAM lparam);
 SHORT KeyStateForTest(int vk, SHORT real);
 

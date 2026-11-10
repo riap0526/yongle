@@ -1,4 +1,4 @@
-// Picture files for backgrounds (R2d.1: the front-end screens' city background): PNG or BMP, read with SDL3's own
+// Picture files for backgrounds (the front-end screens' city background): PNG or BMP, read with SDL3's own
 // loaders (SDL_LoadPNG, SDL_LoadBMP; no other library). Nothing here knows a game.
 #pragma once
 

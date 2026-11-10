@@ -1,4 +1,4 @@
-// A picture of RGB565 pixels shown larger somewhere else (R2c: the China map, games/emperor/china_map.cpp), and the
+// A picture of RGB565 pixels shown larger somewhere else (e.g. the China map, games/emperor/china_map.cpp), and the
 // blurred, darkened copy of it used as the background around it (as Augustus does for its empire map). Nothing here
 // knows a game.
 //
@@ -25,7 +25,7 @@ struct Target16 {
     int w, h;
 };
 
-// How the output rows of a scaling are worked through (R5: core/platform/parallel). A ForRows calls fn(ctx, begin,
+// How the output rows of a scaling are worked through (core/platform/parallel). A ForRows calls fn(ctx, begin,
 // end) for pieces that together cover [0, count) once each -- in any order, possibly on several threads at the same
 // time -- and returns when all are done. nullptr: fn(ctx, 0, count) on the calling thread. Every output row is
 // written by exactly one piece and depends only on the source, so the result is the same either way.
@@ -38,7 +38,7 @@ using ForRows = void (*)(int count, RowsFn fn, void *ctx);
 bool ScaleRgb565(const Pixels16 &src, double scale, bool sharp, const Target16 &dst, int x, int y, const RECT &clip,
                  ForRows forRows = nullptr);
 
-// R5: src shrunk to outW x outH (outW <= src.w, outH <= src.h) at dst's first row and column. average: each output
+// src shrunk to outW x outH (outW <= src.w, outH <= src.h) at dst's first row and column. average: each output
 // pixel the area-weighted average of exactly the source area it covers (src.w / outW x src.h / outH pixels; a pixel
 // cut by its edge counts by the part covered, in 32nds), so details do not blink as the picture moves by a pixel;
 // otherwise nearest (the pixel in the middle of each whole-pixel block). False (nothing written) when the arguments
@@ -55,7 +55,7 @@ bool ScaledToSource(int dx, int dy, int x, int y, double scale, int srcW, int sr
 // gradients would otherwise show bands). Full resolution: meant to be computed once per picture and size.
 void BlurredBackdrop(const Pixels16 &src, int w, int h, double sigma, int brightness, std::vector<WORD> *out);
 
-// O3: sharp bilinear in two passes for a renderer without it (Direct3D 9): the srcW x srcH picture drawn scaled by
+// Sharp bilinear in two passes for a renderer without it (Direct3D 9): the srcW x srcH picture drawn scaled by
 // (scaleX, scaleY) is first enlarged k times with nearest into a render target, then scaled to its place with linear,
 // so each output pixel blends at most two neighbouring source pixels. Returns k (>= 2, the smallest whole number at
 // least as large as the scale, lowered while k srcW or k srcH exceeds maxTexture); 1 when no second pass is needed

@@ -1,4 +1,4 @@
-// City picture and minimap picture (0.2.0, docs/archive/city_export.md): a key saves the whole city the player
+// City picture and minimap picture (0.2.0): a key saves the whole city the player
 // can scroll to as one PNG at the game's own pixel size, without the interface, or the minimap of the whole map.
 //   [ui] city_picture_key = F10           [ui] minimap_picture_key = Shift+F10
 //   [ui] minimap_picture_scale = 1 | 2 | 4

@@ -75,7 +75,7 @@ bool Direct3d9()
 
 // The scale mode our textures are drawn with. Sharp bilinear: SDL's "pixel art" mode samples nearest texels and blends
 // only across texel edges (about one output pixel wide); Direct3D 9 samples it as nearest (SDL 3.4.18,
-// UpdateTextureScaleMode), so there the textures are nearest and DrawScaled adds the second pass (O3).
+// UpdateTextureScaleMode), so there the textures are nearest and DrawScaled adds the second pass.
 SDL_ScaleMode ScaleMode()
 {
     switch (g_scaling) {
@@ -110,7 +110,7 @@ void SetScaling(SDL_Texture *t)
 }
 
 // ---------------------------------------------------------------------------------------------
-// O3 (docs/archive/optimization.md): sharp bilinear on Direct3D 9 in two passes -- the texture enlarged k times with nearest
+// Sharp bilinear on Direct3D 9 in two passes -- the texture enlarged k times with nearest
 // into a render target of ours, then that drawn to its place with linear. SDL's Direct3D 9 renderer moves every
 // vertex by half a pixel (SDL_render_d3d.c, QueueGeometry), for render targets as for the screen.
 
@@ -240,7 +240,7 @@ bool DrawScaled(TwoPass &p, SDL_Texture *src, int sw, int sh, const SDL_FRect &d
     if (core::diag::Guarded(g_twoPassFeature, [](void *q) { DrawScaledTwoPass(*static_cast<ScaledDraw *>(q)); }, &d)) {
         return d.ok;
     }
-    SDL_SetRenderTarget(g_renderer, nullptr); // switched off after an error: nearest, as before O3
+    SDL_SetRenderTarget(g_renderer, nullptr); // switched off after an error: nearest in one pass
     DropTwoPasses();
     return SDL_RenderTexture(g_renderer, src, nullptr, &dst);
 }
@@ -390,7 +390,7 @@ void ReadBackForCapture(int ow, int oh)
         core_log("screenshot: reading back the %dx%d screen failed: %s", ow, oh, SDL_GetError());
         return;
     }
-    const char *renderer = SDL_GetRendererName(g_renderer); // O3: in the file name (their scaling differs)
+    const char *renderer = SDL_GetRendererName(g_renderer); // in the file name (their scaling differs)
     core::capture::SaveScreen(s, stem, time, GetTickCount() - t,
                               !renderer                                 ? nullptr
                               : std::strcmp(renderer, "direct3d") == 0   ? "d3d9"
@@ -447,7 +447,7 @@ int VsyncFor(int refresh)
 }
 
 // ---------------------------------------------------------------------------------------------
-// O1g (docs/archive/optimization.md): how Direct3D 9 is paced, an experiment ([debug] d3d9_pacing). With vsync its present
+// How Direct3D 9 is paced, an experiment ([debug] d3d9_pacing). With vsync its present
 // took 7.5 ms on average at 200 Hz (5 ms per refresh) and the game handed over fewer frames while the output was
 // still presenting (FrameWanted). timer: vsync off, and before each present we wait until one refresh (cap60: N) after
 // the last one: a high-resolution waitable timer up to about 1 ms before, then a busy wait on the performance
@@ -582,7 +582,7 @@ void PaceAfterPresent()
     }
 }
 
-// Frame intervals (O1g, all renderers): the time between presents, kept for the rate log (TakeIntervals).
+// Frame intervals (all renderers): the time between presents, kept for the rate log (TakeIntervals).
 SRWLOCK g_ivLock = SRWLOCK_INIT;
 constexpr int kIvMax = 8192;
 float g_iv[kIvMax];
@@ -612,7 +612,7 @@ void RecordInterval()
 }
 
 // Sets the vsync interval: logs what was asked, whether SDL took it (an interval the device does not offer falls back
-// to 1), and then, once, the frames per second actually presented over the next seconds while frames keep coming (O1:
+// to 1), and then, once, the frames per second actually presented over the next seconds while frames keep coming:
 // Direct3D 9 in a window may accept 4 and still present every refresh, so cap60 would not cap).
 std::atomic<long> g_measureFrames{-1}; // frames presented since the measurement started; -1: not measuring
 DWORD g_measureStart = 0;                 // output thread only
@@ -622,7 +622,7 @@ std::atomic<bool> g_measureRestart{false}; // MeasureFromNow: start again at the
 void ApplyVsync(int interval)
 {
     if (g_pacing != kPaceVsync && interval > 0) {
-        interval = 0; // O1g: paced by us
+        interval = 0; // paced by us
     }
     const bool ok = SDL_SetRenderVSync(g_renderer, interval);
     g_vsync = ok ? interval : 1;
@@ -673,20 +673,20 @@ void MeasureVsync()
     }
 }
 
-// O1 (docs/archive/optimization.md §1.4, 2026-10-28): in a window Direct3D 9 showed the picture out of proportion after a
+// In a window Direct3D 9 showed the picture out of proportion after a
 // resize, Direct3D 11 did not. Direct3D 9's back buffer has the size SDL gives it (SDL's idea of the window, which
 // never hears of size changes: its window procedure is not in the chain); Direct3D 11's swap chain follows the
 // window. Logged after each creation and device reset: the real back buffer, the window's client area and SDL's sizes;
 // and, checked every second (CheckWindowState, when is null), whenever the two differ in a way not logged yet.
 //
-// The second test (2026-10-28) showed why: the rebuild runs on the output thread while the window is still being
+// Testing showed why: the rebuild runs on the output thread while the window is still being
 // dragged on the game thread, so Direct3D 9 took the client size of that moment (say 1701 wide) and the drag went on
 // (to 1024). SDL's render output size for Direct3D 9 is the window's live size, not the back buffer's, so it matched
 // the client and no rebuild followed; Direct3D 11's output size is its swap chain's, so it rebuilt once more. The
 // rebuild is now decided on the real back buffer (g_backW/H, read after each creation and device reset).
 int g_backW = -1, g_backH = -1; // the renderer's back buffer; -1: not known (then its output size is used)
 
-// 2026-10-29: and no rebuild while the window is being dragged. During a size-move (SetSizing, from the game
+// And no rebuild while the window is being dragged. During a size-move (SetSizing, from the game
 // thread) the frames are drawn at the old size and stretched; at its end the output is rebuilt once. Outside a
 // size-move (maximise, restore, F5, a resize by another program) it is rebuilt when the client size has stayed the
 // same for kSettleMs. A size-move longer than kSizingMaxMs counts as ended (should WM_EXITSIZEMOVE never come).
@@ -747,7 +747,7 @@ void LogBackBuffer(const char *when)
     static long lastDiff[4] = {};
     if (!when) {
         const long diff[4] = {bw, bh, cr.right, cr.bottom};
-        // a 0x0 client: the window is closing (2026-10-30), not worth a line
+        // a 0x0 client: the window is closing, not worth a line
         if (bw < 0 || same || cr.right <= 0 || cr.bottom <= 0 || std::memcmp(diff, lastDiff, sizeof(diff)) == 0) {
             return;
         }
@@ -840,8 +840,8 @@ bool Create(bool first)
     }
     bool restored = GetWindowLongPtrA(g_hwnd, GWLP_WNDPROC) != proc;
     SetWindowLongPtrA(g_hwnd, GWLP_WNDPROC, proc);
-    // auto: Direct3D 11, also with the Steam overlay (until the B plan Direct3D 9 was chosen then: with Steam's FPS
-    // counter Direct3D 11 stopped for about 2.5 s every 10-30 s; docs/archive/affinity.md section 7.5). If the first cannot
+    // auto: Direct3D 11, also with the Steam overlay (before the processor affinity change, Direct3D 9: with Steam's FPS
+    // counter Direct3D 11 stopped for about 2.5 s every 10-30 s). If the first cannot
     // start, the other one, then SDL's default.
     const int setting = core_config_get()->renderer;
     const bool steam = GetModuleHandleW(L"gameoverlayrenderer.dll") != nullptr;
@@ -1001,7 +1001,7 @@ core::diag::Feature g_overlayFeature{"performance overlay (core/output)"};
 
 void DrawFrame(const void *pixels, int pitch, int w, int h, const RECT &dst, SIZE client, const Framing &fr)
 {
-    // Where the output's time goes (R2b.1-3): one sample per frame drawn.
+    // Where the output's time goes: one sample per frame drawn.
     static const int kTotal = perf::Register("output frame", perf::Thread::Output, true);
     static const int kUpload = perf::Register("upload to the texture", perf::Thread::Output);
     static const int kDraw = perf::Register("draw (and overlays)", perf::Thread::Output);
@@ -1010,7 +1010,7 @@ void DrawFrame(const void *pixels, int pitch, int w, int h, const RECT &dst, SIZ
     if (!g_renderer || w <= 0 || h <= 0) {
         return;
     }
-    struct Watched { // O1: a frame of a second or more is sampled (core/diag/stall)
+    struct Watched { // a frame of a second or more is sampled (core/diag/stall)
         Watched() { core::diag::stall::Begin(core::diag::stall::Thread::Output); }
         ~Watched() { core::diag::stall::End(core::diag::stall::Thread::Output); }
     } watched;
@@ -1163,7 +1163,7 @@ void DrawFrame(const void *pixels, int pitch, int w, int h, const RECT &dst, SIZ
     perf::EndSample(perf::Thread::Output);
     // A present that fails returns at once (Direct3D 9 while its device is lost: Ctrl+Alt+Del, a sleep, another
     // program in exclusive full screen): wait about one refresh instead of spinning, and log only the start and the
-    // end of such a spell (O1).
+    // end of such a spell.
     static DWORD failingSince = 0;
     static long failures = 0;
     if (!presented) {
@@ -1204,7 +1204,7 @@ struct Frame {
     RECT dst{};
     SIZE client{};
     Framing framing{};
-    std::atomic<unsigned> seq{0}; // odd while the producer writes this copy (R2b.1 frame check, core/diag/report.h)
+    std::atomic<unsigned> seq{0}; // odd while the producer writes this copy (the frame check, core/diag/report.h)
 };
 
 constexpr int kNew = 4; // flag in g_ready: the slot holds a frame the consumer has not taken yet
@@ -1221,7 +1221,7 @@ HANDLE g_readyEvent = nullptr;  // the output thread finished starting (successf
 std::atomic<bool> g_threadOk{false};
 bool g_threaded = false;
 
-// The screenshot key and the report key (R2b.1), seen by the output thread itself (display/cap60): the game thread
+// The screenshot key and the report key, seen by the output thread itself (display/cap60): the game thread
 // does not handle messages while the start-up loader runs or holds a stage, so the keys are polled here, once per
 // press (not its auto-repeat), only while the game window is in front and with exactly the configured modifiers.
 // The window subclass keeps the keys' messages from the game (core/display/virtual_display).
@@ -1284,7 +1284,7 @@ void ScreenshotHere(const char *label = nullptr)
         return;
     }
     // The screen picture is the game picture when the frame fills the window 1:1 with nothing drawn around or over it
-    // (e.g. the city at Display scale 100 %): then only one is saved (O1b).
+    // (e.g. the city at Display scale 100 %): then only one is saved.
     bool caption;
     AcquireSRWLockShared(&g_captionLock);
     caption = g_caption[0] != 0;
@@ -1318,7 +1318,7 @@ void DrawChecked(const Frame &f)
     }
 }
 
-// SDL's render events (O1, docs/resolution_ui/sdl_output_comparison.md §2). Direct3D 9 loses its device on Ctrl+Alt+Del,
+// SDL's render events. Direct3D 9 loses its device on Ctrl+Alt+Del,
 // a sleep, a display change or a full-screen switch: SDL resets it in the next present and keeps our textures (it
 // re-uploads them from its own copies), then sends RENDER_TARGETS_RESET; we draw into no target textures, so that
 // is only logged. Direct3D 11 after a driver reset sends RENDER_DEVICE_RESET with every texture gone: ours are made
@@ -1332,7 +1332,7 @@ void HandleRenderEvents()
     while ((n = SDL_PeepEvents(ev, 16, SDL_GETEVENT, SDL_EVENT_FIRST, SDL_EVENT_LAST)) > 0) {
         for (int i = 0; i < n; ++i) {
             switch (ev[i].type) {
-            case SDL_EVENT_RENDER_TARGETS_RESET: // O3's render targets: made again by SDL, their content (drawn anew
+            case SDL_EVENT_RENDER_TARGETS_RESET: // sharp bilinear's render targets: made again by SDL, their content (drawn anew
                                                  // on every frame) lost
                 core_log("output: the renderer's device was reset (render targets reset); SDL keeps our textures");
                 LogBackBuffer("after the reset");
@@ -1360,7 +1360,7 @@ void HandleRenderEvents()
     }
 }
 
-// O1a (docs/archive/optimization.md): whether Windows treats the game window as hidden -- minimized, not in front, cloaked by
+// Whether Windows treats the game window as hidden -- minimized, not in front, cloaked by
 // the desktop window manager, or occluded for Direct3D 11 (a test present) -- logged when it changes, checked once a
 // second on this thread (the swap chain is this thread's).
 void CheckWindowState()
@@ -1372,7 +1372,7 @@ void CheckWindowState()
         return;
     }
     last = now;
-    LogBackBuffer(nullptr); // O1: a back buffer that no longer fits the window (Direct3D 9 after a resize)
+    LogBackBuffer(nullptr); // a back buffer that no longer fits the window (Direct3D 9 after a resize)
     using DwmAttr_fn = HRESULT(WINAPI *)(HWND, DWORD, PVOID, DWORD);
     static DwmAttr_fn dwmAttr = [] {
         HMODULE m = LoadLibraryW(L"dwmapi.dll");
@@ -1478,7 +1478,7 @@ bool Init(HWND hwnd, core_scaling scaling, core_present_mode mode)
     if (g_failed) {
         return false;
     }
-    // B plan (docs/archive/affinity.md): before our output thread starts, the process is widened; the game's threads stay on
+    // Processor affinity: before our output thread starts, the process is widened; the game's threads stay on
     // its original processor, ours use the others.
     const core_config *cfg = core_config_get();
     core::platform::affinity::Start(cfg->cpu_affinity == 1 ? core::platform::affinity::Mode::Original

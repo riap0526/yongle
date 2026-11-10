@@ -13,7 +13,7 @@
 #include <cstring>
 
 // Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e; mss32.dll Miles 6.0i, SHA256 f09e6024...7015):
-// docs/archive/optimization.md O4, names and calling conventions in docs/symbols.md.
+// Names and calling conventions next to each address.
 namespace emperor::sound {
 namespace {
 
@@ -59,7 +59,7 @@ bool g_probeLog = false;   // [debug] sound_probe: the 10 s counts in the log
 AmbientRate g_rate;
 
 // ---------------------------------------------------------------------------------------------
-// O4a: paused instead of stopped
+// Paused instead of stopped
 
 struct Paused {
     bool on = false;
@@ -185,7 +185,7 @@ void __cdecl StopAll_detour()
 }
 
 // ---------------------------------------------------------------------------------------------
-// The 10 s counts (O4b) and the pan limit
+// The 10 s counts and the pan limit
 
 struct Counts {
     long cityPasses, ambientCalls, ambientAsked, ambientPlayed, allAsked, allPlayed, panLimited;
@@ -204,7 +204,7 @@ void __cdecl Ambient_detour()
     ++g_counts.ambientCalls;
     static bool told = false;
     if (!told) {
-        // 0.2.0 item 10 (player feedback A6): the state of the game's 3D channels, which nothing plays on
+        // Logged once (players asked for the unused nature sounds): the state of the game's 3D channels, which nothing plays on
         // (sound_3d_start 0x763a74 has no caller): the provider the game chose at start-up (sound_3d_open 0x76307d:
         // EAX, A3D, Hardware, RSX, Software in that order; 5 = none), its handle, how many 3D samples were allocated,
         // the 3D-off flag 0x1108b40 (set when no provider opened) and sound_manager + 0x208 (sound off).

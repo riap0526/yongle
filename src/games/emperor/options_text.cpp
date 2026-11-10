@@ -9,7 +9,7 @@ namespace {
 #define N(a) static_cast<int>(sizeof(a) / sizeof((a)[0]))
 
 // Choice names that fit the options window's value box (144 px in the gold font, measured with
-// tools/mockups/textwidth.py: "Scaled with black bars" is 151, so "Scaled + black bars", 130).
+// the font's own widths: "Scaled with black bars" is 151, so "Scaled + black bars", 130).
 
 CHOICES(kIntro,
         {"play", "The game's intro movie plays when the game starts."},
@@ -212,6 +212,7 @@ const char *const kMainMenuOptions = "Options";
 const char *const kMenuHotkeys = "Hotkeys";
 const char *const kCategoryMessages = "Messages";
 
+const char *const kOptionsTitle = "Yongle options";
 const char *const kHotkeysTitle = "Hotkeys";
 const char *const kColumnAction = "Action";
 const char *const kColumnKey = "Hotkey";
@@ -226,7 +227,7 @@ const char *const kKeyClearHint = "Backspace: no key.";
 const char *const kKeyTip = "Click to change; right-click to remove.";
 const char *const kKeepTitle = "Keep this setting?";
 const char *const kKeepCountdown = "The previous setting comes back in %d s.";
-// Widths in the notice font, measured with tools/mockups/textwidth.py (2026-11-08).
+// Widths in the notice font, measured from the game's font.
 const char *const kNoticeCitySaved = "City screenshot saved in the shots folder.";       // 279
 const char *const kNoticeMinimapSaved = "Minimap screenshot saved in the shots folder."; // 309 (still the 400 box)
 const char *const kNoticeNotSaved = "Screenshot could not be saved; see the log.";      // 291

@@ -25,8 +25,8 @@
 #include <string>
 #include <vector>
 
-// Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e): docs/archive/resolution_ui_original_settings.md §12.3, §13.2,
-// §13.5; calling conventions: docs/symbols.md.
+// Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e): the addresses below,
+// calling conventions next to each address.
 namespace emperor::options_window {
 namespace {
 
@@ -73,7 +73,7 @@ const DWORD kImages = 0x1c42130;        // image_manager
 
 // Art (image_get_id groups; pak index << 9 | group). China_Interface is pak 1; China_Unloaded pak 0 [inferred:
 // group 9 of pak 0 is drawn at dialog_offset + 0x50 by 0x501e04, and the mood orbs are groups 7 / 9 of
-// China_Unloaded; checked on screen in the first test].
+// China_Unloaded; checked on screen].
 constexpr int kPanel = 0x20b, kInset = 0x20c, kButton = 0x202, kStrip = 0x202, kStripFirst = 0x1a;
 constexpr int kFrame = 0x212, kLine = 0x21f, kCheck = 0x220, kThumb = 0x204, kSmallOrbs = 0x007;
 constexpr int kArrowUp = 0x21b, kArrowDown = 0x21c, kArrowLeft = 0x21d, kArrowRight = 0x21e; // + 0 / 1 / 2
@@ -113,8 +113,8 @@ std::vector<int> Positions(int size)
     return out;
 }
 
-// The tile layout of panel_draw_tiles 0x5bed30 and inset_panel_draw_tiles 0x5bf080 (symbols.md), as the mockups
-// draw it (tools/mockups/optmock.py nine()).
+// The tile layout of panel_draw_tiles 0x5bed30 and inset_panel_draw_tiles 0x5bf080, as the game
+// draws it (nine parts).
 struct Nine {
     int perRow, edgeCycle, rowsCycle;
     int tl, tr, bl, br, top, bottom, left, right, inside;
@@ -210,7 +210,7 @@ public:
         Image(b + 2, ox + x + w - kTile, oy + y);
     }
     // y is the top of the letters (as in the mockups); text_draw puts them 3 pixels higher than that (measured on the
-    // first test's screenshots: every font, every row 3 pixels above the mockup).
+    // screenshots: every font, every row 3 pixels above the mockup).
     void Text(const char *t, int x, int y, co::Font f) override
     {
         Function<TextDraw_fn>(kTextDraw)(t, ox + x, oy + y + kTextDown, FontId(f), 0, 0);
@@ -370,7 +370,7 @@ void SettingSet(const void *ctx, int value)
     // window's OnKept), as the panel does: if the game does not survive it, the file still has the previous one.
     cs::Request(s.index, v, it.effect != cs::Effect::Relayout);
     // Carried out now: the window takes input on the game thread, where RunPending runs; the window reads the values
-    // back right after Apply (the first test: a queued value was read back as the old one, so Apply stayed on and a
+    // back right after Apply (seen in testing: a queued value was read back as the old one, so Apply stayed on and a
     // second Apply set the old value again).
     cs::RunPending();
 }
@@ -598,7 +598,7 @@ std::vector<co::Page> BuildPages()
     }
     co::Page display{"Video", {}};
     {
-        co::Category c{"Display", {}}; // "Screen" until 2026-11-09 (Display, as modern games call it)
+        co::Category c{"Display", {}}; // once "Screen" (Display, as modern games call it)
         Add(c.rows, "video", "window");
         Add(c.rows, "video", "resolution");
         Add(c.rows, "video", "scale");
@@ -663,7 +663,7 @@ std::vector<co::Page> BuildKeyPages()
     columns.rightLabel = ot::kColumnKey;
     columns.rightLabel2 = ot::kColumnAlternative;
     c.rows.push_back(std::move(columns));
-    // Augustus's sections, with Emperor's actions (docs/archive/key_bindings.md section 3.2).
+    // Augustus's sections, with Emperor's actions.
     for (int s = 0; s < emperor::keys::kSectionCount; ++s) {
         Header(c.rows, ot::KeySection(s));
         if (s == emperor::keys::kGlobal) { // ours first
@@ -701,7 +701,7 @@ std::vector<co::Page> BuildKeyPages()
 
 co::Window g_window; // the options window
 co::Window g_keys;   // the Hotkeys window, over it or alone (from the game's Options menu)
-co::Menu g_pause;    // the pause menu (K4), under the options window when that is opened from it
+co::Menu g_pause;    // the pause menu, under the options window when that is opened from it
 bool g_pauseOpen = false;
 GamePainter g_painter;
 bool g_open = false;     // either is open
@@ -758,7 +758,7 @@ void Kept()
     core_log("options window: the new setting kept");
 }
 
-// Keys nobody may choose (docs/archive/key_bindings.md section 3.2): Enter (the game's, not offered), the game's keys for
+// Keys nobody may choose: Enter (the game's, not offered), the game's keys for
 // development and multiplayer (Ctrl+A, Alt+D, Alt+Z, Alt+T, Ctrl+Alt+C, Numpad2; comma and period are not hotkey keys),
 // and ours that stay fixed (F5 and Alt+Enter: window or full screen; Shift+F7: the resolution, for testing).
 bool ReservedKey(unsigned vk, unsigned mods)
@@ -774,6 +774,7 @@ bool ReservedKey(unsigned vk, unsigned mods)
 void Prepare(co::Window &w, bool keys)
 {
     co::Look look;
+    look.title = ot::kOptionsTitle;
     if (keys) {
         look.title = ot::kHotkeysTitle;
         look.hotkeysButton = look.applyButton = false;
@@ -925,7 +926,7 @@ const char *Lang(int group, int index)
     return t ? t : "";
 }
 
-// The pause menu's items, in order (docs/archive/key_bindings.md section 8.1).
+// The pause menu's items, in order.
 enum PauseItem { kContinue, kReplay, kLoad, kSave, kDelete, kOptions, kMainMenu, kExit };
 
 void ClosePause(const char *why)
@@ -1143,7 +1144,7 @@ bool Attach()
     core_log("options window: available (the game's Options menu and the main menu open it)");
 
     // The debug panel leaves out what these windows list, except the settings to change there when something goes
-    // wrong (the screen; the panel's own key) (2026-11-08).
+    // wrong (the screen; the panel's own key).
     static const char *const kEmergency[][2] = {{"video", "resolution"}, {"video", "scale"},   {"video", "window"},
                                                  {"video", "renderer"},   {"video", "scaling"}, {"ui", "panel_key"}};
     g_dry = true;

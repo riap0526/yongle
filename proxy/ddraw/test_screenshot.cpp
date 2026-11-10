@@ -1,4 +1,4 @@
-// Offline test of core/capture/screenshot's writer (O1, 2026-10-30; not the game): eight 2560x1440 pictures asked
+// Offline test of core/capture/screenshot's writer (not the game): eight 2560x1440 pictures asked
 // for at once, of which 6 are queued and 2 are not saved (logged, before the frame is copied); each saved picture's
 // line has the processor time; Flush waits for all. The pictures go to shots\ next to the exe and are deleted after.
 #include "core/capture/screenshot.h"

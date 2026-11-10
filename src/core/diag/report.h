@@ -1,4 +1,4 @@
-// Diagnostics for problems that come and go (R2b.1, docs/archive/resolution_ui_r2b1.md): the flashing black blocks seen once
+// Diagnostics for problems that come and go: the flashing black blocks seen once
 // in a large city. Nothing here knows a game.
 //
 // Frame integrity, two checks:

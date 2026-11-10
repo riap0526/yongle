@@ -2,8 +2,8 @@
 
 **Modern display and quality-of-life improvements for *Emperor: Rise of the Middle Kingdom* (2002).**
 
-| Platform | Latest release |
-| -------- | -------------- |
+| Platform        | Latest release                                                                                                                                         |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Windows 10 / 11 | [![Download](https://img.shields.io/github/v/release/riap0526/yongle?label=Download&color=0a7bbb)](https://github.com/riap0526/yongle/releases/latest) |
 
 On the release page, download **`yongle-<version>.zip`**, not "Source code (zip)": the source code has no `ddraw.dll`. Then see [Installation](#installation).
@@ -69,18 +69,18 @@ Yongle is a single `ddraw.dll` in the game folder. It replaces the game's Direct
 
 Yongle's keys (the defaults):
 
-| Key             | Action                                                                                        |
-| --------------- | --------------------------------------------------------------------------------------------- |
+| Key             | Action                                                                                                                      |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | Esc             | Close a window or go back. In the city: drop the building tool, or open the Pause menu. On the main menu: quit (asks first) |
-| F6              | Open / close Options                                                                          |
-| F5 or Alt+Enter | Switch between full screen and a window                                                       |
-| F10             | Full city screenshot to `shots\`                                                              |
-| Shift+F10       | Minimap screenshot to `shots\`                                                                |
-| F11             | Screenshot to `shots\`                                                                        |
-| F12             | Problem report (when something looks wrong)                                                   |
-| Insert          | Open / close the debug panel                                                                  |
-| Mouse wheel     | Over the city: zoom in and out. Over the sidebar: the building category, as in the original   |
-| Middle button   | Over the city: zoom back to 100 %                                                             |
+| F6              | Open / close Options                                                                                                        |
+| F5 or Alt+Enter | Switch between full screen and a window                                                                                     |
+| F10             | Full city screenshot to `shots\`                                                                                            |
+| Shift+F10       | Minimap screenshot to `shots\`                                                                                              |
+| F11             | Screenshot to `shots\`                                                                                                      |
+| F12             | Problem report (when something looks wrong)                                                                                 |
+| Insert          | Open / close the debug panel                                                                                                |
+| Mouse wheel     | Over the city: zoom in and out. Over the sidebar: the building category, as in the original                                 |
+| Middle button   | Over the city: zoom back to 100 %                                                                                           |
 
 The game's own keys work as in the original. Almost all of them, and Yongle's keys above, can be changed in **Options > Hotkeys**, with a second key for each action. Not offered: the multiplayer and developer keys of the game, keys used for typing text, and Esc, Enter, the mouse wheel and the middle button (F5 and Alt+Enter cannot be changed either).
 
@@ -122,7 +122,7 @@ See **[CONTRIBUTING.md](CONTRIBUTING.md)** for how to propose changes and the ru
 
 Yongle is an unofficial fan project. It is not affiliated with or endorsed by the owners of *Emperor: Rise of the Middle Kingdom*. You need your own copy of the game; Yongle contains none of its files.
 
-Developed with AI assistance; every stage is tested by a human in the game before release. Use it at your own risk and keep backups of your saves.
+Developed with AI assistance. Every stage is playtested in the game before release. Use it at your own risk and keep backups of your saves.
 
 ## License
 

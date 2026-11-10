@@ -1,4 +1,4 @@
-// A PNG file written a row at a time (city picture, docs/archive/city_export.md section 4.4): only the
+// A PNG file written a row at a time (city picture): only the
 // compressor's state and one chunk of output are in memory, however large the picture. The file is written as
 // <path>.part and renamed to <path> by Close, so a picture that fails part way leaves no PNG behind. 8 bits per
 // channel, RGB or RGBA, the Sub filter on every row. Any thread (one writer per file). Nothing here knows a game.

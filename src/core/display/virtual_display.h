@@ -10,7 +10,7 @@
 //     the edges (so edge scrolling also works with the cursor in a black bar); WindowFromPoint maps back;
 //   - setting and restoring the mode sends the WM_DISPLAYCHANGE and WM_SIZE a real mode change would cause;
 //   - once attached, SetWindowPos/MoveWindow of the game window keep it covering the monitor (the game sizes its
-//     window to each mode, which with a real mode change is the whole screen) -- or, windowed (R2e), where the
+//     window to each mode, which with a real mode change is the whole screen) -- or, windowed, where the
 //     player put it.
 // Our settings panel (core/ui/panel.h) is opened and closed here with its hotkey (ui.panel_key, default Insert;
 // Esc also closes it). While it is open
@@ -43,9 +43,9 @@ void ClearMode();             // RestoreDisplayMode, or release of the exclusive
 bool ModeActive();
 SIZE ModeSize();              // the mode size, or the real screen size when no mode is set
 SIZE NativeSize();            // the real size of the monitor the game window is on (the primary one before attach);
-                              // windowed: the window's client size when it last came to rest (R2e)
+                              // windowed: the window's client size when it last came to rest
 
-// R2e: windowed (a window that can be moved and sized, at least 1024x768 of client area) or covering the monitor
+// Windowed (a window that can be moved and sized, at least 1024x768 of client area) or covering the monitor
 // (game thread; display.window). The game is not told: it stays in its fullscreen mode. Windowed, the exe's own
 // SetWindowPos / MoveWindow / SetWindowLong(GWL_STYLE) calls on its window are not applied, the cursor outside the
 // window is kept off the mode's edges (no edge scrolling), and the window's place is saved when a move or size ends.
@@ -121,8 +121,8 @@ void SetFraming(const core::output::Framing &framing);
 // The game window's real client size (the output's size), or 0 x 0 before attach.
 SIZE ClientSize();
 
-// R4: where the mode's picture lies on the game window and how much it is enlarged -- for drawing at the output's own
-// resolution over the scaled picture (the Chinese text layer, docs/resolution_ui/display_scale.md §6.2) and for our
+// Where the mode's picture lies on the game window and how much it is enlarged -- for drawing at the output's own
+// resolution over the scaled picture (the Chinese text layer) and for our
 // panel. A framed full-screen picture (SetFraming) gives its box and that box's place. Any thread.
 struct Placement {
     RECT box;            // the part of the mode shown (mode pixels): the whole mode, or a framed picture's box

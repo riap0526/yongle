@@ -5,6 +5,7 @@
 #include "core/diag/report.h"
 #include "core/display/framing.h"
 #include "core/hook/hook.h"
+#include "core/game.h"
 #include "core/log.h"
 #include "core/config.h"
 #include "core/output/sdl_output.h"
@@ -74,12 +75,14 @@ SetWindowPos_fn own_SetWindowPos = SetWindowPos;
 MoveWindow_fn own_MoveWindow = MoveWindow;
 SetWindowLong_fn own_SetWindowLongA = SetWindowLongA;
 
-// R2e: windowed (a window that can be moved and sized) or covering the monitor. The game is not told: it stays in
+// Windowed (a window that can be moved and sized) or covering the monitor. The game is not told: it stays in
 // its fullscreen mode; only the window's style and place change, and the output follows the client area.
 bool g_windowed = false;
 SIZE g_settled{0, 0};    // the client size when the window last came to rest (what the layout uses)
 bool g_inSizeMove = false;
-constexpr int kMinClientW = 1024, kMinClientH = 768; // the smallest layout
+// The smallest layout: the game's own size (core/game.h).
+int MinClientW() { return core_game()->native_width; }
+int MinClientH() { return core_game()->native_height; }
 constexpr int kEdgeBand = 8; // windowed: this many pixels (at 96 DPI) inside the client edge count as the edge
 
 // The edge band in the window's pixels (per-monitor DPI aware: 8 px at 100 %, 16 at 200 %).
@@ -390,7 +393,7 @@ BOOL WINAPI SetWindowPos_detour(HWND hwnd, HWND after, int x, int y, int w, int 
         // NOSIZE)), and every other module's call for the game window (ours, SDL's), also goes straight to user32.
         // With GOG's compatibility layer SetWindowPos reaches AcGenral.dll first, whose wrapper re-centres any window
         // that does not fit the monitor's work area after every call: our full-screen window is larger than the work
-        // area by the taskbar, so it went up by half the taskbar's height (30 px). 0.2.0 item 9, docs/archive/compat_layer.md.
+        // area by the taskbar, so it went up by half the taskbar's height (30 px). 0.2.0 item 9.
         if (!FromExe(caller)) {
             LogOtherPlacement("SetWindowPos", x, y, w, h, flags, caller);
         }
@@ -448,7 +451,7 @@ LONG WINAPI SetWindowLongA_detour(HWND hwnd, int index, LONG value)
 }
 
 // ---------------------------------------------------------------------------------------------
-// R2e: the window's two forms
+// The window's two forms
 
 constexpr LONG kFrameStyles = WS_CAPTION | WS_THICKFRAME | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX;
 
@@ -505,8 +508,8 @@ void PlaceWindowed()
     const RECT work = WorkArea(g_hwnd);
     const int ww = work.right - work.left, wh = work.bottom - work.top;
     int cw = cfg->window_w > 0 ? cfg->window_w : ww * 3 / 4, ch = cfg->window_h > 0 ? cfg->window_h : wh * 3 / 4;
-    cw = cw < kMinClientW ? kMinClientW : cw;
-    ch = ch < kMinClientH ? kMinClientH : ch;
+    cw = cw < MinClientW() ? MinClientW() : cw;
+    ch = ch < MinClientH() ? MinClientH() : ch;
     own_SetWindowLongA(g_hwnd, GWL_STYLE, (GetWindowLongA(g_hwnd, GWL_STYLE) & ~WS_POPUP) | kFrameStyles | WS_VISIBLE);
     RECT r = OuterFor(0, 0, cw, ch);
     const int ow = r.right - r.left, oh = r.bottom - r.top;
@@ -691,7 +694,7 @@ bool IsScreenshotHotkey(UINT m, WPARAM w)
     return false;
 }
 
-// The report key (debug.report_key, default F12; R2b.1, core/diag/report.h), when it is not the panel's or the
+// The report key (debug.report_key, default F12; core/diag/report.h), when it is not the panel's or the
 // screenshot's.
 bool IsReportHotkey(UINT m, WPARAM w)
 {
@@ -980,7 +983,7 @@ void KeepOnMonitor(const WINDOWPOS *wp)
     busy = false;
 }
 
-// O1 (2026-10-28): changes of the display made outside the game (Windows' resolution or scale, the window moved
+// Changes of the display made outside the game (Windows' resolution or scale, the window moved
 // to another monitor) were not in the log. The window event lines (core/diag/report, at most 400) were used up by
 // the WM_SIZE of a window being dragged and by the WM_DISPLAYCHANGE/WM_SIZE our emulated modes send (SetMode,
 // ClearMode; logged there already): those are no longer passed on, and Windows' own changes get lines of their own.
@@ -1054,7 +1057,7 @@ LRESULT CALLBACK SubclassProc(HWND hwnd, UINT m, WPARAM w, LPARAM l)
     if (hwnd == g_hwnd) {
         const bool ours = g_ownMessages > 0 && (m == WM_DISPLAYCHANGE || m == WM_SIZE);
         if (!ours && !(m == WM_SIZE && g_inSizeMove)) {
-            core::diag::LogWindowEvent(m, w, l); // alt-tab, focus, minimise (R2b.1)
+            core::diag::LogWindowEvent(m, w, l); // alt-tab, focus, minimise
         }
         LogDisplayEvent(hwnd, m, w, l);
     }
@@ -1063,7 +1066,7 @@ LRESULT CALLBACK SubclassProc(HWND hwnd, UINT m, WPARAM w, LPARAM l)
     }
     if (hwnd == g_hwnd && g_windowed) {
         if (m == WM_GETMINMAXINFO) {
-            RECT r = OuterFor(0, 0, kMinClientW, kMinClientH);
+            RECT r = OuterFor(0, 0, MinClientW(), MinClientH());
             auto *mm = reinterpret_cast<MINMAXINFO *>(l);
             mm->ptMinTrackSize.x = r.right - r.left;
             mm->ptMinTrackSize.y = r.bottom - r.top;
@@ -1220,7 +1223,7 @@ bool Attach(HWND hwnd, core_scaling scaling, core_present_mode present)
         g_outputOk = core::output::Init(hwnd, scaling, present);
         g_prevProc = reinterpret_cast<WNDPROC>(
             SetWindowLongPtrA(hwnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(&SubclassProc)));
-        g_settingsMessage = RegisterWindowMessageA("EmperorEngine.Settings");
+        g_settingsMessage = RegisterWindowMessageA("ImpressionsEngine.Settings");
         core::settings::SetWakeup(&WakeForSettings);
         core_log("display: attached to window %p (mouse messages subclassed, previous procedure %p)", (void *)hwnd,
                  reinterpret_cast<void *>(g_prevProc));
@@ -1314,7 +1317,7 @@ void SetWindowClient(int w, int h)
     const RECT work = WorkArea(g_hwnd);
     RECT now{};
     o_GetWindowRect(g_hwnd, &now);
-    RECT r = OuterFor(now.left, now.top, w < kMinClientW ? kMinClientW : w, h < kMinClientH ? kMinClientH : h);
+    RECT r = OuterFor(now.left, now.top, w < MinClientW() ? MinClientW() : w, h < MinClientH() ? MinClientH() : h);
     LONG ow = r.right - r.left, oh = r.bottom - r.top;
     if (ow > work.right - work.left || oh > work.bottom - work.top) { // larger than the work area: as large as fits
         RECT frame = OuterFor(0, 0, 0, 0);

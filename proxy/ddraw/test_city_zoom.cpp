@@ -1,4 +1,4 @@
-// Offline test of core/display/city_zoom and ShrinkRgb565 (R5, docs/archive/resolution_ui_r5.md section 8.2):
+// Offline test of core/display/city_zoom and ShrinkRgb565:
 //   - for map ranges seen in the game (54x112 .. 112x224) and several screens: the limit is the largest percent whose
 //     view (plus the drawing's extra column and two half rows) is within the map's range, one more does not fit, and
 //     every percent up to it fits; a request above it is capped to it; an unknown map gives 100; a map too small for
@@ -7,9 +7,9 @@
 //   - enlarging (ScaleRgb565 at 100/percent) covers the whole city on the screen;
 //   - averaged and nearest shrinking: flat colours stay, a checkerboard averages to grey, nearest picks one pixel,
 //     nonsense is refused;
-//   - view_clamp's bottom margin (section 9.1): the limit's view is never taller than the clamp holds; the caller's
+//   - view_clamp's bottom margin: the limit's view is never taller than the clamp holds; the caller's
 //     cap (150);
-//   - the rows split over our workers (core/platform/parallel, section 9.2) give the same pixels as one thread, and
+//   - the rows split over our workers (core/platform/parallel) give the same pixels as one thread, and
 //     with no workers everything runs on the caller.
 #include "core/display/city_zoom.h"
 #include "core/display/scaled_rect.h"
@@ -93,7 +93,7 @@ int main()
         }
     }
 
-    // --- the numbers of resolution_ui_r5.md section 8.2 (2560x1440: city 29 x 71 at 100%)
+    // --- the numbers (2560x1440: city 29 x 71 at 100%)
     {
         cd::ZoomInput in{400, 2334, 1400, colPx, halfH, 54, 112};
         const int small = cd::ZoomFor(in).limit;
@@ -214,7 +214,7 @@ int main()
         }
     }
 
-    // --- view_clamp's bottom margin (resolution_ui_r5.md section 9.1): the view never taller than the clamp holds
+    // --- view_clamp's bottom margin: the view never taller than the clamp holds
     {
         bool ok = true;
         for (const Screen &sc : screens) {
@@ -238,7 +238,7 @@ int main()
             }
         }
         CheckShown(ok, "with a bottom margin: the limit's view fits the clamp, one percent more does not");
-        // The first test's case: 112 x 224 at 2560x1440 asked 315 gave 222 half rows; with a margin it must be less.
+        // A case seen in testing: 112 x 224 at 2560x1440 asked 315 gave 222 half rows; with a margin it must be less.
         cd::ZoomInput in{315, 2334, 1400, colPx, halfH, 112, 224, 224 - (3 + 4)};
         const cd::ZoomLayout z = cd::ZoomFor(in);
         std::snprintf(what, sizeof(what), "112 x 224, margin 3: limit %d%%, %d half rows <= %d", z.limit, z.rows,
@@ -261,7 +261,7 @@ int main()
         CheckShown(s.limit <= 150 && s.percent == s.limit, what);
     }
 
-    // --- R5c: screen <-> buffer (section 10.1): round trips within one screen pixel, every screen pixel lands in the
+    // --- Screen <-> buffer: round trips within one screen pixel, every screen pixel lands in the
     //     buffer part shown, and on the pixels the scaling samples for it
     {
         bool ok = true;
@@ -378,27 +378,27 @@ int main()
         core::platform::parallel::LimitWorkers(core::platform::parallel::kMaxWorkers);
     }
 
-    // --- R5d: wheel notches (25 each, on the grid of 25, within the limits)
+    // --- Wheel notches (25 each, on the grid of 25, within the limits)
     {
         CheckShown(cd::ZoomNotch(100, 1, 50, 150) == 125 && cd::ZoomNotch(100, -1, 50, 150) == 75,
-                   "R5d notch: 100 -> 125 out, 75 in");
+                   "notch: 100 -> 125 out, 75 in");
         CheckShown(cd::ZoomNotch(100, 3, 50, 150) == 150 && cd::ZoomNotch(100, -5, 50, 150) == 50,
-                   "R5d notch: several notches stop at 150 and 50");
+                   "notch: several notches stop at 150 and 50");
         CheckShown(cd::ZoomNotch(110, 1, 50, 150) == 125 && cd::ZoomNotch(110, -1, 50, 150) == 100,
-                   "R5d notch: off the grid (110) -> 125 or 100 first");
+                   "notch: off the grid (110) -> 125 or 100 first");
         CheckShown(cd::ZoomNotch(125, 1, 50, 140) == 140 && cd::ZoomNotch(140, 1, 50, 140) == 140,
-                   "R5d notch: a map limit of 140 -> 140, no further");
-        CheckShown(cd::ZoomNotch(100, -1, 50, 40) == 50, "R5d notch: a limit below 50 -> 50");
+                   "notch: a map limit of 140 -> 140, no further");
+        CheckShown(cd::ZoomNotch(100, -1, 50, 40) == 50, "notch: a limit below 50 -> 50");
         int p = 50;
         bool steps = true;
         for (int expect = 75; expect <= 150; expect += 25) {
             p = cd::ZoomNotch(p, 1, 50, 150);
             steps = steps && p == expect;
         }
-        CheckShown(steps, "R5d notch: 50, 75, 100, 125, 150 one notch at a time");
+        CheckShown(steps, "notch: 50, 75, 100, 125, 150 one notch at a time");
     }
 
-    // --- R5d: the city point under the cursor stays there (within a buffer pixel) from any grid scale to another
+    // --- The city point under the cursor stays there (within a buffer pixel) from any grid scale to another
     {
         double worst = 0;
         for (const Screen &sc : screens) {
@@ -417,7 +417,7 @@ int main()
                 }
             }
         }
-        std::snprintf(what, sizeof(what), "R5d anchor: the point under the cursor moves at most %.2f buffer px", worst);
+        std::snprintf(what, sizeof(what), "anchor: the point under the cursor moves at most %.2f buffer px", worst);
         CheckShown(worst <= 1.5, what);
     }
 

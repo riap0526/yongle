@@ -1,4 +1,4 @@
-// Offline test of games/emperor/ambient_rate (O4b; no DLL, no game): N follows the city passes per second so that
+// Offline test of games/emperor/ambient_rate (no DLL, no game): N follows the city passes per second so that
 // passes/s / N is the rate wanted; nothing is written before the game has read its file (N 0); switching back to
 // original puts the file's N back, and a rate again takes over (R -> original -> R); other screens leave N alone.
 #include "games/emperor/ambient_rate.h"

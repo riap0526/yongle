@@ -1,4 +1,4 @@
-// A large RGB565 picture (city picture, docs/archive/city_export.md section 4.3): its rows in blocks allocated
+// A large RGB565 picture (city picture): its rows in blocks allocated
 // one by one, so no single large piece of the address space is needed (the game is a 32-bit program without
 // LARGE_ADDRESS_AWARE: 2 GB in all), and written as a PNG a row at a time (core/capture/png_stream.h). Nothing here
 // knows a game.

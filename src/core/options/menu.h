@@ -1,4 +1,4 @@
-// A menu window in the game's own style: a title and a column of text buttons (the pause menu, docs/archive/key_bindings.md
+// A menu window in the game's own style: a title and a column of text buttons (the pause menu,
 // section 8; laid out as Augustus's pause menu: buttons 192 x 25, 40 apart). Drawn through the options window's
 // Painter in window coordinates (core/options/window.h: 640 x 480), centred there, so nothing here knows a game.
 //

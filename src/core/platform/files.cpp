@@ -1,5 +1,6 @@
 #include "core/platform/files.h"
 
+#include "core/game.h"
 #include "core/log.h"
 
 #include <cstdarg>
@@ -165,7 +166,7 @@ bool SysUsable(const std::wstring &folder, std::string *why)
             }
         }
     }
-    const std::wstring test = WithSlash(folder) + L"yongle_write_test.tmp";
+    const std::wstring test = WithSlash(folder) + L"engine_write_test.tmp";
     HANDLE f = CreateFileW(test.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
                            FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE, nullptr);
     if (f == INVALID_HANDLE_VALUE) {
@@ -390,7 +391,7 @@ extern "C" void core_files_decide(const wchar_t *app, int safe_only)
         return;
     }
     files::g_decided = true;
-    files::g_app = app ? app : L"Yongle";
+    files::g_app = app ? app : core_game()->folder;
     const std::wstring game = files::ModuleFolder();
     if (safe_only) {
         files::Set(game);

@@ -1,6 +1,7 @@
 #include "core/ui/settings_view.h"
 
 #include "core/display/common_sizes.h"
+#include "core/game.h"
 #include "core/display/logical_size.h"
 #include "core/display/virtual_display.h"
 #include "core/log.h"
@@ -132,7 +133,7 @@ void Commit(int i)
     cs::Request(i, g_draft[i], true);
 }
 
-// A key setting's "Change" (city picture, docs/archive/city_export.md section 5.3): the next key pressed with
+// A key setting's "Change" (city picture): the next key pressed with
 // the modifiers held is the new value. g_capture: the item waiting (-1 none); read by the game thread (the window
 // subclass then gives every key to the panel). The note under the item: its last result.
 std::atomic<int> g_capture{-1};
@@ -243,21 +244,26 @@ void IntWidget(int i, const cs::Item &it, const char *id, float width, const cha
     ImGui::EndDisabled();
 }
 
-// display.resolution: the game's own size, scaled, a common size from a list (R2b.1-9), or a custom size. The game's
+// display.resolution: the game's own size, scaled, a common size from a list, or a custom size. The game's
 // own size, scaled and a common size apply at once (with the question whether to keep it); a custom size with the
 // Apply button. All are stored the same way ("1024x768", "scaled", "1920x1080").
 bool g_allAspects = false; // the common sizes of every aspect, not only the screen's (not saved)
 
 void ResolutionWidget(int i, float width)
 {
-    static const char *const kKinds[] = {"1024x768 (the game's own size)", "scaled (native / display scale)",
-                                         "common size (from a list)", "custom size (typed in)"};
+    const int ownW = core_game()->native_width, ownH = core_game()->native_height;
+    static char ownKind[64] = "";
+    if (!ownKind[0]) {
+        std::snprintf(ownKind, sizeof(ownKind), "%dx%d (the game's own size)", ownW, ownH);
+    }
+    const char *const kKinds[] = {ownKind, "scaled (native / display scale)", "common size (from a list)",
+                                  "custom size (typed in)"};
     const bool scaled = std::strcmp(g_draft[i], "scaled") == 0;
-    int w = 1024, h = 768;
+    int w = ownW, h = ownH;
     if (!scaled) {
         w = std::atoi(g_draft[i]);
         const char *x = std::strchr(g_draft[i], 'x');
-        h = x ? std::atoi(x + 1) : 768;
+        h = x ? std::atoi(x + 1) : ownH;
     }
     const SIZE n = core::display::NativeSize();
     int minW = 0, minH = 0;
@@ -270,7 +276,7 @@ void ResolutionWidget(int i, float width)
             listed = k;
         }
     }
-    int kind = scaled ? 1 : (w == 1024 && h == 768) ? 0 : listed >= 0 ? 2 : 3;
+    int kind = scaled ? 1 : (w == ownW && h == ownH) ? 0 : listed >= 0 ? 2 : 3;
     // The kind picked in the box shows until the value is changed some other way (applied, reverted, defaults):
     // "Common size" before a size is picked from the list, "Custom size" while a size is typed.
     static int picked = -1;
@@ -285,7 +291,7 @@ void ResolutionWidget(int i, float width)
     if (ImGui::Combo("##resolution", &kind, kKinds, 4)) {
         picked = kind;
         if (kind == 0) {
-            std::snprintf(g_draft[i], cs::kValueSize, "1024x768");
+            std::snprintf(g_draft[i], cs::kValueSize, "%dx%d", ownW, ownH);
         }
         else if (kind == 1) {
             std::snprintf(g_draft[i], cs::kValueSize, "scaled");
@@ -390,7 +396,7 @@ const char *SectionTitle(const char *section)
     return section;
 }
 
-// The display scale only applies to Resolution = Scaled; it is hidden otherwise (R2b.1, playtest 2026-10-24).
+// The display scale only applies to Resolution = Scaled; it is hidden otherwise.
 bool ScaleShown(int resolution)
 {
     return resolution < 0 || std::strcmp(g_draft[resolution], "scaled") == 0;
@@ -398,7 +404,7 @@ bool ScaleShown(int resolution)
 
 // The result of the resolution and scale drafts, and Apply / Cancel for a custom size not applied yet: under the
 // scale item, or under the resolution item when the scale is hidden. (The scale and the other choices apply at once
-// -- the slider when it is let go -- so they need no buttons; R2b.1, playtest 2026-10-24.)
+// -- the slider when it is let go -- so they need no buttons.)
 void RelayoutControls(int resolution, int displayScale)
 {
     RelayoutPreview(resolution, displayScale);
@@ -482,7 +488,8 @@ void DrawItem(int i, float scale, int resolution, int displayScale)
     }
     if (_stricmp(it.key, "present") == 0 && std::strcmp(g_draft[i], "original") == 0) {
         ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f),
-                           "With original this panel is not available (set present back in emperor_engine.ini).");
+                           "With original this panel is not available (set present back in %s).",
+                           core_game()->ini_file_utf8);
     }
     ImGui::PopID();
     ImGui::Spacing();
@@ -636,7 +643,7 @@ void DrawSettings(float scale)
     ImGui::EndDisabled();
     // Where the log, the settings and the screenshots are (core/platform/files): the game folder, or Documents\My
     // Games\Yongle when the game folder is protected.
-    ImGui::TextDisabled("Yongle's files: %s", core_files_folder_utf8());
+    ImGui::TextDisabled("%s's files: %s", core_game()->product, core_files_folder_utf8());
     ImGui::SameLine();
     if (ImGui::SmallButton("Open folder")) {
         core_files_open_folder();
@@ -656,7 +663,7 @@ void PanelClosed()
 }
 
 // The key that ended the last wait for a key, until it is released: the new value reaches the configuration on the
-// game thread a moment later, and a key poll in between would see the key go down anew (city picture's first test:
+// game thread a moment later, and a key poll in between would see the key go down anew (found in testing:
 // the report key changed to Ctrl+F12 also made a report).
 std::atomic<unsigned> g_settleVk{0};
 

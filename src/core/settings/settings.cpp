@@ -1,6 +1,7 @@
 #include "core/settings/settings.h"
 
 #include "core/diag/guard.h"
+#include "core/game.h"
 #include "core/log.h"
 #include "core/settings/ini_text.h"
 #include "core/ui/hotkey.h"
@@ -17,7 +18,7 @@ namespace core::settings {
 
 namespace {
 
-constexpr int kMaxItems = 256; // 48 until 2026-11-08: the 49th and 50th settings were left out without a word
+constexpr int kMaxItems = 256; // was 48: the 49th and 50th settings were left out without a word
 constexpr DWORD kMaxFileSize = 64 * 1024;
 
 struct Slot {
@@ -30,6 +31,7 @@ struct Slot {
     bool notApplied; // the callback could not apply the current value: waits for a restart
     core::diag::Feature guard; // applying this item's changes (switched off when a callback faults)
     char guardName[80];
+    std::string label, help; // the item's label and help with the game's names filled in (GameText)
 };
 
 Slot g_items[kMaxItems];
@@ -165,14 +167,15 @@ void Save()
     std::string out = UpdateIni(text, changes);
     DWORD error = 0;
     if (WriteFileAtomic(g_path, out, &error)) {
-        std::snprintf(g_saveResult, sizeof(g_saveResult), "saved %d change(s) to emperor_engine.ini",
-                      static_cast<int>(changes.size()));
+        std::snprintf(g_saveResult, sizeof(g_saveResult), "saved %d change(s) to %s",
+                      static_cast<int>(changes.size()), core_game()->ini_file_utf8);
         for (const IniChange &c : changes) {
             core_log("settings: saved [%s] %s = %s", c.section.c_str(), c.key.c_str(), c.value.c_str());
         }
     }
     else {
-        std::snprintf(g_saveResult, sizeof(g_saveResult), "could not save emperor_engine.ini (error %lu)", error);
+        std::snprintf(g_saveResult, sizeof(g_saveResult), "could not save %s (error %lu)",
+                      core_game()->ini_file_utf8, error);
         core_log("settings: %s", g_saveResult);
     }
 }
@@ -301,6 +304,26 @@ const char *MovedValue(const char *section, const char *key, const char *value)
     return value;
 }
 
+// A label or help text with the game's names filled in: {product} (e.g. Yongle), {ini} (e.g. emperor_engine.ini)
+// and {native} (the game's own size, e.g. 1024x768). The registrations keep plain literals with these words, so the
+// shared texts read right for every game and the text check still reads them.
+std::string GameText(const char *text)
+{
+    std::string s = text ? text : "";
+    const core_game_info *game = core_game();
+    char native[32];
+    std::snprintf(native, sizeof(native), "%dx%d", game->native_width, game->native_height);
+    const struct {
+        const char *word, *value;
+    } words[] = {{"{product}", game->product}, {"{ini}", game->ini_file_utf8}, {"{native}", native}};
+    for (const auto &w : words) {
+        for (size_t at = s.find(w.word); at != std::string::npos; at = s.find(w.word, at + std::strlen(w.value))) {
+            s.replace(at, std::strlen(w.word), w.value);
+        }
+    }
+    return s;
+}
+
 } // namespace
 
 int Register(const Item &item)
@@ -312,6 +335,10 @@ int Register(const Item &item)
     }
     Slot &s = g_items[g_count];
     s.item = item;
+    s.label = GameText(item.label);
+    s.help = GameText(item.help);
+    s.item.label = item.label ? s.label.c_str() : nullptr;
+    s.item.help = item.help ? s.help.c_str() : nullptr;
     Copy(s.value, sizeof(s.value), item.defaultValue);
     Copy(s.saved, sizeof(s.saved), item.defaultValue);
     Copy(s.startup, sizeof(s.startup), item.defaultValue);
@@ -543,24 +570,28 @@ void Load(const wchar_t *path)
         filled = FillTemplate(g_template, updated);
         updated = filled.text;
     }
+    const char *ini = core_game()->ini_file_utf8;
     if (remake) {
         // The .bak stays as it is (it is where the values came from).
         DWORD error = 0;
         if (WriteFileAtomic(path, updated, &error)) {
             if (fromBak) {
-                core_log("config: emperor_engine.ini was missing: made again from this version's template with the "
-                         "values of emperor_engine.ini.bak (%d value(s) from it, %d setting(s) at their defaults, %d "
+                core_log("config: %s was missing: made again from this version's template with the "
+                         "values of %s.bak (%d value(s) from it, %d setting(s) at their defaults, %d "
                          "line(s) kept as written)",
-                         filled.kept, filled.added, filled.extra);
+                         ini, ini, filled.kept, filled.added, filled.extra);
             }
             else {
-                core_log("config: emperor_engine.ini was missing (and no emperor_engine.ini.bak): made from this "
-                         "version's template, all settings at their defaults");
+                core_log("config: %s was missing (and no %s.bak): made from this "
+                         "version's template, all settings at their defaults",
+                         ini, ini);
             }
         }
         else {
-            core_log("config: emperor_engine.ini is missing and could not be made (error %lu); %s", error,
-                     fromBak ? "the values of emperor_engine.ini.bak are used" : "defaults");
+            char bakUsed[MAX_PATH];
+            std::snprintf(bakUsed, sizeof(bakUsed), "the values of %s.bak are used", ini);
+            core_log("config: %s is missing and could not be made (error %lu); %s", ini, error,
+                     fromBak ? bakUsed : "defaults");
         }
     }
     else if (updated != text) {
@@ -571,11 +602,11 @@ void Load(const wchar_t *path)
                          static_cast<int>(retired.size()) - movedLines, movedLines, static_cast<int>(renamed.size()));
             }
             if (fill) {
-                core_log("config: emperor_engine.ini rewritten from this version's template: %d value(s) kept, %d "
+                core_log("config: %s rewritten from this version's template: %d value(s) kept, %d "
                          "setting(s) added at their defaults, %d line(s) kept as written",
-                         filled.kept, filled.added, filled.extra);
+                         ini, filled.kept, filled.added, filled.extra);
             }
-            core_log("config: the file as it was: emperor_engine.ini.bak");
+            core_log("config: the file as it was: %s.bak", ini);
         }
         else {
             core_log("config: could not update the file (error %lu); it is read as it is: removed settings are "
@@ -591,8 +622,9 @@ void Load(const wchar_t *path)
     Describe(what, sizeof(what));
     char p[MAX_PATH * 2];
     WideCharToMultiByte(CP_UTF8, 0, path, -1, p, sizeof(p), nullptr, nullptr);
-    core_log("config: %s; %s",
-             exists || remake ? p : "emperor_engine.ini not found, defaults", what);
+    char missing[MAX_PATH];
+    std::snprintf(missing, sizeof(missing), "%s not found, defaults", ini);
+    core_log("config: %s; %s", exists || remake ? p : missing, what);
     for (int i = 0; i < g_count; ++i) {
         for (int k = 0; k < g_items[i].applyCount; ++k) {
             g_items[i].apply[k](i, g_items[i].value, true);

@@ -18,7 +18,7 @@
 // _AIL_set_sample_volume@8 (0x762a22), _AIL_set_stream_volume@8 (0x762c03 ... 0x76305a) and
 // _AIL_set_3D_sample_volume@8 (0x763c30, 0x763fea), and reads them back through _AIL_stream_volume@4 (0x762ee0;
 // the music's fade out 0x762f77 takes 5 off what it reads, the fade in 0x763008 adds 5 up to its target) and
-// _AIL_3D_sample_volume@4 (0x763f9f) [confirmed: tools/recon/import_calls.py, capstone]. All __stdcall.
+// _AIL_3D_sample_volume@4 (0x763f9f) [confirmed: the import table, capstone]. All __stdcall.
 namespace emperor::master_volume {
 namespace {
 
@@ -40,7 +40,7 @@ core::diag::Feature g_feature{"master volume (games/emperor)"};
 
 // What the game asked for, by handle: the game reads its volumes back and steps them, so it gets back its own value
 // (not the scaled one); and a change of the master volume sets every live handle again (a sound that loops, e.g. the
-// frogs, keeps the volume it started with otherwise; first test of S2d). A handle leaves the list when the game
+// frogs, keeps the volume it started with otherwise; seen in testing). A handle leaves the list when the game
 // releases or closes it (_AIL_release_sample_handle@4, _AIL_release_3D_sample_handle@4, _AIL_close_stream@4), so
 // only live handles are set again. Miles may call in from its timer thread too: a lock.
 enum Kind { kStream, kSample, k3D };

@@ -103,7 +103,7 @@ void ScaleRows(void *p, int begin, int end)
     }
 }
 
-// R5 (resolution_ui_r5.md section 10.6): area-weighted shrinking. Output pixel i covers exactly f = src / out source
+// Area-weighted shrinking. Output pixel i covers exactly f = src / out source
 // pixels; each source pixel it touches counts by how much of it is covered, in 32nds that add up to exactly 32 (so a
 // flat colour stays exact). Moving the picture by one source pixel then changes each output pixel a little instead of
 // moving a whole-pixel block boundary (which made small bright details blink while scrolling).
@@ -366,7 +366,7 @@ void BlurredBackdrop(const Pixels16 &src, int w, int h, double sigma, int bright
             boxLine(&ch[static_cast<size_t>(y) * w], w, 1);
         }
         // The vertical passes row by row (the same sums as boxLine down each column, but reading whole rows: the
-        // column-wise walk took most of the 350 ms at 2560x1440, R2d.1 follow-up).
+        // column-wise walk took most of the 350 ms at 2560x1440).
         for (int pass = 0; pass < 3 && sigma > 0; ++pass) {
             for (int x = 0; x < w; ++x) {
                 long s = 0;

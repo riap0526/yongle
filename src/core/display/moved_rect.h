@@ -1,4 +1,4 @@
-// A rectangle of a 16-bit surface shown somewhere else (R2b: the info windows the game always opens at one place,
+// A rectangle of a 16-bit surface shown somewhere else (e.g. the info windows the game always opens at one place,
 // games/emperor/resolution.cpp). The game draws into a copy of the screen; the rectangle it drew (`from`) is then shown
 // at `to`, and everything it drew outside `from` stays where it was drawn. Nothing here knows a game.
 //
