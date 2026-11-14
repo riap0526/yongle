@@ -6,7 +6,7 @@
 
 #include <cstring>
 
-// Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e): the addresses below.
+// Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e): the layouts measured in screenshots and read from the disassembly.
 namespace emperor::ui_fixes {
 namespace {
 

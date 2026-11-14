@@ -2,10 +2,9 @@
 
 #include "core/diag/guard.h"
 #include "core/log.h"
+#include "core/settings/intro_movie.h"
 #include "core/settings/settings.h"
 #include "games/emperor/site.h"
-
-#include <cstring>
 
 // Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e): config_ini_load 0x475380 and
 // play_intro_movie 0x828398.
@@ -21,7 +20,6 @@ using Void_fn = void(__cdecl *)();
 Void_fn o_ConfigLoad;
 
 core::diag::Feature g_feature{"intro movie setting (games/emperor/intro)"};
-bool g_skip = false; // [display] intro_movie = skip, as read at start-up
 
 void Skip(void *)
 {
@@ -35,16 +33,13 @@ void Skip(void *)
 void __cdecl ConfigLoad_detour()
 {
     o_ConfigLoad();
-    if (!g_skip) {
+    if (!core::settings::intro_movie::Skip()) {
         core_log("intro: intro_movie = play: the game decides (its Emperor.ini says %s)",
                  *kPlayIntro ? "play it" : "PlayIntroMovie=no");
         return;
     }
     core::diag::Guarded(g_feature, &Skip, nullptr); // on a fault: the game plays the movie as its file says
 }
-
-const char *const kChoices[] = {"play", "skip"};
-const char *const kLabels[] = {"play (the game's intro movie at start-up)", "skip (straight to the main menu)"};
 
 } // namespace
 
@@ -53,20 +48,17 @@ void RegisterSettings()
     using core::settings::Effect;
     using core::settings::Item;
     using core::settings::Type;
+    namespace im = core::settings::intro_movie;
     const int i = core::settings::Register(Item{
         "ui", "intro_movie", "Intro movie",
         "Whether the game plays its intro movie at start-up. Takes effect the next time the game starts. Yongle "
         "does not change the game's own Emperor.ini: if PlayIntroMovie=no is set there, the movie is skipped "
         "either way.",
-        Type::Choice, "play", Effect::Restart, true, true, 0, 0, 0, nullptr, kChoices, kLabels, 2});
+        Type::Choice, "play", Effect::Restart, true, true, 0, 0, 0, nullptr, im::kChoices, im::kChoiceLabels,
+        im::kChoiceCount});
     // From [display] (now [video]) to [ui], beside the other settings of the options window's General page.
     core::settings::MoveKey("display", "intro_movie", "ui", "intro_movie");
-    core::settings::OnChange(i, [](int, const char *v, bool initial) {
-        if (initial) {
-            g_skip = std::strcmp(v, "skip") == 0;
-        }
-        return true;
-    });
+    im::Watch(i);
 }
 
 bool Attach()

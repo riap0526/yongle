@@ -32,7 +32,7 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
 
-# SDL3 3.4.18, static (Zlib). Built once into build/sdl3-i686-install.
+# SDL3 3.4.18, static (Zlib). Built once by tools/build/build_sdl3.ps1 into build/sdl3-i686-install.
 set(SDL3_DIR "${CMAKE_CURRENT_SOURCE_DIR}/build/sdl3-i686-install/lib/cmake/SDL3" CACHE PATH "SDL3 CMake package")
 find_package(SDL3 3.4.18 EXACT REQUIRED CONFIG COMPONENTS SDL3-static)
 
@@ -73,9 +73,19 @@ set(CORE_SOURCES
     src/core/platform/files.cpp
     src/core/platform/affinity.cpp
     src/core/platform/parallel.cpp
+    src/core/platform/exe_identity.cpp
+    src/core/diag/rate_log.cpp
+    src/core/sim/pace.cpp
     src/core/display/virtual_display.cpp
     src/core/display/logical_size.cpp
+    src/core/display/resolution_switch.cpp
+    src/core/sim/panel_pause.cpp
+    src/core/display/framed_screens.cpp
     src/core/display/framing.cpp
+    src/core/display/map_screen.cpp
+    src/core/display/city_layout.cpp
+    src/core/display/window_move.cpp
+    src/core/ui/info_window.cpp
     src/core/display/moved_rect.cpp
     src/core/display/scaled_rect.cpp
     src/core/display/city_zoom.cpp
@@ -89,6 +99,7 @@ set(CORE_SOURCES
     src/core/diag/perf.cpp
     src/core/diag/environment.cpp
     src/core/diag/stall.cpp
+    src/core/diag/autorun.cpp
     src/core/diag/present_mode.cpp
     src/core/diag/present_mode_tracker.cpp
     src/core/diag/screen_programs.cpp
@@ -109,6 +120,7 @@ set(CORE_SOURCES
     src/core/ui/perf_view.cpp
     src/core/settings/settings.cpp
     src/core/settings/ini_text.cpp
+    src/core/settings/intro_movie.cpp
 )
 add_library(ddraw SHARED proxy/ddraw/ddraw.c proxy/ddraw/ddraw.def ${CORE_SOURCES} ${GAME_SOURCES})
 # Augustus code (AGPL-3.0): third_party/augustus/README.md. Compiled as part of the DLL.
@@ -131,7 +143,7 @@ target_compile_options(ddraw PRIVATE
 # Static C++ runtime: the DLL depends only on system DLLs (and the UCRT API set).
 target_link_options(ddraw PRIVATE -static -Wl,--subsystem,windows)
 target_link_libraries(ddraw PRIVATE minhook augustus_core png_encode imgui SDL3::SDL3-static dxguid user32 gdi32 winmm)
-# Debug information : ddraw.dbg.dll keeps the DWARF (for llvm-symbolizer), ddraw.syms is the table the
+# Debug information: ddraw.dbg.dll keeps the DWARF (for llvm-symbolizer), ddraw.syms is the table the
 # exception log reads (function and source line for addresses in our DLL; tools/build/make_syms.py), and ddraw.dll
 # itself is stripped of the debug sections (the code is the same).
 find_program(PYTHON_EXE python REQUIRED)
@@ -207,6 +219,12 @@ add_executable(test_moved_rect proxy/ddraw/test_moved_rect.cpp src/core/display/
 target_include_directories(test_moved_rect PRIVATE src)
 target_link_options(test_moved_rect PRIVATE -static)
 
+# Offline test of core/display/city_layout (spare rows, tiling, the sidebar filler's pixels).
+add_executable(test_city_layout proxy/ddraw/test_city_layout.cpp src/core/display/city_layout.cpp
+    src/core/ddraw/surface_memory.cpp src/core/log.cpp)
+target_include_directories(test_city_layout PRIVATE src)
+target_link_options(test_city_layout PRIVATE -static)
+
 # Offline test of core/display/scaled_rect (the China map's scaling, mouse mapping and backdrop).
 # Offline test of core/display/city_zoom and the shrinking in core/display/scaled_rect:
 # the zoom limit for map and screen sizes, the cap, averaged and nearest shrinking.
@@ -232,6 +250,12 @@ add_executable(test_report proxy/ddraw/test_report.cpp src/core/diag/report.cpp 
 target_include_directories(test_report PRIVATE src)
 target_link_options(test_report PRIVATE -static)
 
+# core/platform/exe_identity: SHA-256, the exe's log line and the notice for an untested exe (no game, no DLL).
+add_executable(test_exe_identity proxy/ddraw/test_exe_identity.cpp src/core/platform/exe_identity.cpp
+    src/core/log.cpp src/core/game.cpp)
+target_include_directories(test_exe_identity PRIVATE src)
+target_link_options(test_exe_identity PRIVATE -static)
+
 # Offline test of core/diag/perf (where the time goes).
 add_executable(test_perf proxy/ddraw/test_perf.cpp src/core/diag/perf.cpp)
 target_include_directories(test_perf PRIVATE src)
@@ -256,6 +280,12 @@ add_executable(test_stall proxy/ddraw/test_stall.cpp src/core/diag/stall.cpp src
     src/core/platform/affinity.cpp)
 target_include_directories(test_stall PRIVATE src)
 target_link_options(test_stall PRIVATE -static)
+
+# Offline test of core/diag/autorun (the unattended smoke test's script and steps, on a fake game and clock).
+add_executable(test_autorun proxy/ddraw/test_autorun.cpp src/core/diag/autorun.cpp src/core/diag/guard.cpp
+    src/core/log.cpp src/core/platform/affinity.cpp)
+target_include_directories(test_autorun PRIVATE src)
+target_link_options(test_autorun PRIVATE -static)
 
 # Offline test of core/diag/present_mode (the bookkeeping, the report; the not-Direct3D-11 path), the screen
 # programs list and the window background test color.
@@ -334,8 +364,8 @@ target_link_options(test_options PRIVATE -static)
 
 # Timer probe: timeGetTime/Sleep granularity and an emulation of Emperor's 50 ms present gate.
 # A development tool, not in the public source export.
-if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/tools/timer_probe/timer_probe.cpp)
-    add_executable(timer_probe tools/timer_probe/timer_probe.cpp)
+if(FALSE) # the probe's source is a local development tool, not in this repository
+    add_executable(timer_probe timer_probe.cpp)
     target_link_options(timer_probe PRIVATE -static)
     target_link_libraries(timer_probe PRIVATE winmm)
 endif()

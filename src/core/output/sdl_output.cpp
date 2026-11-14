@@ -4,6 +4,7 @@
 #include "core/output/sdl_output.h"
 
 #include "core/capture/screenshot.h"
+#include "core/diag/autorun.h"
 #include "core/diag/environment.h"
 #include "core/diag/guard.h"
 #include "core/diag/present_mode.h"
@@ -291,6 +292,7 @@ char g_caption[512] = "";      // under g_captionLock
 int g_captionY = 0;
 char g_notice[256] = "";       // SetNotice, under g_captionLock
 DWORD g_noticeUntil = 0;
+std::atomic<unsigned> g_noticeFromFirst{0}; // SetNoticeFromFirstFrame: the ms, counted from the next frame drawn (0: none)
 
 SRWLOCK g_captureLock = SRWLOCK_INIT;
 std::atomic<bool> g_captureWanted{false};
@@ -1117,6 +1119,14 @@ void DrawFrame(const void *pixels, int pitch, int w, int h, const RECT &dst, SIZ
     }
     { // SetNotice: after the screen read-back, so it is never in a screenshot
         char notice[256];
+        if (g_noticeFromFirst) { // a start-up notice: its time starts now
+            AcquireSRWLockExclusive(&g_captionLock);
+            if (g_noticeFromFirst) {
+                g_noticeUntil = GetTickCount() + g_noticeFromFirst;
+                g_noticeFromFirst = 0;
+            }
+            ReleaseSRWLockExclusive(&g_captionLock);
+        }
         AcquireSRWLockShared(&g_captionLock);
         const bool showing = g_notice[0] && static_cast<LONG>(g_noticeUntil - GetTickCount()) > 0;
         std::memcpy(notice, g_notice, sizeof(notice));
@@ -1275,7 +1285,11 @@ core::diag::Feature g_shotFeature{"screenshot (core/output)"};
 
 // Both pictures of a screenshot from the frame this thread shows: the game frame from its own copy, the screen by
 // drawing that frame again and reading it back (so they always match, also while the game is paused or loading).
-// label: nullptr for a screenshot, "report<n>" for a report.
+// label: nullptr for a screenshot, "report<n>" for a report. Counts the ones handed to the writer (autorun waits for
+// that count; core/diag/autorun.h).
+std::atomic<long> g_shotsTaken{0};
+std::atomic<bool> g_autoShot{false}, g_autoReport{false};
+
 void ScreenshotHere(const char *label = nullptr)
 {
     const Frame &f = g_slots[g_read];
@@ -1296,14 +1310,24 @@ void ScreenshotHere(const char *label = nullptr)
         const char *label;
         bool screen;
     } shot{&f, label, !same};
+    struct Taken {
+        Shot *shot;
+        bool ok;
+    } taken{&shot, false};
     if (core::diag::Guarded(g_shotFeature,
                             [](void *p) {
-                                auto *s = static_cast<Shot *>(p);
-                                core::capture::Save(s->f->bits, s->f->pitch, s->f->w, s->f->h, s->label, s->screen);
+                                auto *t = static_cast<Taken *>(p);
+                                const Shot *s = t->shot;
+                                t->ok = core::capture::Save(s->f->bits, s->f->pitch, s->f->w, s->f->h, s->label,
+                                                            s->screen);
                             },
-                            &shot) &&
-        !same) {
-        DrawFrame(f.bits, f.pitch, f.w, f.h, f.dst, f.client, f.framing); // reads the screen back
+                            &taken)) {
+        if (!same) {
+            DrawFrame(f.bits, f.pitch, f.w, f.h, f.dst, f.client, f.framing); // reads the screen back
+        }
+        if (taken.ok) {
+            g_shotsTaken.fetch_add(1);
+        }
     }
 }
 
@@ -1426,12 +1450,15 @@ DWORD WINAPI OutputThread(void *)
         while (PeekMessageW(&m, nullptr, 0, 0, PM_REMOVE)) {
             DispatchMessageW(&m);
         }
-        if (ScreenshotKeyPressed()) {
+        // The keys are polled every time (their state is kept); the autorun's requests count as presses.
+        const bool shotKey = ScreenshotKeyPressed();
+        if (g_autoShot.exchange(false) || shotKey) {
             ScreenshotHere();
         }
-        if (ReportKeyPressed()) {
+        const bool reportKey = ReportKeyPressed();
+        if (g_autoReport.exchange(false) || reportKey) {
             char label[24];
-            const int report = core::diag::BeginReport("report key");
+            const int report = core::diag::BeginReport(reportKey ? "report key" : "autorun");
             std::snprintf(label, sizeof(label), "report%d", report);
             ScreenshotHere(label);
             if (core_config_get()->present_mode_log) {
@@ -1440,6 +1467,7 @@ DWORD WINAPI OutputThread(void *)
         }
         HandleRenderEvents();
         CheckWindowState();
+        core::diag::autorun::Watch(); // the smoke test's watchdog (nothing unless it runs and the game is stuck)
         // [debug] window_background_test (core/diag/window_background.h): applied or restored when it changes.
         core::diag::window_background::Update(g_hwnd, core_config_live(core_config_get()->window_background_test) != 0);
         int r = g_ready.load();
@@ -1676,6 +1704,16 @@ void SetNotice(const char *utf8, unsigned ms)
     AcquireSRWLockExclusive(&g_captionLock);
     std::snprintf(g_notice, sizeof(g_notice), "%s", utf8 ? utf8 : "");
     g_noticeUntil = GetTickCount() + ms;
+    g_noticeFromFirst = 0;
+    ReleaseSRWLockExclusive(&g_captionLock);
+}
+
+void SetNoticeFromFirstFrame(const char *utf8, unsigned ms)
+{
+    AcquireSRWLockExclusive(&g_captionLock);
+    std::snprintf(g_notice, sizeof(g_notice), "%s", utf8 ? utf8 : "");
+    g_noticeUntil = 0;
+    g_noticeFromFirst = ms ? ms : 1;
     ReleaseSRWLockExclusive(&g_captionLock);
 }
 
@@ -1686,6 +1724,21 @@ void RequestScreenCapture(const char *stem, const char *time)
     std::snprintf(g_captureTime, sizeof(g_captureTime), "%s", time);
     ReleaseSRWLockExclusive(&g_captureLock);
     g_captureWanted = true;
+}
+
+void RequestScreenshot()
+{
+    g_autoShot = true;
+}
+
+void RequestReport()
+{
+    g_autoReport = true;
+}
+
+long ScreenshotsSaved()
+{
+    return g_shotsTaken.load();
 }
 
 } // namespace core::output

@@ -1,4 +1,4 @@
-// Custom logical resolution (addresses and evidence in the comments below).
+// Custom logical resolution (the addresses are in the Site and Var declarations below).
 // The city screen's layout.
 //
 // The game knows three modes (screen_mode_get_size 0x52b910: 1 = 640x480, 2 = 800x600, 3 = 1024x768). Mode 3 is
@@ -21,7 +21,7 @@
 //   fullscreen_art_load 0x526040: front-end screens (fixed 1024x768 frames) run at 1024x768 (OnLoop).
 // Shift+F7 (the game treats it as F7) cycles through a few settings at run time.
 //
-// Failure: the game has laid itself out for the
+// Failure (each part's guard is listed in Attach): the game has laid itself out for the
 // resolution, so the resolution is not switched off as a whole. Each part runs under its own guard and only the failing part
 // goes:
 //   switching (mode size, changing it, Shift+F7, front-end frame) -> the game's own 1024x768 from now on (one mode
@@ -41,9 +41,13 @@
 #include "core/ddraw/surface_memory.h"
 #include "core/diag/guard.h"
 #include "core/diag/perf.h"
+#include "core/display/city_layout.h"
 #include "core/display/logical_size.h"
 #include "core/display/moved_rect.h"
+#include "core/display/window_move.h"
+#include "core/display/resolution_switch.h"
 #include "core/display/virtual_display.h"
+#include "core/display/window_key.h"
 #include "core/settings/settings.h"
 #include "core/log.h"
 #include "games/emperor/site.h"
@@ -52,6 +56,8 @@
 #include <vector>
 
 namespace emperor::resolution {
+
+namespace switching = core::display::resolution;
 
 namespace {
 
@@ -134,8 +140,8 @@ constexpr int kViewCols = 231, kViewRows = 457;    // view_to_grid
 constexpr int kTopBar = 40;                        // the city viewport starts below the top bar (y 0x28)
 constexpr int kBottomEdge = 8; // the game's bottom edge (group 0x2d6, 8 px; drawn at 1024 only): its 768 rule
 
-// Guards (core/diag): each part is switched off on its own.
-core::diag::Feature g_switching{"resolution switching (games/emperor/resolution)"};
+// Guards (core/diag): each part of the custom resolution is switched off on its own (switching has the core's,
+// core/display/resolution_switch).
 core::diag::Feature g_layout{"city layout at this resolution (games/emperor/resolution)"};
 core::diag::Feature g_bars{"top bar (games/emperor/resolution)"};
 core::diag::Feature g_filler{"sidebar filler (games/emperor/resolution)"};
@@ -144,71 +150,39 @@ core::diag::Feature g_info{"info window position (games/emperor/resolution)"};
 core::diag::Feature g_clamp{"full-screen picture clamp (games/emperor/resolution)"};
 
 // ---------------------------------------------------------------------------------------------
-// The setting in effect (game thread)
-
-struct Setting {
-    core_resolution_kind kind;
-    int w, h;
-    int scale; // 0 = auto
-};
-Setting g_setting{CORE_RESOLUTION_SCALED, 1024, 768, 100};
-int g_lastW = 0, g_lastH = 0;
-
+// Switching (core/display/resolution_switch): the setting, the 1024x768 frame of the front-end screens, Shift+F7, the
+// way back to the game's own size.
+//
 // Front-end screens (main menu, campaign and mission screens, loading, victory and defeat) are drawn for a fixed
 // 1024x768 frame: the full-screen picture (fullscreen_art_load) is never centred on a larger screen (0x525cd0 only
 // crops it to a smaller one) and their buttons sit at fixed 1024x768 positions. So while one is shown the game
-// runs at 1024x768 and the output centres it; the setting applies again once the city screen is shown.
-const Setting kFrontEnd{CORE_RESOLUTION_FIXED, 1024, 768, 0};
-bool g_frontEnd = true; // until the first city screen
+// runs at 1024x768 and the output frames it; the setting applies again once the city screen is shown.
 
-// Windowed, the game is laid out for the window: its client area at rest divided by the display scale (as
-// Augustus does; with a fixed resolution setting, scale 100%), never below 1024x768 (NativeSize is the client area).
-Setting g_windowedSetting{CORE_RESOLUTION_SCALED, 0, 0, 100};
-
-const Setting &Target()
-{
-    if (g_frontEnd) {
-        return kFrontEnd;
-    }
-    if (core::display::Windowed()) {
-        g_windowedSetting.scale = g_setting.kind == CORE_RESOLUTION_SCALED ? g_setting.scale : 100;
-        return g_windowedSetting;
-    }
-    return g_setting;
-}
-
-bool CityScreen(char s) // the screens screen_draw draws the city for
+bool CityScreen(unsigned char s) // the screens screen_draw draws the city for
 {
     return s == 0x01 || s == 0x08 || s == 0x20 || s == 0x2d || s == 0x48 || s == 0x49;
 }
 
-core::display::LogicalSize Logical(const Setting &s)
-{
-    SIZE native = core::display::NativeSize();
-    return core::display::ChooseLogicalSize(native.cx, native.cy, s.kind, s.w, s.h, s.scale, kMinW, kMinH);
-}
-
-void Describe(const Setting &s, char *out, int size)
-{
-    core::display::DescribeSetting(s.kind, s.w, s.h, s.scale, out, size);
-}
-
 using ChangeMode_fn = void(__cdecl *)(int);
 
-// ---------------------------------------------------------------------------------------------
-// Back to the game's own 1024x768
+// The mode change (the game's own, as its F7 does it). Under the core's switching guard: if it is abandoned, the
+// game's own size comes back on the next loop (screen_change_mode builds everything again then).
+void ChangeMode()
+{
+    Function<ChangeMode_fn>(kChangeMode)(3);
+    *kRedraw = 1;
+}
 
-bool g_toGameSize = false; // a mode change to the game's own size is due (OnLoop)
+switching::SwitchGame Game()
+{
+    return switching::SwitchGame("resolution", kScreenWidth, kScreenHeight, kScreenMode,
+                                 core::site::Var<unsigned char>{kGameScreen.address}, &CityScreen, &ChangeMode);
+}
 
-// Switching is off from now on (mode 3 = the game's own 1024x768) and the game is laid out again at that size on
-// the next loop. Used by every part whose fallback is the game's own size.
+// Every part whose fallback is the game's own size: switching off, the game's own 1024x768 on the next loop.
 void ToGameSize(const char *why)
 {
-    core::diag::Disable(g_switching, why);
-    if (!g_toGameSize && (*kScreenWidth != kMinW || *kScreenHeight != kMinH)) {
-        g_toGameSize = true;
-        core_log("resolution: back to the game's own 1024x768 on the next loop (%s)", why);
-    }
+    switching::ToGameSize(why);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -220,40 +194,12 @@ using ViewportInit_fn = void(__cdecl *)(int, int, int, int, int, int, int, int);
 ModeGetSize_fn o_ModeGetSize;
 Void_fn o_SidebarPos, o_ViewportSmall, o_ViewportLarge;
 
-struct ModeCall {
-    core::diag::Restore r;
-};
-
-// Mode 3's size: ours (screen_width/height in c.r: the game's own 1024x768 comes back if this is abandoned).
-void ModeSize(ModeCall &c)
-{
-    core::display::LogicalSize l = Logical(Target());
-    c.r.Set(kScreenWidth.ptr(), l.w);
-    c.r.Set(kScreenHeight.ptr(), l.h);
-    if (l.w != g_lastW || l.h != g_lastH) {
-        char what[64];
-        Describe(Target(), what, sizeof(what));
-        if (g_frontEnd) {
-            std::strcat(what, ", front-end screen");
-        }
-        SIZE native = core::display::NativeSize();
-        core_log("resolution: mode 3 = %dx%d (%s; native %ldx%ld, scale %d%%%s)", l.w, l.h, what, native.cx,
-                 native.cy, l.scale_percent, l.limited ? ", limited to the 1024x768 minimum" : "");
-        g_lastW = l.w;
-        g_lastH = l.h;
-    }
-    c.r.Forget(); // the new size is the result
-}
-
+// Mode 3's size: ours (the core's, guarded; the game's own when switching is off).
 void __cdecl ModeGetSize_detour(int mode)
 {
     Original(o_ModeGetSize, kModeGetSize)(mode);
-    if (mode != 3 || !core::diag::Enabled(g_switching)) {
-        return; // the game's own size
-    }
-    ModeCall c;
-    if (!core::diag::Guarded(g_switching, [](void *p) { ModeSize(*static_cast<ModeCall *>(p)); }, &c, &c.r)) {
-        ToGameSize("the mode size could not be worked out");
+    if (mode == 3) {
+        switching::OnModeSize();
     }
 }
 
@@ -269,7 +215,6 @@ int LargeColumns(int w)
 // (not the sidebar, which the game sets before it: the clip is still the last mode's then) also the spare rows the
 // city may draw into (core/ddraw/surface_memory.h): the clip's overshoot of the screen (the game's own small tiles:
 // 775 at 768) or the next half row past the bottom; never more than a row pair.
-int g_lastAllowance = -1;
 int g_extRight = 0, g_extBottom = 0;
 bool StandardSize(int w, int h); // below
 
@@ -285,22 +230,7 @@ void UpdateCityExtent(bool viewport)
     if (!viewport) {
         return;
     }
-    const int clip = *kCityClipBottom, halfH = *kTileHalfH;
-    int reach = clip;
-    if (bottom > clip && halfH > 0) {
-        reach = clip + (bottom - clip + halfH - 1) / halfH * halfH;
-    }
-    int allowance = reach > h ? reach - h : 0;
-    if (halfH > 0 && allowance > 2 * halfH) {
-        allowance = 2 * halfH; // not a clip of this mode
-    }
-    core::ddraw::SetCanaryAllowance(allowance);
-    if (allowance != g_lastAllowance) {
-        g_lastAllowance = allowance;
-        core_log("resolution: the city may draw %d row(s) below the screen (spare rows; city clip bottom %d, shown to "
-                 "%d)",
-                 allowance, clip, bottom ? bottom : clip);
-    }
+    core::display::ApplySpareRows("resolution: ", *kCityClipBottom, bottom, *kTileHalfH, h);
 }
 
 // The layout part failed: the 1024 layout's values now (valid on any screen of 1024x768 or more), the game's own
@@ -461,12 +391,16 @@ void TileRowLeft(int id, int left, int right, int y)
 {
     int w, h;
     ImageSize(id, &w, &h);
-    if (w <= 0) {
-        return;
-    }
-    for (int x = right - w; x > left - w; x -= w) {
-        Draw(id, x, y);
-    }
+    struct Row {
+        int id, y;
+    } row{id, y};
+    core::display::TileRowLeft(
+        w, left, right,
+        [](int x, void *p) {
+            auto *r = static_cast<Row *>(p);
+            Draw(r->id, x, r->y);
+        },
+        &row);
 }
 
 Void_fn o_FrameBars, o_SidebarDraw, o_InfoPlace;
@@ -502,7 +436,7 @@ void __cdecl FrameBars_detour()
 
 // The sidebar backdrop of China_Interface (entry 2045, 226x768, the light leather panel from playtests), read from the
 // player's own pack in memory (core/assets/sg3) so that rows can be drawn on their own (the game's image_draw only
-// draws whole images). Its rows (from the pixels): 0..14 the blue-white fret
+// draws whole images). Its rows: 0..14 the blue-white fret
 // band (as on the top bar), 15..37 leather without the edge, 38..39 the corner where the left edge starts, 40..767
 // leather with the sidebar's own left edge (column 0 dark, 1 light, 2 highlight -- the same as the sidebar panels).
 // Below the sidebar: rows 40.. only (no band: not wanted in play), and the lower panel's own last 7 rows
@@ -672,12 +606,11 @@ void __cdecl SidebarDraw_detour()
 // ---------------------------------------------------------------------------------------------
 // The building information window (info_window_place 0x5a1430)
 
-InfoMode g_infoMode = InfoMode::Original;
 
 // The four kinds of building the game always opens at (0, 0x2a): info_window_place's second special case,
 // FUN_005d3690 (types 0x35 Mill, 0x36 Warehouse, 0x38 Trading Quay, 0x3a Trading Station; names from
 // EmperorText.eng group 0x1c). Their window code relies on that position in places
-// §3.2): the storage window draws its employee panel at y (rows - 4) x 16 and the trade window at (rows - 1) x 16,
+// (from the disassembly): the storage window draws its employee panel at y (rows - 4) x 16 and the trade window at (rows - 1) x 16,
 // without the window's y; their goods lists are laid out once and kept. So for these the game keeps its own position
 // and the window is moved only on screen: drawn into a copy of the screen and its rectangle copied to where it is
 // shown, the mouse moved back by the same amount while the window draws and handles input. Everything the game
@@ -759,13 +692,13 @@ void PlaceInfo(core::diag::Restore &r)
     const bool small = *kSmallTiles == 1;
     const bool fixed = *kInfoKind == 2 && *kInfoX == kFixedX && *kInfoY == kFixedY &&
                        (Function<int(__cdecl *)(int)>(kSpecialPlace)(*kInfoBuilding) & 0xff) != 0;
-    if (g_infoMode != InfoMode::Original) {
+    if (core::ui::info_window::Current() != InfoMode::Original) {
         // Opened on the China map (the trade window from the sidebar's Order button): in the middle of the map
         // area, whatever the setting (beside the cursor it would sit at the sidebar's edge).
         const char from = *kInfoPrevScreen;
         const bool map = from == 0x14 || from == 0x16 || from == 0x1e;
         InfoArea a{0, kTopBar, small ? w : *kSidebarX, h}; // the city reaches the bottom (no bottom edge)
-        POINT p = InfoPosition(map ? InfoMode::Centered : g_infoMode, a, *kInfoCols * 16, *kInfoRows * 16, *kMouseX,
+        POINT p = InfoPosition(map ? InfoMode::Centered : core::ui::info_window::Current(), a, *kInfoCols * 16, *kInfoRows * 16, *kMouseX,
                                *kMouseY);
         if (fixed) {
             if (DrawIsHooked()) {
@@ -807,71 +740,19 @@ void __cdecl InfoPlace_detour()
     }
 }
 
-// Drawing a shifted window: the game draws into a copy of the screen (draw_buffer) where the window's place
-// (`from`) holds what is on screen where it is shown (`to`); afterwards everything outside `from` is copied back
-// 1:1 (anything else the call drew) and `from` is copied to `to`.
-struct Redirect {
-    bool active = false;
-    core::display::Surface16 back{}; // the screen as it was when the window started drawing
-    RECT from{}, to{};
-    core::diag::Restore r; // draw_buffer and the mouse
-};
-Redirect g_redirect;
-BYTE *g_copy = nullptr;
-size_t g_copySize = 0;
-
-const int kWindowMovePhase = core::diag::perf::Register("info window move (ours)", core::diag::perf::Thread::Game);
+// Drawing a shifted window (core/display/window_move): the game draws into a copy of the screen (draw_buffer) where
+// the window's place holds what is on screen where it is shown; afterwards that place is shown there.
+core::display::WindowMove g_move("resolution: ");
 
 bool BeginRedirect(int x, int y, int cols, int rows)
 {
-    core::diag::perf::Scope timed(kWindowMovePhase);
-    const int pitch = *kScreenPitch, w = *kDdWidth, h = *kDdHeight;
-    core::display::Surface16 back{*kDrawBuffer, pitch, w, h,
-                                  pitch > 0 && h > 0 ? static_cast<size_t>(pitch) * static_cast<size_t>(h) : 0};
-    RECT from{x, y, x + cols * 16, y + rows * 16};
-    RECT to{from.left + g_shift.dx, from.top + g_shift.dy, from.right + g_shift.dx, from.bottom + g_shift.dy};
-    // Both rectangles inside the screen (the placement keeps them in the city area; anything else: not moved).
-    if (!core::display::MovedRectValid(back, from, to)) {
-        static long logs = 0;
-        if (++logs <= 4) {
-            core_log("resolution: info window not moved: (%ld,%ld)-(%ld,%ld) to (%ld,%ld) does not fit a %dx%d screen "
-                     "(pitch %d)",
-                     from.left, from.top, from.right, from.bottom, to.left, to.top, w, h, pitch);
-        }
-        return false;
-    }
-    if (back.bytes > g_copySize) {
-        if (g_copy) {
-            VirtualFree(g_copy, 0, MEM_RELEASE);
-        }
-        g_copy = static_cast<BYTE *>(VirtualAlloc(nullptr, back.bytes, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
-        g_copySize = g_copy ? back.bytes : 0;
-    }
-    if (!g_copy || !core::display::MovedRectPrepare(g_copy, back, from, to)) {
-        return false;
-    }
-    Redirect &d = g_redirect;
-    d.back = back;
-    d.from = from;
-    d.to = to;
-    d.r.Set(kDrawBuffer.ptr(), g_copy);
-    d.r.Set(kMouseX.ptr(), *kMouseX - g_shift.dx); // hover in the game's own place of the window
-    d.r.Set(kMouseY.ptr(), *kMouseY - g_shift.dy);
-    d.active = true;
-    return true;
+    return g_move.Begin(kDrawBuffer.ptr(), *kScreenPitch, *kDdWidth, *kDdHeight, x, y, cols * 16, rows * 16,
+                        g_shift.dx, g_shift.dy, kMouseX.ptr(), kMouseY.ptr());
 }
 
 void EndRedirect()
 {
-    core::diag::perf::Scope timed(kWindowMovePhase);
-    Redirect &d = g_redirect;
-    if (!d.active) {
-        return;
-    }
-    d.active = false;
-    d.r.Undo(); // draw_buffer and the mouse
-    // The screen it started with (the game does not change modes inside a window draw; checked again inside).
-    core::display::MovedRectCompose(d.back, g_copy, d.from, d.to);
+    g_move.End();
 }
 
 using WindowDraw_fn = void(__thiscall *)(void *, int, int, int, int, int);
@@ -904,10 +785,10 @@ void __fastcall WindowDraw_detour(void *self, void *, int x, int y, int cols, in
                 c.original(c.self, c.x, c.y, c.cols, c.rows, c.flag);
                 EndRedirect();
             },
-            &c, &g_redirect.r)) {
+            &c, &g_move.Changes())) {
         return;
     }
-    g_redirect.active = false; // put back by the guard; the window is drawn where the game has it from now on
+    g_move.Abandon(); // put back by the guard; the window is drawn where the game has it from now on
     g_shift = Shift{};
     original(self, x, y, cols, rows, flag);
 }
@@ -943,10 +824,10 @@ void __fastcall MillForeground_detour(void *self, void *, int x, int y, int cols
                 c.original(c.self, c.x, c.y, c.cols, c.rows);
                 EndRedirect();
             },
-            &c, &g_redirect.r)) {
+            &c, &g_move.Changes())) {
         return;
     }
-    g_redirect.active = false;
+    g_move.Abandon();
     g_shift = Shift{};
     original(self, x, y, cols, rows);
 }
@@ -958,8 +839,8 @@ Popup_fn o_TradePopup;
 
 void __fastcall TradePopup_detour(void *self)
 {
-    if (g_redirect.active && !core::diag::Guarded(g_info, [](void *) { EndRedirect(); }, nullptr, &g_redirect.r)) {
-        g_redirect.active = false;
+    if (g_move.Active() && !core::diag::Guarded(g_info, [](void *) { EndRedirect(); }, nullptr, &g_move.Changes())) {
+        g_move.Abandon();
         g_shift = Shift{};
     }
     Original(o_TradePopup, kTradePopup)(self);
@@ -1172,62 +1053,16 @@ int __cdecl ImageDraw_detour(int id, int x, int y, int a, int b, int c)
 using ArtLoad_fn = int(__cdecl *)(int, int, int);
 ArtLoad_fn o_ArtLoad;
 
-long g_switchLogs = 0;
-constexpr long kSwitchLogs = 40;
-
-// Only our own flag (nothing that can fault), so not guarded; with switching off it is left alone.
+// A full-screen picture outside the city screens starts the 1024x768 frame (the core's flag; not guarded).
 int __cdecl ArtLoad_detour(int index, int x, int y)
 {
-    char s = *kGameScreen;
-    if (!g_frontEnd && !CityScreen(s) && core::diag::Enabled(g_switching)) {
-        g_frontEnd = true; // a full-screen picture: OnLoop switches to the 1024x768 frame
-        if (++g_switchLogs <= kSwitchLogs) {
-            core_log("resolution: full-screen picture %d on screen 0x%02x -> 1024x768 frame", index,
-                     static_cast<unsigned char>(s));
-        }
-    }
+    switching::EnterFrontEnd(index);
     int r = Original(o_ArtLoad, kArtLoad)(index, x, y);
     emperor::fullscreen::OnArtLoaded(index, x, y);
     return r;
 }
 
 bool g_installed = false;
-DWORD g_lastTry = 0;
-
-// ---------------------------------------------------------------------------------------------
-// Shift+F7
-
-const Setting kCycle[] = {
-    {CORE_RESOLUTION_FIXED, 1024, 768, 0}, {CORE_RESOLUTION_SCALED, 0, 0, 0},   {CORE_RESOLUTION_SCALED, 0, 0, 100},
-    {CORE_RESOLUTION_SCALED, 0, 0, 125},   {CORE_RESOLUTION_SCALED, 0, 0, 150}, {CORE_RESOLUTION_SCALED, 0, 0, 175},
-    {CORE_RESOLUTION_SCALED, 0, 0, 200},   {CORE_RESOLUTION_SCALED, 0, 0, 250},
-};
-int g_cycle = -1; // -1: the setting from emperor_engine.ini
-
-// The mode change (the game's own, as its F7 does it). Guarded with switching: if it is abandoned, the game's own
-// size comes back on the next loop (screen_change_mode builds everything again then).
-void ChangeMode()
-{
-    Function<ChangeMode_fn>(kChangeMode)(3);
-    *kRedraw = 1;
-}
-
-void CycleSetting()
-{
-    const int n = sizeof(kCycle) / sizeof(kCycle[0]);
-    for (int tries = 0; tries < n; ++tries) { // the next setting that gives another size on this screen
-        g_cycle = (g_cycle + 1) % n;
-        core::display::LogicalSize next = Logical(kCycle[g_cycle]);
-        if (next.w != g_lastW || next.h != g_lastH) {
-            break;
-        }
-    }
-    g_setting = kCycle[g_cycle];
-    char what[48];
-    Describe(g_setting, what, sizeof(what));
-    core_log("resolution: Shift+F7 -> %s (until the game ends; emperor_engine.ini is not changed)", what);
-    ChangeMode();
-}
 
 // Modes 1 (640x480) and 2 (800x600) have no use with our resolutions (in play it is always 1024x768, i.e. mode 3,
 // which carries our size). The game falls back to mode 1 when DirectDraw refuses 1024x768 and 800x600 (dd_init), so
@@ -1260,124 +1095,21 @@ bool ModeKey(UINT message, WPARAM key, LPARAM)
     return true;
 }
 
-// F5 (and the Display options button "Windowed screen", which posts F5) and Alt+Enter: our window mode instead of the
-// game's
-// The game never sees it, so screen_fullscreen stays 1 and Emperor.inf only ever
-// holds the original's own value; the change goes through the setting (saved, applied on the game thread).
-bool WindowKey(UINT message, WPARAM key, LPARAM l)
-{
-    const bool f5 = message == WM_KEYDOWN && key == VK_F5 && !(GetKeyState(VK_SHIFT) & 0x8000) &&
-                    !(GetKeyState(VK_CONTROL) & 0x8000);
-    const bool altEnter = message == WM_SYSKEYDOWN && key == VK_RETURN && (l & (1 << 29)); // the usual key elsewhere
-    if (!f5 && !altEnter) {
-        return false;
-    }
-    if (!(l & (1 << 30))) { // not an auto-repeat
-        const bool to = !core::display::Windowed();
-        core_log("resolution: %s -> %s (the game does not see the key)", f5 ? "F5" : "Alt+Enter",
-                 to ? "windowed" : "fullscreen");
-        core::settings::Request(core::settings::Find("video", "window"), to ? "windowed" : "fullscreen", true);
-    }
-    return true;
-}
-
-bool KeyFilter(UINT message, WPARAM key, LPARAM l)
-{
-    if (WindowKey(message, key, l) || ModeKey(message, key, l)) {
-        return true;
-    }
-    if (message != WM_KEYDOWN || key != VK_F7 || !(GetKeyState(VK_SHIFT) & 0x8000)) {
-        return false;
-    }
-    if ((l & (1 << 30)) || !core::diag::Enabled(g_switching)) {
-        return true; // auto-repeat: one step per press; off: Shift+F7 does nothing (the game does not see it)
-    }
-    if (!core::diag::Guarded(g_switching, [](void *) { CycleSetting(); }, nullptr)) {
-        ToGameSize("Shift+F7 could not change the resolution");
-    }
-    return true;
-}
-
-void Switch()
-{
-    char s = *kGameScreen;
-    if (g_frontEnd && CityScreen(s)) {
-        g_frontEnd = false;
-        if (++g_switchLogs <= kSwitchLogs) {
-            core_log("resolution: city screen 0x%02x -> the configured resolution", static_cast<unsigned char>(s));
-        }
-    }
-    if (*kScreenMode != 3) {
-        return; // F6 (800x600) or a video: the game's own mode
-    }
-    core::display::LogicalSize t = Logical(Target());
-    if (t.w == *kScreenWidth && t.h == *kScreenHeight) {
-        return;
-    }
-    DWORD now = GetTickCount();
-    if (now - g_lastTry < 500) {
-        return; // screen_change_mode refuses during videos and a few other screens; try again later
-    }
-    g_lastTry = now;
-    ChangeMode();
-}
-
 } // namespace
 
-POINT InfoPosition(InfoMode mode, const InfoArea &a, int w, int h, int mouseX, int mouseY)
+// F6 (blocked) and Shift+F7 (the core's cycle), with resolution installed. F5 and Alt+Enter (our window mode) are in
+// emperor.cpp's key filter, installed also without resolution.
+bool KeyFilter(UINT message, WPARAM key, LPARAM l)
 {
-    constexpr int kGap = 24; // between the cursor and the window
-    auto clamp = [](int v, int lo, int hi) { return v > hi ? (hi > lo ? hi : lo) : v < lo ? lo : v; };
-    POINT p{a.left, a.top};
-    if (mode == InfoMode::Centered) {
-        p.x = a.left + (a.right - a.left - w) / 2;
-        p.y = a.top + (a.bottom - a.top - h) / 2;
+    if (!g_installed) {
+        return false;
     }
-    else if (mode == InfoMode::Cursor) {
-        // Beside the cursor (right of it, or left when it does not fit), centred on it vertically; never past the
-        // city area.
-        p.x = mouseX + kGap + w <= a.right ? mouseX + kGap : mouseX - kGap - w;
-        p.y = mouseY - h / 2;
-    }
-    p.x = clamp(static_cast<int>(p.x), a.left, a.right - w);
-    p.y = clamp(static_cast<int>(p.y), a.top, a.bottom - h);
-    return p;
-}
-
-void SetInfoMode(InfoMode mode)
-{
-    static const char *const kNames[] = {"original", "centered", "cursor"};
-    g_infoMode = mode;
-    core_log("resolution: info window position %s (from the next window opened)", kNames[static_cast<int>(mode)]);
+    return ModeKey(message, key, l) || switching::CycleKey(message, key, l);
 }
 
 void OnLoop()
 {
-    if (!g_installed) {
-        return;
-    }
-    if (g_toGameSize) {
-        // Back to the game's own size: mode 3 is 1024x768 again (switching is off); the game's own mode change.
-        // Not guarded: from here on everything is the game's own (our layout hooks pass 1024 through).
-        if (*kScreenMode == 3 && (*kScreenWidth != kMinW || *kScreenHeight != kMinH)) {
-            DWORD now = GetTickCount();
-            if (now - g_lastTry >= 500) {
-                g_lastTry = now;
-                Function<ChangeMode_fn>(kChangeMode)(3);
-                *kRedraw = 1;
-            }
-            return;
-        }
-        g_toGameSize = false;
-        core_log("resolution: the game runs at its own %dx%d", *kScreenWidth, *kScreenHeight);
-        return;
-    }
-    if (!core::diag::Enabled(g_switching)) {
-        return;
-    }
-    if (!core::diag::Guarded(g_switching, [](void *) { Switch(); }, nullptr)) {
-        ToGameSize("the resolution could not be changed");
-    }
+    switching::OnLoop();
 }
 
 void DrawSidebarFiller()
@@ -1393,46 +1125,17 @@ void DrawSidebarFiller()
 
 bool FrontEnd()
 {
-    return g_installed && g_frontEnd;
+    return switching::FrontEnd();
 }
 
 double CityScale()
 {
-    Setting s = g_setting;
-    if (core::display::Windowed()) {
-        s = g_windowedSetting;
-        s.scale = g_setting.kind == CORE_RESOLUTION_SCALED ? g_setting.scale : 100;
-    }
-    const core::display::LogicalSize l = Logical(s);
-    const SIZE n = core::display::NativeSize(); // windowed: the client area
-    if (l.w <= 0 || l.h <= 0 || n.cx <= 0 || n.cy <= 0) {
-        return 1.0;
-    }
-    const double kx = static_cast<double>(n.cx) / l.w, ky = static_cast<double>(n.cy) / l.h;
-    return kx < ky ? kx : ky;
+    return switching::CityScale();
 }
 
 bool SettingsChanged(const core_config *cfg)
 {
-    if (!g_installed) {
-        return true;
-    }
-    if (!core::diag::Enabled(g_switching)) {
-        core_log("resolution: setting not applied: resolution switching was switched off after an error (the game "
-                 "runs at its own 1024x768)");
-        return false;
-    }
-    g_setting = Setting{cfg->resolution, cfg->resolution_w, cfg->resolution_h, cfg->scale_percent};
-    g_cycle = -1; // Shift+F7 starts again from the setting
-    g_lastTry = 0;
-    char what[48];
-    Describe(g_setting, what, sizeof(what));
-    core_log("resolution: setting changed to %s%s", what, g_frontEnd ? " (applies on the city screen)" : "");
-    if (core::display::Windowed() && g_setting.kind == CORE_RESOLUTION_FIXED) {
-        // Windowed the game is laid out for the window: a size chosen here becomes the window's client area.
-        core::display::SetWindowClient(g_setting.w, g_setting.h);
-    }
-    return true;
+    return switching::SettingsChanged(cfg);
 }
 
 const Detour *Detours(int *count)
@@ -1463,13 +1166,8 @@ const Detour *Detours(int *count)
 
 void InstalledForTest(const core_config *cfg)
 {
-    g_setting = Setting{cfg->resolution, cfg->resolution_w, cfg->resolution_h, cfg->scale_percent};
+    switching::InstalledForTest(Game(), cfg);
     g_installed = true;
-}
-
-bool KeyFilterForTest(UINT message, WPARAM key, LPARAM l)
-{
-    return KeyFilter(message, key, l);
 }
 
 void SetInterfacePackForTest(const wchar_t *path)
@@ -1515,7 +1213,7 @@ bool Attach(const core_config *cfg)
             patched += PatchCode(at, &jl, 1);
         }
     }
-    g_setting = Setting{cfg->resolution, cfg->resolution_w, cfg->resolution_h, cfg->scale_percent};
+    switching::Install(Game(), cfg); // before the hooks: their fallbacks go back to the game's size through it
     Install(kModeGetSize, &ModeGetSize_detour, o_ModeGetSize);
     if (Matches(kInitialMode)) {
         Install(kInitialMode, &InitialMode_detour, o_InitialMode);
@@ -1554,12 +1252,11 @@ bool Attach(const core_config *cfg)
                  static_cast<unsigned long>(kHelpTocX));
     }
     Install(kFillRect, &FillRect_detour, o_FillRect);
-    core::display::SetKeyFilter(&KeyFilter);
-    core::display::SetGameMinimum(kMinW, kMinH);
     emperor::zoom::SetRelayout(&RelayoutCity);
     g_installed = true;
     char what[48];
-    Describe(g_setting, what, sizeof(what));
+    core::display::DescribeSetting(cfg->resolution, cfg->resolution_w, cfg->resolution_h, cfg->scale_percent, what,
+                                   sizeof(what));
     core_log("resolution: installed (display.resolution %s; %d of %d layout compares now take the 1024 layout for "
              "any width >= 1024; front-end screens at 1024x768; Shift+F7 cycles the resolution; each part guarded)",
              what, patched, static_cast<int>(sizeof(kJumps) / sizeof(kJumps[0])));

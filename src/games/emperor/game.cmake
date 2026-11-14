@@ -40,6 +40,7 @@ set(GAME_SOURCES
     src/games/emperor/game_menu.cpp
     src/games/emperor/nature_sounds.cpp
     src/games/emperor/ambient_rate.cpp
+    src/games/emperor/smoke.cpp
 )
 
 # The offline tests of this game layer (run by src/games/emperor/tests.ps1 through proxy/ddraw/run_tests.ps1).
@@ -61,17 +62,21 @@ macro(game_add_tests)
         src/core/options/menu.cpp src/games/emperor/game_menu.cpp src/games/emperor/nature_sounds.cpp
         src/core/display/common_sizes.cpp
         src/games/emperor/sound.cpp src/games/emperor/master_volume.cpp src/games/emperor/ambient_rate.cpp
-        src/games/emperor/intro.cpp
+        src/games/emperor/intro.cpp src/core/settings/intro_movie.cpp src/games/emperor/smoke.cpp
         src/games/emperor/zoom.cpp src/core/display/city_zoom.cpp
         src/games/emperor/city_picture.cpp src/games/emperor/notice.cpp src/games/emperor/keys.cpp
         src/core/display/city_strips.cpp
         src/core/capture/big_picture.cpp
         src/core/capture/png_stream.cpp
         src/core/scroll/smooth_scroll.cpp src/core/diag/guard.cpp src/core/diag/report.cpp src/core/diag/perf.cpp
+        src/core/diag/rate_log.cpp src/core/sim/pace.cpp
         src/core/diag/environment.cpp src/core/diag/stall.cpp src/core/platform/affinity.cpp src/core/log.cpp
         src/core/diag/present_mode.cpp src/core/diag/present_mode_tracker.cpp src/core/diag/screen_programs.cpp
-        src/core/platform/parallel.cpp src/core/display/logical_size.cpp
-        src/core/display/moved_rect.cpp src/core/display/scaled_rect.cpp src/core/ddraw/surface_memory.cpp
+        src/core/platform/parallel.cpp src/core/display/logical_size.cpp src/core/display/resolution_switch.cpp
+        src/core/sim/panel_pause.cpp
+        src/core/display/moved_rect.cpp src/core/display/scaled_rect.cpp src/core/display/map_screen.cpp
+        src/core/ddraw/surface_memory.cpp
+        src/core/display/city_layout.cpp src/core/display/window_move.cpp src/core/ui/info_window.cpp
         src/core/assets/sg3.cpp src/core/config.cpp src/core/settings/settings.cpp src/core/settings/ini_text.cpp
         src/core/ui/hotkey.cpp src/core/hook/hook.cpp src/core/platform/files.cpp src/core/game.cpp)
     target_include_directories(test_restore PRIVATE src ${CMAKE_CURRENT_BINARY_DIR}/generated)

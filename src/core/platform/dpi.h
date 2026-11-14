@@ -1,6 +1,6 @@
 // DPI awareness for the game process. Old games are DPI unaware, so with display scaling above 100% Windows
 // virtualizes their coordinates: Emperor at 125% presented only 819x614 of its 1024x768 frame
-// (seen in testing). Making the process DPI aware before its first window fixes that without
+// in testing. Making the process DPI aware before its first window fixes that without
 // the per-exe compatibility setting.
 //
 // All functions call user32, so none of them may run under the loader lock (see core/startup.h for when they

@@ -2,20 +2,17 @@
 
 #include "core/diag/guard.h"
 #include "core/diag/perf.h"
-#include "core/display/scaled_rect.h"
+#include "core/display/map_screen.h"
 #include "core/log.h"
 #include "core/settings/settings.h"
-#include "games/emperor/fullscreen.h"
+#include "core/sim/ui_anim.h"
 #include "games/emperor/resolution.h"
 
-#include <cmath>
 #include <cstdio>
-#include <cstdlib>
 #include <cstring>
-#include <vector>
 
 // Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e): how the game draws
-// the map) and §5 (this design). All five hooked functions are __cdecl with a plain ret.
+// the map was read from the disassembly. All five hooked functions are __cdecl with a plain ret.
 namespace emperor::china_map {
 namespace {
 
@@ -44,7 +41,8 @@ const Site kFrameDraw{"china_map_frame_draw", 0x5b81d0, {0xa1, 0xd8, 0xd0, 0xc5,
 // anim_advance_ui (__cdecl id, frame; ret; only china_map_draw calls it): images with animation speed 0 (the allies'
 // flags, group 0x25a: 5 frames, speed 0 in China_Interface.sg3) step on every main-loop pass, so how fast they look
 // depends on how often a frame is shown: about 20 per second in the original, about 100 with our output (seen in
-// test: the flags flap much faster than in the original). Here speed 0 steps at most every kSpeed0Ms, as at 20 FPS.
+// test: the flags flap much faster than in the original). Here speed 0 steps at most every 50 ms, as at 20 FPS
+// (core/sim/ui_anim.h).
 const Site kAnim{"anim_advance_ui", 0x5b9760, {0x53, 0x8b, 0x5c, 0x24, 0x0c, 0x56, 0x57, 0x33}};
 // The city map panels of screen 0x16 ("Consult Spy Map" and the like; __thiscall on the panel object, x, y, w, h;
 // ret 0x10), called by 0x5ca230 with the map window (0, 40, sidebar_x, height - 40). They lay the 231 x 457 grid of
@@ -60,6 +58,7 @@ const Var<BYTE *> kDrawBuffer{0x1156df8}; // draw_buffer (RGB565)
 const Var<int> kPitch{0x10de000};         // bytes per row
 const Var<int> kDdWidth{0x10de008};
 const Var<int> kDdHeight{0x10de004};
+const Var<int> kClipBottom{0x10c7318}; // screen_clip_rect's bottom (exclusive)
 const Var<char> kGameScreen{0x10de045};
 const Var<char> kRedraw{0x10de036};      // screen_redraw
 const Var<int> kSidebarX{0x13f8e0c};
@@ -74,12 +73,8 @@ const Var<int> kMapH{0x82b7ac};
 const Var<int> kMapNumber{0xc058d4};     // which of China_MapOfChina01..04 (the map object 0xc058d0, +4)
 const Var<DWORD> kFrameTime{0x1156dec};  // timeGetTime() at the start of each game_frame
 const Var<BYTE> kTimerFlag0{0x8901cc};   // frame_timer_flags[0]: set on every game_frame
-constexpr DWORD kSpeed0Ms = 50;
 
 constexpr int kTopBarH = 0x28;            // the origin's y
-constexpr int kBorder = 16;               // the fret border, in map pixels
-constexpr double kBlurSigma = 3.0;        // the backdrop's blur, in screen pixels (playtest: mockup bg_sigma3_bright55)
-constexpr int kBrightness = 141;          // the backdrop's brightness, /256 (55 %)
 constexpr char kEditorMap = 0x15;
 
 using VoidFn = void(__cdecl *)();
@@ -91,370 +86,77 @@ TopBarFn o_TopBar;
 AnimFn o_Anim;
 PanelFn o_SpyPanel, o_CityPanel;
 
+namespace map_screen = core::display::map_screen;
+
 core::diag::Feature g_feature{"China map layout (games/emperor/china_map)"};
-const int kPhase = core::diag::perf::Register("China map layer (ours)", core::diag::perf::Thread::Game);
 
-// kOriginal (the game's own drawing, top left) is no longer a choice (hardly anyone would pick it; a file
-// that has it gets native); it stays for the offline tests and as the way through when the layout is off.
-enum Mode { kScaled, kNative, kOriginal };
-const char *const kModes[] = {"scaled", "native", "original"};
-const char *const kModeLabels[] = {"scaled (larger than its own size)", "native (its own size, centered)"};
-constexpr int kModeChoices = 2;
-int g_mode = kNative; // the picture's own size by default
-int g_scalePercent = 0; // display.china_map_scale for scaled, 0 = fit (as large as the map area allows)
-int g_fitPercent = 0;   // the fit of the map last shown, in percent (0: none shown yet)
-
-// The panel's China map: scale slider ends at what fits now (the last map shown at the current size; 400 before any).
-int FitPercent()
+// The map's layout, drawing and mouse are the core's (core/display/map_screen, shared with Zeus's world map); here
+// the game's variables and functions.
+bool TakeOver()
 {
-    return g_fitPercent > 0 ? g_fitPercent : 400;
+    return *kGameScreen != kEditorMap;
 }
 
-// What is around the map: the same map blurred and darkened, or the city as it was when the map opened, as
-// it is (the map like a window over it). That city is what the game leaves in its draw buffer: the map screen does
-// not redraw outside the map (the original shows it, with what popups leave
-// behind). It is kept when the first map frame after a city frame is drawn and put back on every frame, so nothing
-// is left behind. The city is still: the game does not draw it while the map is shown. (Blurring it would take about
-// 0.1 s at 2560x1440, a visible stop when the map opens: not done.)
-enum Background { kMapBackground, kCityBackground };
-const char *const kBackgrounds[] = {"map", "city"};
-const char *const kBackgroundLabels[] = {"map (the same map, blurred and darkened)", "city (your city as you left it)"};
-int g_background = kMapBackground;
-
-// Our buffers.
-BYTE *g_layer = nullptr; // the game draws the map here: same layout as the back buffer
-size_t g_layerSize = 0;
-std::vector<WORD> g_canvas; // border + map, (map + 2 border) pixels square
-int g_canvasW = 0, g_canvasH = 0, g_border = 0;
-std::vector<WORD> g_backdrop; // the map area's background
-int g_backdropKey[5] = {};
-std::vector<WORD> g_cityBackdrop; // the map area of the draw buffer when the map opened
-int g_cityW = 0, g_cityH = 0;
-int g_cityFrames = -1;            // emperor::fullscreen::CityFramesDrawn() when it was kept
-
-// Where the map is shown now (for the mouse); valid only for the layout it was computed for.
-struct Shown {
-    bool valid;
-    int ddW, ddH, sidebarX;
-    int x, y;         // the framed map's (border + map) top left on the screen
-    double scale;
-    int border;       // in map pixels
-    int canvasW, canvasH, mapW, mapH;
-} g_shown{};
-
-bool g_deferTop = false; // inside our china_map_draw call: top_bar_piece_and_popup waits
-bool g_topPending = false;
-int g_topArg = 0;
-long g_logs = 0;
-constexpr long kLogs = 12;
-
-void Log(const char *fmt, int a = 0, int b = 0, int c = 0, int d = 0, int e = 0, int f = 0)
+bool CityBackground()
 {
-    if (++g_logs <= kLogs) {
-        core_log(fmt, a, b, c, d, e, f);
-    }
+    return true; // the campaign map (0x34) is not reached in Emperor's campaigns
 }
 
-// The layout the composition needs: the whole map at its own size inside the area (so the game's scroll offsets are 0).
-struct Layout {
-    int ddW, ddH, pitch, sidebarX, mapW, mapH;
-};
-
-bool CurrentLayout(Layout *l)
+void DrawMap(core::diag::Restore &)
 {
-    l->ddW = *kDdWidth;
-    l->ddH = *kDdHeight;
-    l->pitch = *kPitch;
-    l->sidebarX = *kSidebarX;
-    l->mapW = *kMapW;
-    l->mapH = *kMapH;
-    return g_mode != kOriginal && *kGameScreen != kEditorMap && l->ddW > 0 && l->ddH > 0 && l->pitch >= l->ddW * 2 &&
-           l->mapW > 0 && l->mapH > 0 && l->mapW <= l->sidebarX && l->sidebarX <= l->ddW &&
-           l->mapH <= l->ddH - kTopBarH && *kDrawBuffer;
-}
-
-bool LayerBuffer(size_t size)
-{
-    if (size <= g_layerSize && g_layer) {
-        return true;
-    }
-    if (g_layer) {
-        VirtualFree(g_layer, 0, MEM_RELEASE);
-    }
-    g_layer = static_cast<BYTE *>(VirtualAlloc(nullptr, size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
-    g_layerSize = g_layer ? size : 0;
-    return g_layer != nullptr;
-}
-
-// The map's pixels in our layer: (0, 40), map size, rows of the back buffer's pitch.
-core::display::Pixels16 MapPixels(const Layout &l)
-{
-    return core::display::Pixels16{reinterpret_cast<const WORD *>(g_layer + static_cast<size_t>(kTopBarH) * l.pitch),
-                                   l.pitch / 2, l.mapW, l.mapH};
-}
-
-void Canvas(const Layout &l)
-{
-    const int b = kBorder;
-    if (g_canvasW != l.mapW + 2 * b || g_canvasH != l.mapH + 2 * b) {
-        g_canvasW = l.mapW + 2 * b;
-        g_canvasH = l.mapH + 2 * b;
-        g_border = b;
-        if (!emperor::fullscreen::BorderPicture(g_canvasW, g_canvasH, &g_canvas)) {
-            Log("china_map: no fret border (the panel tiles could not be read): the map without it");
-            g_canvasW = l.mapW;
-            g_canvasH = l.mapH;
-            g_border = 0;
-            g_canvas.assign(static_cast<size_t>(g_canvasW) * g_canvasH, 0);
-        }
-    }
-    const core::display::Pixels16 m = MapPixels(l);
-    for (int y = 0; y < l.mapH; ++y) {
-        std::memcpy(&g_canvas[static_cast<size_t>(y + g_border) * g_canvasW + g_border], m.px + static_cast<size_t>(y) * m.stride,
-                    static_cast<size_t>(l.mapW) * 2);
-    }
-}
-
-void Backdrop(const Layout &l, int areaW, int areaH)
-{
-    const int key[5] = {*kMapNumber, l.mapW, l.mapH, areaW, areaH};
-    if (std::memcmp(key, g_backdropKey, sizeof(key)) == 0 && g_backdrop.size() == static_cast<size_t>(areaW) * areaH) {
-        return;
-    }
-    std::memcpy(g_backdropKey, key, sizeof(key));
-    core::display::BlurredBackdrop(MapPixels(l), areaW, areaH, kBlurSigma, kBrightness, &g_backdrop);
-    Log("china_map: backdrop for map %d (%dx%d) over the %dx%d map area", key[0], l.mapW, l.mapH, areaW, areaH);
-}
-
-double Scale(int areaW, int areaH)
-{
-    if (g_mode == kNative) {
-        g_fitPercent = static_cast<int>(
-            std::floor(std::fmin(static_cast<double>(areaW) / g_canvasW, static_cast<double>(areaH) / g_canvasH) * 100 + 1e-9));
-        return 1.0;
-    }
-    double s = std::fmin(static_cast<double>(areaW) / g_canvasW, static_cast<double>(areaH) / g_canvasH);
-    g_fitPercent = static_cast<int>(std::floor(s * 100 + 1e-9));
-    if (g_scalePercent > 0) { // a chosen scale, never larger than fits
-        s = std::fmin(g_scalePercent / 100.0, s);
-    }
-    return s < 1.0 ? 1.0 : s;
-}
-
-// Backdrop and the framed map into `target` (the buffer the game draws to outside our call).
-void Compose(const Layout &l, BYTE *target, bool backdrop)
-{
-    const int areaW = l.sidebarX, areaH = l.ddH - kTopBarH;
-    Canvas(l);
-    const double s = Scale(areaW, areaH);
-    const int tw = static_cast<int>(std::lround(g_canvasW * s)), th = static_cast<int>(std::lround(g_canvasH * s));
-    const int tx = (areaW - tw) / 2, ty = kTopBarH + (areaH - th) / 2;
-    const core::display::Target16 dst{reinterpret_cast<WORD *>(target), l.pitch / 2, l.ddW, l.ddH};
-    const RECT area{0, kTopBarH, areaW, l.ddH};
-    if (backdrop) {
-        const std::vector<WORD> *bg = &g_backdrop;
-        const size_t areaSize = static_cast<size_t>(areaW) * areaH;
-        if (g_background == kCityBackground && g_cityW == areaW && g_cityH == areaH &&
-            g_cityBackdrop.size() == areaSize) {
-            bg = &g_cityBackdrop;
-        }
-        if (bg == &g_backdrop) { // also when no city was kept for this size (e.g. the resolution changed on the map)
-            Backdrop(l, areaW, areaH);
-        }
-        for (int y = 0; y < areaH; ++y) {
-            std::memcpy(dst.px + static_cast<size_t>(y + kTopBarH) * dst.stride, &(*bg)[static_cast<size_t>(y) * areaW],
-                        static_cast<size_t>(areaW) * 2);
-        }
-    }
-    const bool whole = std::fabs(s - std::round(s)) < 1e-9;
-    core::display::ScaleRgb565(core::display::Pixels16{g_canvas.data(), g_canvasW, g_canvasW, g_canvasH}, s, !whole, dst,
-                               tx, ty, area);
-    g_shown = Shown{true, l.ddW, l.ddH, l.sidebarX, tx, ty, s, g_border, g_canvasW, g_canvasH, l.mapW, l.mapH};
-}
-
-// The real mouse in the game's own map coordinates while the map is shown by us. Outside the map but inside the
-// map area: a point of the game's map window right of the picture (nothing is there: a click deselects, as on the
-// empty map). Elsewhere (sidebar, top bar): false, the real position.
-bool MapMouse(int mx, int my, int *gx, int *gy)
-{
-    const Shown &s = g_shown;
-    if (!s.valid || s.ddW != *kDdWidth || s.ddH != *kDdHeight || s.sidebarX != *kSidebarX) {
-        return false;
-    }
-    int u, v; // the pixel of border + map drawn there (the same rounding as the drawing)
-    if (core::display::ScaledToSource(mx, my, s.x, s.y, s.scale, s.canvasW, s.canvasH, &u, &v) && u >= s.border &&
-        v >= s.border && u < s.border + s.mapW && v < s.border + s.mapH) {
-        *gx = u - s.border; // the game's origin is (0, 40)
-        *gy = v - s.border + kTopBarH;
-        return true;
-    }
-    if (mx >= 0 && mx < s.sidebarX && my >= kTopBarH && my < s.ddH) {
-        *gx = s.mapW + 2 < s.sidebarX ? s.mapW + 2 : -10000;
-        *gy = kTopBarH + 2;
-        return true;
-    }
-    return false;
-}
-
-struct Call {
-    Layout l;
-    BYTE *target;
-    core::diag::Restore r;
-};
-
-void DrawLayer(void *p)
-{
-    Call &c = *static_cast<Call *>(p);
-    const size_t size = static_cast<size_t>(c.l.pitch) * c.l.ddH;
-    if (!LayerBuffer(size)) {
-        Original(o_MapDraw, kMapDraw)();
-        return;
-    }
-    const int cityFrames = emperor::fullscreen::CityFramesDrawn();
-    if (cityFrames != g_cityFrames) { // the first map frame after the city: its map area still shows the city
-        g_cityFrames = cityFrames;
-        const int areaW = c.l.sidebarX, areaH = c.l.ddH - kTopBarH;
-        g_cityBackdrop.resize(static_cast<size_t>(areaW) * areaH);
-        for (int y = 0; y < areaH; ++y) {
-            std::memcpy(&g_cityBackdrop[static_cast<size_t>(y) * areaW],
-                        c.target + static_cast<size_t>(y + kTopBarH) * c.l.pitch, static_cast<size_t>(areaW) * 2);
-        }
-        g_cityW = areaW;
-        g_cityH = areaH;
-        Log("china_map: the city kept from the draw buffer for the %dx%d map area", areaW, areaH);
-    }
-    c.r.Set(kDrawBuffer.ptr(), g_layer);
-    c.r.Set(&g_deferTop, true);
-    g_topPending = false;
     Original(o_MapDraw, kMapDraw)();
-    c.r.Undo();
-    if (*kOriginX != 0 || *kOriginY != kTopBarH || *kScrollX != 0 || *kScrollY != 0 || *kMapW != c.l.mapW ||
-        *kMapH != c.l.mapH) {
-        // Not the layout we expected (a new picture, or the game scrolls): show what it drew, as it drew it.
-        Log("china_map: unexpected map state (origin %d,%d scroll %d,%d map %dx%d): drawn the game's way", *kOriginX,
-            *kOriginY, *kScrollX, *kScrollY, *kMapW, *kMapH);
-        const int right = c.l.sidebarX + 16 < c.l.ddW ? c.l.sidebarX + 16 : c.l.ddW; // the game's map window
-        for (int y = kTopBarH; y < c.l.ddH; ++y) {
-            std::memcpy(c.target + static_cast<size_t>(y) * c.l.pitch, g_layer + static_cast<size_t>(y) * c.l.pitch,
-                        static_cast<size_t>(right) * 2);
-        }
-        g_shown.valid = false;
-    }
-    else {
-        core::diag::perf::Scope timed(kPhase);
-        Compose(c.l, c.target, true);
-    }
-    if (g_topPending) {
-        g_topPending = false;
-        Original(o_TopBar, kTopBar)(g_topArg);
-    }
 }
+
+void DrawTopBar(int arg)
+{
+    Original(o_TopBar, kTopBar)(arg);
+}
+
+// The game's map window: the picture is drawn into (0, 40) .. (sidebar_x + 16, height).
+RECT GameBox(int ddW, int ddH, int sidebarX, int, int)
+{
+    return RECT{0, kTopBarH, sidebarX + 16 < ddW ? sidebarX + 16 : ddW, ddH};
+}
+
+// A point of the game's map window right of the picture (nothing is there).
+void EmptyPoint(int mapW, int, int sidebarX, int *gx, int *gy)
+{
+    *gx = mapW + 2 < sidebarX ? mapW + 2 : -10000;
+    *gy = kTopBarH + 2;
+}
+
+const map_screen::MapGame kGame("china_map", &g_feature, "China map layer (ours)",
+                                kDrawBuffer, kPitch, kDdWidth, kDdHeight, kClipBottom, kRedraw, kSidebarX, kMouseX, kMouseY,
+                                kOriginX, kOriginY, kScrollX, kScrollY, kMapW, kMapH, kMapNumber, kTopBarH, 0, &TakeOver,
+                                &CityBackground, &DrawMap, &DrawTopBar, &GameBox, &EmptyPoint);
 
 void __cdecl MapDraw_detour()
 {
-    Call c{};
-    if (!core::diag::Enabled(g_feature) || !CurrentLayout(&c.l)) {
-        g_shown.valid = false;
-        Original(o_MapDraw, kMapDraw)();
-        return;
-    }
-    c.target = *kDrawBuffer;
-    if (!core::diag::Guarded(g_feature, &DrawLayer, &c, &c.r)) {
-        g_shown.valid = false;
-        g_topPending = false;
-        Original(o_MapDraw, kMapDraw)(); // the game's own way from now on
-    }
+    map_screen::Draw();
 }
 
 int __cdecl TopBar_detour(int arg)
 {
-    if (g_deferTop) {
-        g_topPending = true;
-        g_topArg = arg;
+    if (map_screen::TopBar(arg)) {
         return 0;
     }
     return Original(o_TopBar, kTopBar)(arg);
 }
 
-// Runs fn with the mouse in the game's map coordinates (when the map is ours and the mouse is over the map area).
-void WithMapMouse(VoidFn original, const Site &site)
-{
-    int gx = 0, gy = 0;
-    if (!core::diag::Enabled(g_feature) || !MapMouse(*kMouseX, *kMouseY, &gx, &gy)) {
-        Original(original, site)();
-        return;
-    }
-    struct Ctx {
-        VoidFn fn;
-        const Site *site;
-        int gx, gy;
-        core::diag::Restore r;
-    } ctx{original, &site, gx, gy, {}};
-    if (!core::diag::Guarded(
-            g_feature,
-            [](void *p) {
-                Ctx &c = *static_cast<Ctx *>(p);
-                c.r.Set(kMouseX.ptr(), c.gx);
-                c.r.Set(kMouseY.ptr(), c.gy);
-                Original(c.fn, *c.site)();
-                c.r.Undo();
-            },
-            &ctx, &ctx.r)) {
-        g_shown.valid = false;
-        Original(original, site)();
-    }
-}
-
 void __cdecl MapInput_detour()
 {
-    WithMapMouse(o_MapInput, kMapInput);
+    map_screen::WithMapMouse([](void *) { Original(o_MapInput, kMapInput)(); }, nullptr);
 }
 
 void __cdecl CampaignClick_detour()
 {
-    WithMapMouse(o_CampaignClick, kCampaignClick);
+    map_screen::WithMapMouse([](void *) { Original(o_CampaignClick, kCampaignClick)(); }, nullptr);
 }
 
-// Screen 0x34: the markers go into our layer (onto the map the background drew there), the sidebar to the screen;
-// then the map is shown again.
-void CampaignLayer(void *p)
-{
-    Call &c = *static_cast<Call *>(p);
-    core::diag::perf::Scope timed(kPhase);
-    const int pitch = c.l.pitch, x0 = c.l.sidebarX, bytes = (c.l.ddW - x0) * 2;
-    for (int y = 0; y < c.l.ddH; ++y) { // the sidebar's strip as it is on the screen
-        std::memcpy(g_layer + static_cast<size_t>(y) * pitch + x0 * 2, c.target + static_cast<size_t>(y) * pitch + x0 * 2, bytes);
-    }
-    int gx = 0, gy = 0;
-    c.r.Set(kDrawBuffer.ptr(), g_layer);
-    if (MapMouse(*kMouseX, *kMouseY, &gx, &gy)) {
-        c.r.Set(kMouseX.ptr(), gx);
-        c.r.Set(kMouseY.ptr(), gy);
-    }
-    Original(o_CampaignDraw, kCampaignDraw)();
-    c.r.Undo();
-    for (int y = 0; y < c.l.ddH; ++y) {
-        std::memcpy(c.target + static_cast<size_t>(y) * pitch + x0 * 2, g_layer + static_cast<size_t>(y) * pitch + x0 * 2, bytes);
-    }
-    Compose(c.l, c.target, false);
-}
-
+// Screen 0x34: the markers go into our layer, the sidebar to the screen (core); then the leather below the sidebar.
 void __cdecl CampaignDraw_detour()
 {
-    Call c{};
-    const size_t size = static_cast<size_t>(*kPitch) * *kDdHeight;
-    if (!core::diag::Enabled(g_feature) || !CurrentLayout(&c.l) || !g_shown.valid || g_shown.ddW != c.l.ddW ||
-        g_shown.ddH != c.l.ddH || !g_layer || g_layerSize < size) {
-        Original(o_CampaignDraw, kCampaignDraw)();
-        emperor::resolution::DrawSidebarFiller();
-        return;
-    }
-    c.target = *kDrawBuffer;
-    if (!core::diag::Guarded(g_feature, &CampaignLayer, &c, &c.r)) {
-        g_shown.valid = false;
-        *kRedraw = 1; // the background draws the map the game's way again
-        Original(o_CampaignDraw, kCampaignDraw)();
-    }
+    map_screen::CampaignDraw([] { Original(o_CampaignDraw, kCampaignDraw)(); });
     emperor::resolution::DrawSidebarFiller();
 }
 
@@ -464,20 +166,12 @@ void __cdecl FrameDraw_detour()
     emperor::resolution::DrawSidebarFiller();
 }
 
-DWORD g_animFrame = 0, g_animLast = 0;
-bool g_animStep = true;
+core::sim::Speed0Gate g_animGate; // shared with Zeus's world map (core/sim/ui_anim.h)
 
 unsigned __cdecl Anim_detour(int id, unsigned frame)
 {
-    const DWORD now = *kFrameTime;
-    if (now != g_animFrame) { // the first call in this game_frame decides for all of them
-        g_animFrame = now;
-        g_animStep = now - g_animLast >= kSpeed0Ms;
-        if (g_animStep) {
-            g_animLast = now;
-        }
-    }
-    if (g_animStep || !core::diag::Enabled(g_feature)) {
+    const DWORD now = *kFrameTime; // the frame's start time: changes once per game_frame
+    if (g_animGate.Step(now, now) || !core::diag::Enabled(g_feature)) {
         return Original(o_Anim, kAnim)(id, frame);
     }
     struct Ctx {
@@ -523,38 +217,6 @@ void __fastcall CityPanel_detour(void *self, void *, int x, int y, int w, int h)
     Original(o_CityPanel, kCityPanel)(self, nullptr, x, y, w, h);
 }
 
-bool ApplyMode(int, const char *v, bool initial)
-{
-    g_mode = kNative;
-    for (int i = 0; i < kModeChoices; ++i) {
-        if (std::strcmp(v, kModes[i]) == 0) {
-            g_mode = i;
-        }
-    }
-    if (!initial) {
-        *kRedraw = 1; // redrawn in the new way (the campaign map's picture is drawn only on redraws)
-    }
-    return true;
-}
-
-bool ApplyScale(int, const char *v, bool initial)
-{
-    g_scalePercent = std::strcmp(v, "fit") == 0 ? 0 : std::atoi(v);
-    if (!initial) {
-        *kRedraw = 1;
-    }
-    return true;
-}
-
-bool ApplyBackground(int, const char *v, bool initial)
-{
-    g_background = std::strcmp(v, "city") == 0 ? kCityBackground : kMapBackground;
-    if (!initial) {
-        *kRedraw = 1;
-    }
-    return true;
-}
-
 const Detour kDetours[] = {
     {&kMapDraw, reinterpret_cast<void *>(&MapDraw_detour)},
     {&kTopBar, reinterpret_cast<void *>(&TopBar_detour)},
@@ -579,8 +241,9 @@ void RegisterSettings()
         "The empire map at resolutions larger than the map. scaled: larger than its own size (Empire map: scale), in "
         "a fret border, over the background (Empire map: background); native: the picture's own size, centered, the "
         "same background.",
-        Type::Choice, "native", Effect::Live, true, true, 0, 0, 0, nullptr, kModes, kModeLabels, kModeChoices});
-    core::settings::OnChange(i, &ApplyMode);
+        Type::Choice, "native", Effect::Live, true, true, 0, 0, 0, nullptr, map_screen::kModes, map_screen::kModeLabels,
+        map_screen::kModeChoices});
+    core::settings::OnChange(i, &map_screen::ApplyMode);
     // [display] china_map* became [video] empire_map* (the campaign editor's name for the map), and
     // original is no longer a choice.
     core::settings::MoveKey("display", "china_map", "video", "empire_map");
@@ -594,16 +257,17 @@ void RegisterSettings()
         "For Empire map = scaled: how large, in percent of the map's own size. Auto: as large as the map area allows "
         "(fit). The slider ends at what fits for the map last shown at this resolution; a larger value in "
         "emperor_engine.ini is shown as large as fits.",
-        Type::Int, "fit", Effect::Live, true, true, 100, 400, 5, "fit", nullptr, nullptr, 0, "%", &FitPercent,
+        Type::Int, "fit", Effect::Live, true, true, 100, 400, 5, "fit", nullptr, nullptr, 0, "%", &map_screen::FitPercent,
         "empire_map", "scaled"});
-    core::settings::OnChange(i, &ApplyScale);
+    core::settings::OnChange(i, &map_screen::ApplyScale);
     i = core::settings::Register(Item{
         "video", "empire_map_background", "Empire map: background",
         "What is around the map (Empire map = scaled or native). map: the same map, blurred and darkened; city: your "
         "city as it was when you opened the map, as it is (the map like a window over it); it stands still while "
         "the map is shown.",
-        Type::Choice, "map", Effect::Live, true, true, 0, 0, 0, nullptr, kBackgrounds, kBackgroundLabels, 2});
-    core::settings::OnChange(i, &ApplyBackground);
+        Type::Choice, "map", Effect::Live, true, true, 0, 0, 0, nullptr, map_screen::kBackgrounds,
+        map_screen::kBackgroundLabels, 2});
+    core::settings::OnChange(i, &map_screen::ApplyBackground);
 }
 
 bool Attach()
@@ -615,6 +279,7 @@ bool Attach()
             return false;
         }
     }
+    map_screen::Configure(kGame);
     Install(kMapDraw, &MapDraw_detour, o_MapDraw);
     Install(kTopBar, &TopBar_detour, o_TopBar);
     Install(kMapInput, &MapInput_detour, o_MapInput);
@@ -625,9 +290,9 @@ bool Attach()
     Install(kSpyPanel, &SpyPanel_detour, o_SpyPanel);
     Install(kCityPanel, &CityPanel_detour, o_CityPanel);
     char scale[16];
-    std::snprintf(scale, sizeof(scale), g_scalePercent ? "%d%%" : "fit", g_scalePercent);
-    core_log("china_map: installed (video.empire_map %s,scale %s, background %s)", kModes[g_mode], scale,
-             kBackgrounds[g_background]);
+    std::snprintf(scale, sizeof(scale), map_screen::ScalePercent() ? "%d%%" : "fit", map_screen::ScalePercent());
+    core_log("china_map: installed (video.empire_map %s,scale %s, background %s)", map_screen::ModeName(), scale,
+             map_screen::BackgroundName());
     return true;
 }
 
@@ -639,8 +304,8 @@ const Detour *Detours(int *count)
 
 void SetModeForTest(int mode, int scalePercent)
 {
-    g_mode = mode;
-    g_scalePercent = scalePercent;
+    map_screen::Configure(kGame);
+    map_screen::SetModeForTest(mode, scalePercent);
 }
 
 } // namespace emperor::china_map

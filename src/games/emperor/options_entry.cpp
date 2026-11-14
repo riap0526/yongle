@@ -12,8 +12,8 @@
 #include <cstring>
 #include <initializer_list>
 
-// Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e): the menu tables below and
-// the menu tables (Ghidra, capstone); calling conventions next to each address.
+// Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e): the menus and the main menu's buttons read
+// with a table reader, Ghidra and capstone; calling conventions checked by disassembly.
 namespace emperor::options_entry {
 namespace {
 
@@ -137,7 +137,7 @@ MenuItem g_itemsNoAutosave[] = {
     {60, kTextHotkeys, &MenuHotkeys, 0, 0},
 };
 // The File menu: the game's items (0x81e0b0: 6; 0x81e110: 7, with Proverbs) copied at Attach. Item 6 adds our two
-// screenshots after Save game. The order is Augustus's: Replay map, Load, Save,
+// screenshots after Save game. It is ordered as Augustus's: Replay map, Load, Save,
 // (screenshots), Delete, (Proverbs), Exit to main menu (the game's New game), Exit game; Replay map, Exit to main
 // menu and Exit game are ours (games/emperor/game_menu: our confirmations, Esc answers No). Every item 20 pixels below
 // the one before. Returns the number of items.
@@ -326,7 +326,7 @@ void OptionsIn()
     }
 }
 
-// The File menu's screenshot items: when the screenshots are there,
+// The File menu's screenshot items (0.2.0 item 6): when the screenshots are there,
 // in the single-player File menus (0x81e0b0, 0x81e110; the other bars' File menus, e.g. multiplayer, stay).
 bool IsSinglePlayerFile(const Menu &m)
 {

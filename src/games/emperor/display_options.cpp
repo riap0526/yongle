@@ -11,12 +11,12 @@
 #include <cstdlib>
 #include <cstring>
 
-// Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e): the addresses below.
+// Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e): the dialog's table and drawing read from the disassembly.
 namespace emperor::display_options {
 namespace {
 
 // ---------------------------------------------------------------------------------------------
-// Addresses (calling conventions below)
+// Addresses (calling conventions checked by disassembly)
 
 const Site kDraw{"display_options_draw", 0x5ba9c0, {0x56, 0x68, 0x14, 0x1e, 0x00, 0x00, 0xb9, 0x30}};
 const Site kPanelDraw{"panel_draw", 0x5363f0, {0x51, 0xa1, 0x1c, 0xf5, 0x15, 0x01, 0x85, 0xc0}};

@@ -34,6 +34,11 @@ SIZE g_mode{0, 0};
 BYTE *g_exeBase = nullptr;
 SIZE_T g_exeSize = 0;
 
+// The smoke test's mouse (HoldMouse, SendMouse).
+bool g_autoMouse = false;
+POINT g_autoCursor{0, 0};
+bool g_autoSending = false;
+
 bool FromExe(void *caller)
 {
     auto *p = static_cast<BYTE *>(caller);
@@ -233,6 +238,11 @@ BOOL WINAPI GetCursorPos_detour(LPPOINT pt)
     }
     if (!modal) {
         g_modalHeld = false;
+    }
+    if (pt && Acting(caller, nullptr) && g_autoMouse) { // the smoke test: where it last put the mouse
+        LONG x = g_autoCursor.x, y = g_autoCursor.y;
+        *pt = POINT{x < 2 ? 2 : x > g_mode.cx - 3 ? g_mode.cx - 3 : x, y < 2 ? 2 : y > g_mode.cy - 3 ? g_mode.cy - 3 : y};
+        return TRUE;
     }
     if (pt && Acting(caller, nullptr) && (core::ui::IsOpen() || g_modalHeld)) {
         // The cursor is on our panel: the game sees it where it was when the panel opened, kept 2 pixels away from
@@ -1116,6 +1126,9 @@ LRESULT CALLBACK SubclassProc(HWND hwnd, UINT m, WPARAM w, LPARAM l)
     if (g_active && hwnd == g_hwnd) {
         bool client = IsClientMouseMessage(m);
         bool screen = m == WM_MOUSEWHEEL || m == WM_MOUSEHWHEEL;
+        if ((client || screen) && g_autoMouse && !g_autoSending) {
+            return 0; // the smoke test holds the mouse: the real one does not reach the game
+        }
         if (client || screen) {
             POINT p{GET_X_LPARAM(l), GET_Y_LPARAM(l)};
             POINT in = p;
@@ -1392,6 +1405,25 @@ POINT ClientToMode(POINT client)
 POINT ModeToClient(POINT mode)
 {
     return ToRealClient(mode);
+}
+
+void HoldMouse(bool on, POINT mode)
+{
+    g_autoMouse = on;
+    g_autoCursor = mode;
+}
+
+bool SendMouse(UINT message, WPARAM keys, POINT mode)
+{
+    if (!g_active || !g_hwnd) {
+        return false;
+    }
+    g_autoCursor = mode;
+    const POINT c = ToRealClient(mode);
+    g_autoSending = true;
+    SendMessageA(g_hwnd, message, keys, MAKELPARAM(static_cast<WORD>(c.x), static_cast<WORD>(c.y)));
+    g_autoSending = false;
+    return true;
 }
 
 SIZE ClientSize()

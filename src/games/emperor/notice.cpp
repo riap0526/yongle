@@ -10,8 +10,8 @@
 #include <cstdio>
 #include <cstring>
 
-// Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e): the addresses below (Ghidra, capstone,
-// calling conventions next to each address.
+// Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e): the notice boxes read with Ghidra and capstone (
+// calling conventions checked by disassembly.
 namespace emperor::notice {
 namespace {
 

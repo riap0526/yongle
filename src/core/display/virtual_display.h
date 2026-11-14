@@ -135,6 +135,15 @@ bool ModePlacement(Placement *out); // false before a mode is set or while the w
 POINT ClientToMode(POINT client);
 POINT ModeToClient(POINT mode);
 
+// The unattended smoke test (core/diag/autorun.h) only. HoldMouse(true, p): the game no longer sees the real mouse --
+// the exe's GetCursorPos answers p (mode pixels, kept 2 pixels off the edges so the city does not edge-scroll and stop
+// its ticks), and the real mouse messages of the game window are not passed to the game; only SendMouse's are.
+// HoldMouse(false, ...) ends it. Game thread.
+void HoldMouse(bool on, POINT mode);
+// Sends (SendMessage, so the game's window procedure has it on return) a client mouse message for the mode point p to
+// the game window, through the same mapping as a real one (client -> mode). false before a mode is set.
+bool SendMouse(UINT message, WPARAM keys, POINT mode);
+
 // The memory of a presented frame is about to be freed (core/ddraw: a primary surface is released), so a screenshot
 // must not read it any more.
 void FrameGone(const void *pixels);

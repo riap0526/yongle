@@ -1,14 +1,12 @@
-// Framed full-screen pictures.
+// Framed full-screen pictures, Emperor's part.
 //
-// While a front-end screen runs in its 1024x768 frame (emperor::resolution::FrontEnd), the output frames it
-// (core/display/framing.h): the picture -- the whole frame, or a loading picture's real area found at run time --
-// goes straight from the game's pixels to its place on the screen, over a background this module composes from the
-// game's own dialog panel tiles (group 0x20b, read from the player's own China_Interface pack): parchment outside,
-// the fret border and padding around the picture. The loading screens' status line (screen_text_gdi) is drawn by the
-// output on a dark strip over the picture's bottom instead of with GDI. The
-// pictures can also be shown at their own size (display.loading_screen, display.menu_screens; the default), the menus
-// with a blurred picture of the player's city around them; black keeps the scaled frame with black bars.
-// debug.frame_labels draws the layout in label colours for checking it.
+// While a front-end screen runs in its 1024x768 frame (emperor::resolution::FrontEnd), the output frames it: the
+// core's core/display/framed_screens (shared with Zeus's layer) composes the background from the game's own
+// dialog panel tiles (group 0x20b of the player's own China_Interface pack): the panel pattern (parchment) outside,
+// the fret border and padding around the picture, or the player's city blurred around the menus. This layer keeps
+// what only Emperor has: the loading screens' status line (screen_text_gdi), drawn in a status block under the
+// picture in the game's own font (or by the output) instead of with GDI, and the loading pictures' black bands found
+// at run time. debug.frame_labels draws the layout in label colours for a layout check.
 #pragma once
 
 #define WIN32_LEAN_AND_MEAN
@@ -38,12 +36,7 @@ void OnPresent();
 // never comes back to a front-end screen), written before returning.
 void OnGameEnd();
 
-// w x h RGB565 pixels: parchment inside the dialog panel's fret border (one 16 px tile wide, the last tiles flush
-// with the far edges), from the same tiles as the framed pictures. Used around the China map (
-// games/emperor/china_map.cpp). False when the tiles cannot be read.
-bool BorderPicture(int w, int h, std::vector<WORD> *out);
-
-// Whether menu_screens = native_city shows the city background on
+// Whether menu_screens = city shows the city background on
 // this front-end screen. The screens before a mission (0x3d mission choice and briefing, 0x35 mission introduction),
 // the timed full-screen picture 0x04, the mission summary 0x17 and the editors' screens get parchment: the next
 // mission is usually another map, and the editors have nothing to do with the city played last. The player's own
@@ -62,9 +55,5 @@ inline bool CityAround(char screen, bool playerPicture)
         return true;
     }
 }
-
-// How many city frames were drawn so far (game thread). A change since the last China map frame means the game's
-// draw buffer holds the city (the map screen does not redraw outside the map: the city left there when it opened).
-int CityFramesDrawn();
 
 } // namespace emperor::fullscreen

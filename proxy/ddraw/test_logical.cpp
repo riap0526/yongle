@@ -1,5 +1,5 @@
-// Offline test of core/display/logical_size (not the game): the display scale rules of
-// Augustus, with Emperor's 1024x768 minimum.
+// Offline test of core/display/logical_size (not the game): the display scale rules
+// (fixed, scale, auto, cap) with Emperor's 1024x768 minimum.
 #include "core/display/logical_size.h"
 
 #include <cstdio>
@@ -29,6 +29,8 @@ int main()
     Expect("fixed 1024x768 on 2560x1440", 2560, 1440, F, 1024, 768, 0, 1024, 768, 100, false);
     Expect("fixed 1280x1024 on 2560x1440", 2560, 1440, F, 1280, 1024, 0, 1280, 1024, 100, false);
     Expect("fixed 2560x1080 on 2560x1440", 2560, 1440, F, 2560, 1080, 0, 2560, 1080, 100, false);
+    Expect("fixed 2557x1440: the width made even", 2560, 1440, F, 2557, 1440, 0, 2556, 1440, 100, false);
+    Expect("fixed 1025x768: the width made even", 2560, 1440, F, 1025, 768, 0, 1024, 768, 100, false);
     Expect("fixed 800x600 raised to the minimum", 2560, 1440, F, 800, 600, 0, 1024, 768, 100, true);
     Expect("auto on 1920x1080", 1920, 1080, S, 0, 0, 0, 1920, 1080, 100, false);
     Expect("auto on 2560x1440 (exactly 1080 high)", 2560, 1440, S, 0, 0, 0, 1920, 1080, 133, false);

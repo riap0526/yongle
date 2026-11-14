@@ -9,8 +9,8 @@
 #include <cstdint>
 #include <string>
 
-// Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e): the game's options and their functions below
-// calling conventions next to each address.
+// Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e): the game's own options dialogs read from the disassembly
+// calling conventions checked by disassembly.
 namespace emperor::options_original {
 namespace {
 

@@ -1,4 +1,4 @@
-// [display] intro_movie = play | skip.
+// 0.2.0 item 2: [ui] intro_movie = play | skip .
 // The game reads [Config] PlayIntroMovie from its own Emperor.ini in config_ini_load (once, from game_main) and plays
 // the intro movie before the main loop when play_intro_movie is not 0. With skip, play_intro_movie
 // is set to 0 right after config_ini_load. Emperor.ini is never written: without the DLL the game does what its file
@@ -7,7 +7,7 @@
 
 namespace emperor::intro {
 
-// From emperor_register_settings (DllMain): [display] intro_movie.
+// From emperor_register_settings (DllMain): [ui] intro_movie.
 void RegisterSettings();
 
 // Checks config_ini_load and installs its hook; left out (logged) when it does not match: the movie then plays as the

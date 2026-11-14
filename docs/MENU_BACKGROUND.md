@@ -20,10 +20,11 @@ The menu frame is *Menu screens* in Options > Video (`[video] menu_screens` in `
 | Value | Around the menus |
 |---|---|
 | `city` (default) | a fret border; your picture or your last city, blurred and darkened |
-| `parchment` | a fret border, on the game's parchment |
+| `panel` | a fret border, on the game's own panel pattern (parchment) |
+| `framed` | a fret border, black around |
 | `original` | the game's own picture, black around (as the game itself on a wide screen) |
 
-The older values are converted at the first start: `native_city` becomes `city`, `native` and `scaled` become `parchment`, and `scaled_black` becomes `original`. For the old `scaled_black` look (the whole picture as large as it fits), choose `original` and a larger display scale.
+The older values are converted at the first start: `native_city` becomes `city`, `parchment`, `native` and `scaled` become `panel`, and `scaled_black` becomes `original`. For the old `scaled_black` look (the whole picture as large as it fits), choose `original` and a larger display scale.
 
 How much the picture is blurred and darkened: *City background: blur* and *City background: brightness* in Options > Video (`background_blur`, 0 to 8, default 2, 0 is not blurred; `background_brightness`, 30 to 100 percent, default 65).
 

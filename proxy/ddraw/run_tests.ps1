@@ -17,6 +17,8 @@
 #   test_scroll core/scroll: cruise speed, easing, stop (no DLL; ~4 s)
 #   test_logical core/display/logical_size: display scale rules (no DLL)
 #   test_moved_rect core/display/moved_rect: a rectangle shown elsewhere, every buffer between no-access pages
+#   test_city_layout core/display/city_layout: spare rows, the top bar's tiling, the sidebar filler's inset panel,
+#               mirrored tiles and moved rows (no DLL)
 #   test_scaled_rect core/display/scaled_rect: the China map's scaling, mouse mapping and backdrop
 #               (no DLL)
 #   test_common_sizes core/display/common_sizes: the panel's common sizes for a screen (no DLL)
@@ -29,10 +31,12 @@
 #               pages around it (no DLL)
 #   test_perf   core/diag/perf: phases, samples per thread, averages, history, the rate log window (no DLL; ~1 s)
 #   test_report core/diag/report: frame check counts, window event log, report numbers (no DLL)
+#   test_exe_identity core/platform/exe_identity: SHA-256, the exe log line, the untested-exe notice (no DLL)
 #   test_guard  core/diag/guard: the exception log and feature guards (no DLL; writes test_guard.log)
 #   test_env    core/diag/environment: modules, processor time per thread, priorities, affinity and its changes,
 #               where our files are (no DLL; ~4 s)
 #   test_stall  core/diag/stall: long passes sampled with their call stack (no DLL)
+#   test_autorun core/diag/autorun: the smoke test's script and steps on a fake game and clock (no DLL)
 #   test_present_mode core/diag/present_mode: mode changes, errors counted, giving up, the once-a-second line, the
 #               not-Direct3D-11 path (no DLL; writes test_present_mode.log)
 #   test_affinity core/platform/affinity: scenarios on one processor in child processes, the last one
@@ -92,13 +96,16 @@ Run 'test_city_zoom' 'emulated' @()
 Run 'test_city_picture' 'emulated' @()
 Run 'test_framing' 'emulated' @()
 Run 'test_moved_rect' 'emulated' @()
+Run 'test_city_layout' 'emulated' @()
 Run 'test_scaled_rect' 'emulated' @()
 Run 'test_surface_memory' 'emulated' @()
 Run 'test_perf' 'emulated' @()
 Run 'test_report' 'emulated' @()
+Run 'test_exe_identity' 'emulated' @()
 Run 'test_guard' 'emulated' @()
 Run 'test_env' 'emulated' @()
 Run 'test_stall' 'emulated' @()
+Run 'test_autorun' 'emulated' @()
 Run 'test_present_mode' 'emulated' @()
 Run 'test_affinity' 'emulated' @()
 Run 'test_screenshot' 'emulated' @()

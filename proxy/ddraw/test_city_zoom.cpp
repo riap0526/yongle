@@ -93,7 +93,7 @@ int main()
         }
     }
 
-    // --- the numbers (2560x1440: city 29 x 71 at 100%)
+    // --- the numbers measured in the game (2560x1440: city 29 x 71 at 100%)
     {
         cd::ZoomInput in{400, 2334, 1400, colPx, halfH, 54, 112};
         const int small = cd::ZoomFor(in).limit;

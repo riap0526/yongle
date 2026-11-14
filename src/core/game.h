@@ -26,6 +26,11 @@ typedef struct core_game_info {
     void (*register_settings)(void);
     void (*attach)(void);
     int (*editor_exe)(void);
+    /* The exe this version is made and tested with (core/platform/exe_identity.h): its SHA-256 (64 lowercase hex
+       digits) and how players know it, e.g. "English GOG Emperor.exe 1.0.1.0". Another exe gets a log line and a
+       notice; NULL: not checked. */
+    const char *exe_sha256;
+    const char *exe_label;
 } core_game_info;
 
 /* Provided by the game layer (src/games/<game>/game.cpp); only the entry point calls it. */

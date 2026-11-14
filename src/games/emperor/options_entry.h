@@ -1,7 +1,7 @@
 // The ways into the options window: the game's
 // Options menu in the city becomes General Settings / Video / Audio (each opens the window at that page) and the
 // game's own Autosave switch; the main menu's "Visit Website" becomes "Options".
-// Also the File menu's Save city screenshot and Save minimap screenshot.
+// Also the File menu's Save city screenshot and Save minimap screenshot (0.2.0 item 6).
 #pragma once
 
 namespace emperor::options_entry {

@@ -64,7 +64,8 @@ CHOICES(kLoading,
 CHOICES(kMenus,
         {"city", "In a fret border, with your city blurred around it. A picture of your own named "
                  "menu_background.png or .bmp in Yongle's folder or the game folder is used instead of the city."},
-        {"parchment", "In a fret border on parchment."},
+        {"panel", "In a fret border on the game's own panel pattern."},
+        {"framed", "In a fret border, black around it."},
         {"original", "The game's own picture, black around it, as the game shows it on a wide screen."});
 
 CHOICES(kEmpireMap,

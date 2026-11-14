@@ -2,7 +2,7 @@
 // copy of the game's address range (emperor::g_imageShift, games/emperor/site.h) where the game's functions are
 // small fakes. A fake faults on purpose; the test then checks that the game state the detour had changed is back
 // to the game's own values, that the feature is switched off, and what the detour does afterwards (the fallback in
-// the failure table of resolution.cpp).
+// each module's Failure note).
 //
 // The info windows the game always opens at (0, 0x2a) (Mill, Warehouse, Trading Quay, Trading Station) are shown
 // elsewhere without moving them in the game (drawn into a copy of the screen, the mouse moved back); the sidebar
@@ -15,6 +15,7 @@
 #include "core/assets/sg3.h"
 #include "core/capture/big_picture.h"
 #include "core/ddraw/surface_memory.h"
+#include "core/diag/autorun.h"
 #include "core/diag/guard.h"
 #include "core/display/city_zoom.h"
 #include "core/display/logical_size.h"
@@ -28,6 +29,7 @@
 #include "games/emperor/resolution.h"
 #include "games/emperor/scroll.h"
 #include "games/emperor/site.h"
+#include "games/emperor/smoke.h"
 #include "games/emperor/ui_fixes.h"
 #include "games/emperor/zoom.h"
 
@@ -117,6 +119,11 @@ void SetOtherCapture(bool, unsigned) {}
 void SetListedElsewhere(const int *, int) {}
 } // namespace core::ui
 
+namespace core::diag::autorun { // the smoke test is not started here (its own test: test_autorun)
+bool Start(const Game &) { return false; }
+void Frame() {}
+} // namespace core::diag::autorun
+
 namespace core::capture {
 using TagProvider = void (*)(char *, size_t);
 void SetTagProvider(TagProvider) {}
@@ -132,7 +139,8 @@ bool SaveBig(BigPicture *pic, const BigOptions &) // the city picture's file (no
 extern "C" unsigned core_timer_resolution_us(void) { return 1000; }
 extern "C" void core_timer_end(void) {}
 
-namespace emperor::fullscreen {
+namespace core::display::framed { // the framing (core/display/framed_screens) is not under test here
+void NoteCitySkipped(const char *, int, int, int, int) {}
 bool BorderPicture(int w, int h, std::vector<WORD> *out) // a plain frame: 0x1111 border, 0x2222 inside
 {
     out->assign(static_cast<size_t>(w) * h, 0x2222);
@@ -146,6 +154,9 @@ bool BorderPicture(int w, int h, std::vector<WORD> *out) // a plain frame: 0x111
     return true;
 }
 int CityFramesDrawn() { return 0; } // no city drawn: the map's own background
+} // namespace core::display::framed
+
+namespace emperor::fullscreen {
 void RegisterSettings() {}
 bool Attach() { return false; }
 void OnArtLoaded(int, int, int) {}
@@ -273,7 +284,9 @@ struct MapCalls {
     int draws, tops, inputs, campaign, clicks;
     BYTE *drawBuffer, *topBuffer;
     int mouseX, mouseY;
+    int drawHeight, drawClip, inputHeight; // dd_height and the clip's bottom as the drawing / the input saw them
 } g_map;
+constexpr DWORD aClipBottom = 0x10c7318; // screen_clip_rect's bottom (exclusive)
 
 using MapVoid_fn = void(__cdecl *)();
 using MapTop_fn = int(__cdecl *)(int);
@@ -287,10 +300,20 @@ void __cdecl FakeMapDraw() // as china_map_draw: origin (0, 40), the picture at 
     if (Fires("china_map_draw")) {
         Fault();
     }
+    if (At<int>(aMapW) == 0) { // china_map_load: the first map
+        At<int>(aMapW) = 848;
+        At<int>(aMapH) = 746;
+    }
     At<int>(aMapOriginX) = 0;
     At<int>(aMapOriginY) = 0x28;
+    g_map.drawHeight = At<int>(aDdH);
+    g_map.drawClip = At<int>(aClipBottom);
     BYTE *buf = At<BYTE *>(aDrawBuffer);
-    const int pitch = At<int>(aPitch), w = At<int>(aMapW), h = At<int>(aMapH);
+    const int pitch = At<int>(aPitch), w = At<int>(aMapW);
+    // As the game: dd_height - 40 rows (the map's own height at most: image_draw stops at the picture and the clip).
+    int h = At<int>(aMapH);
+    h = h < g_map.drawHeight - 0x28 ? h : g_map.drawHeight - 0x28;
+    h = h < g_map.drawClip - 0x28 ? h : g_map.drawClip - 0x28;
     for (int y = 0; y < h; ++y) {
         WORD *row = reinterpret_cast<WORD *>(buf + static_cast<size_t>(y + 0x28) * pitch);
         for (int x = 0; x < w; ++x) {
@@ -310,6 +333,7 @@ int __cdecl FakeTopBar(int)
 void __cdecl FakeMapInput()
 {
     ++g_map.inputs;
+    g_map.inputHeight = At<int>(aDdH);
     g_map.mouseX = At<int>(aMouseX);
     g_map.mouseY = At<int>(aMouseY);
 }
@@ -1284,6 +1308,7 @@ void MessagePanel()
 void LayoutFault()
 {
     using Fn = void(__cdecl *)();
+    emperor::resolution::InstalledForTest(core_config_get()); // as after Attach: the core's switching knows the game
     g_fault = "viewport_init";
     Res<Fn>("city_viewport_large")();
     Check(g_viewport.calls == 2 && g_viewport.a == 10 && g_viewport.b == 37,
@@ -1381,6 +1406,7 @@ void BarsAndFiller()
 void ClampFault()
 {
     using Fn = int(__cdecl *)(int, int, int, int, int, int);
+    emperor::resolution::InstalledForTest(core_config_get()); // as after Attach: the core's switching knows the game
     Fn draw = Res<Fn>("image_draw");
     At<int>(aArtOX) = 0;
     At<int>(aArtOY) = 0;
@@ -1737,6 +1763,7 @@ void MapScreen(int w, int h, int sidebar)
     At<int>(aPitch) = w * 2;
     At<int>(aDdW) = w;
     At<int>(aDdH) = h;
+    At<int>(aClipBottom) = h; // the game's clip: the screen
     At<int>(aSidebarX) = sidebar;
     At<int>(aMapW) = 848;
     At<int>(aMapH) = 746;
@@ -1813,6 +1840,50 @@ void ChinaMap()
     At<int>(aMouseY) = ny + 200;
     input();
     Check(g_map.mouseX == 300 && g_map.mouseY == 240, "native: the mouse in the game's map coordinates");
+
+    // At 1364x768 (sidebar 1138): the map (848 x 746) is taller than the area (728 rows): drawn whole with
+    // the game's height and clip raised to 786 for the call, shown as large as the map fits (728 / 746), the border
+    // cut at the top and bottom, the input with the same height.
+    for (int mode = 1; mode >= 0; --mode) {
+        MapScreen(1364, 768, 1138);
+        emperor::china_map::SetModeForTest(mode, 0);
+        draw();
+        Check(g_map.draws == 1 && g_map.drawBuffer != At<BYTE *>(aDrawBuffer) && g_map.drawHeight == 786 &&
+                  g_map.drawClip == 786,
+              mode ? "1364x768 native: drawn whole into our layer (dd_height and clip 786 for the call)"
+                   : "1364x768 scaled: drawn whole into our layer (dd_height and clip 786 for the call)");
+        Check(At<int>(aDdH) == 768 && At<int>(aClipBottom) == 768, "1364x768: dd_height and the clip back afterwards");
+        const double ts = 728.0 / 746;
+        const int ttx = (1138 - static_cast<int>(880 * ts + 0.5)) / 2, tty = 40 + (728 - static_cast<int>(778 * ts + 0.5)) / 2;
+        Check(Screen(100, 39) == kSentinel16 && Screen(1200, 400) == kSentinel16 && Screen(5, 767) != kSentinel16 &&
+                  Screen(1137, 41) != kSentinel16,
+              "1364x768: the whole map area filled (backdrop and map), not the top bar or the sidebar");
+        // The framed map itself (not only the backdrop; seen in testing: the map was missing): the fret border's
+        // left edge (the fake border is 0x1111, 16 px: about 15 px shrunk) and the map right of it.
+        Check(Screen(ttx + 5, 400) == 0x1111 && Screen(ttx + 30, 400) != 0x1111 && Screen(ttx + 30, 400) != kSentinel16,
+              "1364x768: the shrunk border and map drawn (the border's left edge, the map right of it)");
+        const int tcx = ttx + static_cast<int>((16 + 424 + 0.5) * ts), tcy = tty + static_cast<int>((16 + 373 + 0.5) * ts);
+        At<int>(aMouseX) = tcx;
+        At<int>(aMouseY) = tcy;
+        input();
+        Check(g_map.mouseX >= 423 && g_map.mouseX <= 425 && g_map.mouseY >= 412 && g_map.mouseY <= 414 &&
+                  g_map.inputHeight == 786,
+              "1364x768: the map's middle clicked is the map's, the input sees the map's height (786)");
+        const int bottom = tty + static_cast<int>((16 + 740 + 0.5) * ts);
+        At<int>(aMouseY) = bottom;
+        input();
+        Check(g_map.mouseY >= 778 && g_map.mouseY <= 782 && At<int>(aDdH) == 768,
+              "1364x768: the map's lowest rows answer (y 780 of 786); dd_height back afterwards");
+    }
+    MapScreen(1364, 768, 1138); // the first map (not loaded yet): drawn at the screen's height, then again whole
+    At<int>(aMapW) = 0;
+    At<int>(aMapH) = 0;
+    emperor::china_map::SetModeForTest(1, 0);
+    draw();
+    Check(g_map.draws == 2 && g_map.drawHeight == 786 && At<int>(aDdH) == 768 && Screen(5, 767) != kSentinel16,
+          "1364x768, the first map: drawn again whole (786), then shown");
+    Check(LogContains("taller than the 1138x728 map area: drawn whole (786 rows) and shown smaller"),
+          "log: the map taller than the area");
 
     // A scale of one's own: 100% at 2560x1440 is the same as native.
     MapScreen(2560, 1440, 2334);
@@ -2038,11 +2109,66 @@ void KeyBindings()
     d::g_ctrlForTest = nullptr;
 }
 
+// --- The smoke test's actions (games/emperor/smoke). cheat_run 0x43ce20 is __cdecl (one argument [esp+8] after
+// push esi, returns al, plain ret; the caller cleans): the fake is the same.
+int g_cheatArg = -1;
+char __cdecl FakeCheatRun(int n)
+{
+    g_cheatArg = n;
+    if (n == 1) { // I win again
+        At<char>(0x10de043) = 1;
+        At<char>(0x10de042) = 1;
+    }
+    return 1;
+}
+
+void SmokeActions()
+{
+    const BYTE body[8] = {0x53, 0x83, 0xfe, 0x64, 0x7d, 0x4e, 0xe8, 0x8d};
+    const BYTE iwin[8] = {0xb0, 0x01, 0xa2, 0x43, 0xe0, 0x0d, 0x01, 0xa2};
+    for (int i = 0; i < 8; ++i) {
+        At<BYTE>(0x43ce28 + i) = body[i];
+        At<BYTE>(0x43cdf0 + i) = iwin[i];
+    }
+    Thunk(0x43ce20, reinterpret_cast<const void *>(&FakeCheatRun)); // the first 5 bytes only
+    At<char>(0x82ab50) = 1;
+    At<DWORD>(0x7abe10) = 0x43cdf0;
+    At<int>(0x13125dc) = -1;
+    At<short>(0x1312538) = 0x1234;
+    char why[200] = "";
+    namespace s = emperor::smoke;
+    At<unsigned char>(0x10de045) = 0x00;
+    Check(!s::Action("win", why, sizeof(why)) && std::strstr(why, "not on the city") && g_cheatArg == -1,
+          "smoke win off the city screen: refused, cheat_run not called");
+    At<unsigned char>(0x10de045) = 0x01;
+    At<int>(0x13124f8) = 1;
+    Check(!s::Action("win", why, sizeof(why)) && std::strstr(why, "governed on"), "smoke win while governing on: refused");
+    At<int>(0x13124f8) = 0;
+    At<int>(0x13125e4) = 1;
+    Check(!s::Action("win", why, sizeof(why)) && std::strstr(why, "already won"), "smoke win when won: refused");
+    At<int>(0x13125e4) = 0;
+    Check(s::Action("win", why, sizeof(why)) && g_cheatArg == 1 && At<char>(0x10de043) == 1,
+          "smoke win in the city: cheat_run(1) (__cdecl), cheat_win set");
+    g_cheatArg = -1;
+    At<DWORD>(0x7abe10) = 0x43cdf1;
+    Check(!s::Action("win", why, sizeof(why)) && g_cheatArg == -1, "smoke win, entry 1 not I win again: not called");
+    Check(s::Action("lose", why, sizeof(why)) && At<int>(0x13125dc) == 0x573 && At<short>(0x1312534) == 0x573 &&
+              At<short>(0x1312536) == 0x572 && At<short>(0x1312538) == 0x1234,
+          "smoke lose: lose_reason 0x573 (4 bytes), the two words 0x573 / 0x572, nothing after them");
+    Check(!s::Action("lose", why, sizeof(why)), "smoke lose twice: refused");
+    At<int>(0x10de014) = 192;
+    At<int>(0x10de010) = 144;
+    int x = 0, y = 0;
+    s::DialogOffset(&x, &y);
+    Check(x == 192 && y == 144, "smoke dialog offset (dialog_offset_x / _y)");
+}
+
 struct Scenario {
     const char *name;
     void (*run)();
 };
 const Scenario kScenarios[] = {
+    {"smoke_actions", &SmokeActions},
     {"render_ok", &RenderOk},       {"render_fault", &RenderFault},
     {"convert_fault", &ConvertFault}, {"direction_fault", &DirectionFault},
     {"drag_fault", &DragFault},     {"switch_fault", &SwitchFault},

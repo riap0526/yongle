@@ -17,7 +17,6 @@ Back to the [README](../README.md). If you run into something not listed here, p
 
 - The map and campaign editors and the multiplayer screens run at 1024×768 (centered), not at your resolution.
 - City zoom is not available at the game's own 1024×768 or with its small tiles: the mouse wheel then changes the building category, as in the original.
-- The campaign map screen has not been tested in play yet.
 - Small cosmetic quirks of the original are kept for now (e.g. text sitting slightly high in some dialog buttons and in the notices at the top of the city, Yongle's included).
 
 ## Installation

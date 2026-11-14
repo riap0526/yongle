@@ -5,7 +5,7 @@ namespace {
 
 // Neutral values until the entry point sets the game's (the offline tests that do not set one).
 const core_game_info kNoGame = {"engine", "Engine", "dev", L"Engine", L"engine.ini", "engine.ini", 1024, 768,
-                                nullptr, nullptr, nullptr};
+                                nullptr, nullptr, nullptr, nullptr, nullptr};
 const core_game_info *g_game = &kNoGame;
 
 } // namespace

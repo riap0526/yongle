@@ -21,7 +21,7 @@ In PowerShell, in the repository folder:
 
 ```powershell
 # 1. Build SDL3 once (static, 32-bit) into build\sdl3-i686-install
-powershell -File tools\build_sdl3.ps1 -Source <SDL3-3.4.18 folder> -Toolchain <llvm-mingw folder> -CMake <cmake.exe>
+powershell -File tools\build\build_sdl3.ps1 -Source <SDL3-3.4.18 folder> -Toolchain <llvm-mingw folder> -CMake <cmake.exe>
 
 # 2. Build the DLL and the offline tests into build\emperor
 powershell -File proxy\ddraw\build.ps1 -Toolchain <llvm-mingw folder> -CMake <cmake.exe>
@@ -49,4 +49,4 @@ In `build\emperor\`:
 - `src/games/emperor/` — everything specific to Emperor: addresses, structures and the hooks on the game's functions. Every hook checks the game's bytes before installing and falls back to the original behavior on failure.
 - `third_party/` — vendored libraries (licenses in [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)).
 
-The design notes and reverse-engineering records are kept in Traditional Chinese for now and are not published yet; they will follow once translated. Comments in the code refer to them (`docs/...`); those are the internal notes, not the player documents in this folder.
+The design notes and reverse-engineering records are kept in Traditional Chinese for now and are not published yet; they will follow once translated. The comments in the code do not depend on them.

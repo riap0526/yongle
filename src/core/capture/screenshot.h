@@ -12,7 +12,7 @@
 // the frame fills the window 1:1 with nothing around or over it, it equals the game picture and is not saved.
 // The game layer supplies the tag (SetTagProvider; "frame" without one). The game frame is copied on the calling
 // (game) thread; encoding and writing happen on one writer thread at normal priority, one picture at a time
-// which logs one line per file with the time of each step.
+// -- the writer logs one line per file with the time of each step.
 // Nothing here knows a game.
 #pragma once
 

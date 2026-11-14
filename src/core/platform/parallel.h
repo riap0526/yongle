@@ -1,4 +1,4 @@
-// Work split across our own threads while the caller waits (the city zoom's scaling).
+// Work split across our own threads while the caller waits (e.g. the city zoom's scaling)
 // The game thread is the one that limits the frame rate
 // and what it waits for here must be done before it goes on (the game draws its interface over the
 // scaled city next), so the work is cut into pieces of rows that the caller and up to kMaxWorkers threads of ours

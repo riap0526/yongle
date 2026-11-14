@@ -34,7 +34,7 @@
 // back to the screen, the drag selection works in buffer pixels with only its frame put on the screen, and the
 // camera's speed is scaled so the screen scrolls as fast as at 100%.
 //
-// Failure: every call that changes game state for us runs under
+// Failure (our features never end the game): every call that changes game state for us runs under
 // core/diag's guard with the changes in a Restore list (moved origin, larger viewport and clip, our buffer as
 // draw_buffer, the camera of this frame). On an exception the list is put back, smooth scrolling is switched off
 // for the rest of the run (remainder 0: the view snaps to its whole tile) and the call is made again the game's own
@@ -47,6 +47,7 @@
 #include "core/diag/guard.h"
 #include "core/diag/perf.h"
 #include "core/display/city_zoom.h"
+#include "core/display/framed_screens.h"
 #include "core/display/scaled_rect.h"
 #include "core/log.h"
 #include "core/scroll/smooth_scroll.h"
@@ -882,6 +883,10 @@ void AfterRender()
     if (back && *kClipLeft >= 0 && *kClipTop >= 0 && *kClipLeft < right && *kClipTop < bottom && right <= width &&
         bottom <= height) {
         g_cityDrawn(back, pitch, *kClipLeft, *kClipTop, right, bottom);
+    }
+    else { // the menus' city background: a summary line if no city is ever kept (core/display/framed_screens)
+        core::display::framed::NoteCitySkipped(back ? "the city's area is outside the draw buffer" : "no draw buffer",
+                                               *kClipLeft, *kClipTop, right, bottom);
     }
 }
 

@@ -21,6 +21,8 @@ const core_game_info kEmperor = {
     &emperor_register_settings,
     &emperor_attach,
     &emperor_editor_exe,
+    "6373328bfc5c4886d9abc9544eb706e89e7d465b18176ea8205fe27aaee53c0e",
+    "English GOG Emperor.exe 1.0.1.0",
 };
 
 } // namespace

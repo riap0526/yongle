@@ -724,7 +724,7 @@ void LogReverted(const char *why, DWORD error)
              static_cast<unsigned long>(ThreadMask(g_gameThread)));
 }
 
-// The process back on the original mask (each thread's mask has to stay within it).
+// Reverting: the process back on the original mask (each thread's mask has to stay within it).
 void Revert(const char *why, DWORD error)
 {
     int s = g_state.load();

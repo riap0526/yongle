@@ -27,6 +27,7 @@
 #include "core/game.h"
 #include "core/log.h"
 #include "core/platform/affinity.h"
+#include "core/platform/exe_identity.h"
 #include "core/platform/files.h"
 #include "core/platform/timing.h"
 #include "core/startup.h"
@@ -89,6 +90,8 @@ static int deferred_start(int in_loader_lock)
                  "hooks, no game hooks)");
         return 0;
     }
+    /* Which exe this is (log), and a notice when it is not the one this version is tested with. */
+    core_exe_check();
     core_startup_install_hooks();
     if (game->attach)
         game->attach();

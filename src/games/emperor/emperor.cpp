@@ -1,4 +1,4 @@
-// Game hooks for Emperor. Addresses, names and evidence are in the comments next to them.
+// Game hooks for Emperor. The addresses are in the Site and Var declarations.
 //
 //   game_main      0x4754f0  WinMain (stdcall, 4 args): after it returns, the timer resolution is given back.
 //   game_loop_step 0x475b00  one main-loop iteration with a frame (counted; drives the periodic rate log).
@@ -12,7 +12,7 @@
 //      animation, the simulation and scrolling run on their own timers, so presenting more
 //      often changes no game timing.
 //   Screenshots (core/capture/screenshot.h): the file name starts with game_screen, e.g. screen_0x14
-//      (the list of screens: the game_screen values in this layer).
+//      (game_screen as a hex number).
 //   Smooth scrolling: games/emperor/scroll.cpp.
 //   Custom logical resolution: games/emperor/resolution.cpp.
 //   Framed full-screen pictures: games/emperor/fullscreen.cpp.
@@ -21,25 +21,31 @@
 //      iteration. game_main ignores game_loop_step's return value (0x475a4b: call, then jmp past WaitMessage).
 //      sim_tick_due sets its last tick to "now", so the simulation does not catch up afterwards.
 //   Failure: the draw-only frames (the game draws while our panel asks to
-//      keep a new resolution) run under core/diag's guard; on an exception the frame is abandoned, g_drawOnly goes
-//      back to false and the game simply stays paused while the panel asks. Settings callbacks are guarded by
+//      keep a new resolution) run under core/sim/panel_pause's guard; on an exception the frame is abandoned, the
+//      draw-only flag goes back to false and the game simply stays paused while the panel asks. Settings callbacks are guarded by
 //      core/settings. Normal frames are the game's own and are not guarded.
 #include "games/emperor/emperor.h"
 
+#include "core/ui/info_window.h"
 #include "core/capture/screenshot.h"
 #include "core/config.h"
 #include "core/ddraw/surface_memory.h"
+#include "core/diag/autorun.h"
 #include "core/diag/environment.h"
 #include "core/diag/guard.h"
+#include "core/diag/rate_log.h"
 #include "core/diag/perf.h"
 #include "core/diag/present_mode.h"
 #include "core/diag/report.h"
 #include "core/diag/stall.h"
 #include "core/display/virtual_display.h"
+#include "core/display/window_key.h"
 #include "core/log.h"
 #include "core/output/sdl_output.h"
 #include "core/platform/timing.h"
 #include "core/settings/settings.h"
+#include "core/sim/pace.h"
+#include "core/sim/panel_pause.h"
 #include "core/ui/panel.h"
 #include "core/ui/perf_view.h"
 #include "core/ui/settings_view.h"
@@ -61,6 +67,7 @@
 #include "games/emperor/intro.h"
 #include "games/emperor/zoom.h"
 #include "games/emperor/site.h"
+#include "games/emperor/smoke.h"
 #include "games/emperor/ui_fixes.h"
 #include "ini_template.h" // generated from src/games/emperor/emperor_engine.ini (CMakeLists.txt)
 
@@ -137,27 +144,23 @@ namespace perf = core::diag::perf;
 const int kPassPhase = perf::Register("game pass", perf::Thread::Game, true);
 const int kSimPhase = perf::Register("simulation (sim_tick)", perf::Thread::Game);
 
+// The simulation pace's view of Emperor (core/sim/pace.h; SimDue_detour below).
+core::diag::Feature g_paceFeature{"simulation pace (games/emperor)"};
+const core::sim::PaceGame kPace{
+    "emperor",
+    "pass",
+    &g_paceFeature,
+    [] { return kSimLastTick.ptr(); },
+    [] { return kViewScrolling.ptr(); },
+    [] { return *kFastForward != 0; },
+    [] { return static_cast<int>(*kGameSpeed); },
+    [](int idx) { return reinterpret_cast<const int *>(kTickTable + emperor::g_imageShift)[idx]; },
+};
+
 // Counters and rate log (game thread only).
 long g_loops = 0, g_ticks = 0;
 DWORD g_since = 0;
 int g_lastSpeed = -1;
-
-// The simulation pace (see SimDue_detour below).
-struct Pace {
-    DWORD last = 0;   // our tick clock: the time the ticks run so far were owed at
-    bool valid = false;
-    int extra = 0;    // ticks owed beyond the game's own one in this frame
-    long caughtUp = 0; // extra ticks run (for the rate log)
-    int mostInOnePass = 0; // the most ticks one pass ran (its own and the extra ones; for the rate log)
-    // Falling behind: the time between passes, smoothed; while it is long, few ticks per pass (see DueBody).
-    DWORD lastPass = 0;
-    double passMs = 0;
-    bool behind = false;
-    long dropped = 0;       // ticks owed and not run while behind (for the rate log)
-    long droppedSpell = 0;  // the same, for the current spell of falling behind
-    long gaps = 0;          // pauses whose time was not made up (kGapMs; for the rate log)
-};
-Pace g_pace;
 
 void LogRates(const char *why)
 {
@@ -173,23 +176,8 @@ void LogRates(const char *why)
     }
     char scroll[256];
     emperor::scroll::TakeStats(scroll, sizeof(scroll));
-    char paceNote[128] = "";
-    if (g_pace.caughtUp > 0) {
-        std::snprintf(paceNote, sizeof(paceNote), "; %ld ticks made up (at most %d ticks in one pass)", g_pace.caughtUp,
-                      g_pace.mostInOnePass);
-        g_pace.caughtUp = 0;
-    }
-    g_pace.mostInOnePass = 0;
-    if (g_pace.dropped > 0) {
-        const size_t len = std::strlen(paceNote);
-        std::snprintf(paceNote + len, sizeof(paceNote) - len, "; %ld ticks dropped (falling behind)", g_pace.dropped);
-        g_pace.dropped = 0;
-    }
-    if (g_pace.gaps > 0) {
-        const size_t len = std::strlen(paceNote);
-        std::snprintf(paceNote + len, sizeof(paceNote) - len, "; %ld pause(s) not made up", g_pace.gaps);
-        g_pace.gaps = 0;
-    }
+    char paceNote[128];
+    core::sim::TakeNote(kPace, paceNote, sizeof(paceNote));
     long multi = 0, torn = 0;
     core::diag::TakeIntegrity(&multi, &torn);
     static const char *const kPresent[] = {"original", "display", "cap60"};
@@ -203,22 +191,7 @@ void LogRates(const char *why)
              core::output::RefreshHz(), *kGameSpeed, static_cast<int>(*kGameScreen), emperor::zoom::Percent(), mapCols,
              mapRows, emperor::zoom::AverageShrink() ? "average" : "nearest", core_timer_resolution_us(), multi, torn,
              scroll, paceNote);
-    char times[768], longest[768];
-    perf::TakeWindow(times, sizeof(times), longest, sizeof(longest));
-    if (times[0]) {
-        core_log("time%s (ms): %s", why, times);
-        core_log("time max%s (ms): %s", why, longest);
-    }
-    char intervals[512];
-    core::output::TakeIntervals(intervals, sizeof(intervals)); // how evenly the frames were shown
-    if (intervals[0]) {
-        core_log("intervals%s (ms): %s", why, intervals);
-    }
-    char cpu[512];
-    core::diag::env::TakeWindow(cpu, sizeof(cpu)); // processor time actually given to our threads
-    if (cpu[0]) {
-        core_log("cpu%s: %s", why, cpu);
-    }
+    core::diag::LogRateTail(why); // time, time max, intervals, cpu (the same lines in every game)
     g_loops = 0;
     g_ticks = 0;
     g_since = now;
@@ -236,63 +209,45 @@ int WINAPI GameMain_detour(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int show)
 }
 
 DWORD g_lastLoop = 0;
-bool g_paused = false;
-bool g_drawOnly = false; // a frame drawn while paused: no simulation tick
-DWORD g_lastDrawOnly = 0;
-core::diag::Feature g_drawFrames{"draw-only frames while the panel asks (games/emperor)"};
 
-struct DrawOnlyCall {
-    int result;
-    core::diag::Restore r;
-};
+// While the panel or our options window is open (core/sim/panel_pause, shared with Zeus): the game is paused; while
+// the panel asks whether to keep a new resolution, or while the options window is open (it is drawn over each frame),
+// the game draws frames (at most ~60 per second) and sim_tick_due says no, so the city does not move on.
+void Paused(bool options)
+{
+    emperor::sound::SetQuiet(true); // no new ambient sound meanwhile, as under the game's own dialogs
+    LogRates(options ? " (options window opened: game paused)" : " (panel opened: game paused)");
+}
 
-// One frame drawn while the panel is open (sim_tick_due says no). g_drawOnly is in c.r: false again if abandoned.
-void DrawOnlyFrame(DrawOnlyCall &c)
+void Resumed()
+{
+    emperor::sound::SetQuiet(false);
+    core_log("emperor: panel or options window closed: game resumed");
+    g_since = GetTickCount();
+    g_loops = g_ticks = 0;
+    g_lastLoop = 0; // the pause is not a frame time
+    emperor::scroll::Resume();
+}
+
+// One frame drawn while paused (sim_tick_due says no).
+int DrawOnlyFrame()
 {
     emperor::resolution::OnLoop();
     emperor::fullscreen::OnLoop();
-    c.r.Set(&g_drawOnly, true);
     core::diag::GameFrameBegin();
-    c.result = Original(o_LoopStep, kLoopStep)();
+    const int r = Original(o_LoopStep, kLoopStep)();
     core::diag::GameFrameEnd();
-    c.r.Undo();
+    return r;
 }
+
+const core::sim::panel_pause::PauseGame kPause("emperor", &emperor::options_window::IsOpen, &Paused, &Resumed,
+                                               &DrawOnlyFrame);
 
 int __cdecl LoopStep_detour()
 {
-    const bool options = emperor::options_window::IsOpen();
-    if (core::ui::IsOpen() || options) {
-        if (!g_paused) {
-            g_paused = true;
-            emperor::sound::SetQuiet(true); // no new ambient sound meanwhile, as under the game's own dialogs
-            LogRates(options ? " (options window opened: game paused)" : " (panel opened: game paused)");
-        }
-        // While the panel asks whether to keep a new resolution, or while our options window is open (it is drawn
-        // over each frame), the game draws frames (at most ~60 per second); sim_tick_due says no, so the city does
-        // not move on.
-        DWORD now = timeGetTime();
-        if ((core::ui::WantsGameFrames() || options) && now - g_lastDrawOnly >= 16 &&
-            core::diag::Enabled(g_drawFrames)) {
-            g_lastDrawOnly = now;
-            DrawOnlyCall c{0, {}};
-            if (core::diag::Guarded(g_drawFrames, [](void *p) { DrawOnlyFrame(*static_cast<DrawOnlyCall *>(p)); },
-                                    &c, &c.r)) {
-                return c.result;
-            }
-            core_log("emperor: no more draw-only frames after an error: the game stays paused while the panel asks");
-            return 0;
-        }
-        Sleep(5);
-        return 0;
-    }
-    if (g_paused) {
-        g_paused = false;
-        emperor::sound::SetQuiet(false);
-        core_log("emperor: panel or options window closed: game resumed");
-        g_since = GetTickCount();
-        g_loops = g_ticks = 0;
-        g_lastLoop = 0; // the pause is not a frame time
-        emperor::scroll::Resume();
+    int paused = 0;
+    if (core::sim::panel_pause::Loop(kPause, &paused)) {
+        return paused;
     }
     if (emperor::game_menu::OnLoop() && emperor::options_window::IsOpen()) {
         return 0; // a confirmation answered No opened the pause menu again: no pass (the game stays paused)
@@ -355,151 +310,83 @@ int __cdecl LoopStep_detour()
     return r;
 }
 
+// ---------------------------------------------------------------------------------------------
+// The unattended smoke test (core/diag/autorun.h): the game's screen, its tick count and its own way to end.
+// game_quit 0x10c7205: 1 makes game_main's loop send WM_CLOSE, which the window procedure takes (game_quit = 3, then
+// DefWindowProc and WM_DESTROY's PostQuitMessage): the game's own exit, Emperor.inf written as always, no question
+// asked (Ghidra; the same as Zeus's quit_request). /sg=<save> on the command line loads a save on the
+// first frame (cmdline_parse 0x474f10, as Zeus's). The steps run in ScreenPresent_detour (below).
+
+const Var<char> kGameQuit{0x10c7205};
+
+int AutorunScreen()
+{
+    return static_cast<unsigned char>(*kGameScreen);
+}
+
+long AutorunTicks()
+{
+    return *kTickCounter;
+}
+
+void AutorunQuit()
+{
+    *kGameQuit = 1;
+}
+
+// game_main calls game_loop_step only when app_paused 0x10de458 is 0 and app_active 0x10de45c is not, and only on a
+// pass that dispatched no message or a click (Ghidra).
+const Var<int> kAppActive{0x10de45c}, kAppPaused{0x10de458};
+// The game's mouse (input_update_mouse) and its scrolling flag, for the smoke test's clicks.
+const Var<int> kMouseX{0x10de0a0}, kMouseY{0x10de09c};
+const Var<char> kMouseLeftHeld{0x10de06c}; // (view_scrolling: kViewScrolling above)
+
+void AutorunDescribe(char *out, int size)
+{
+    std::snprintf(out, size, "game_screen 0x%02x, app_active %d, app_paused %d, game_quit %d, game mouse (%d,%d) left "
+                             "held %d, view scrolling %d",
+                  static_cast<unsigned char>(*kGameScreen), *kAppActive, *kAppPaused, static_cast<int>(*kGameQuit),
+                  *kMouseX, *kMouseY, static_cast<int>(*kMouseLeftHeld), *kViewScrolling);
+}
+
 // One flag read (nothing that can fault), so not guarded.
 // ---------------------------------------------------------------------------------------------
-// Simulation pace. The game runs at most one tick per game_frame and sets its tick time to "now"
-// when it runs one, so a frame that takes 10 ms stretches every interval to the next frame (80 % at 2560x1440 in a
-// large city: 22.6 ticks/s instead of 26.4). As Augustus does (game_speed_get_elapsed_ticks): the time owed is kept,
-// and the ticks owed run in the same frame, at most 20, the left-over milliseconds carried to the next frame.
-//   sim_tick_due still decides whether a tick may run (pause, screen, scrolling, multiplayer); only the time test is
-//   ours: its tick time is set so that its own test agrees with ours, and set back to our clock afterwards.
-//   The extra ticks run right after the game's own one, each as game_frame runs one: counter, sim_tick, then
-//   sim_after_tick 0x535770 (game_frame calls it after every tick; for the last one it does so itself).
-// 100 % (2 ms, "as fast as it can"): capped to 16 ms (Augustus's 100 %) unless gameplay.full_speed = original.
-// gameplay.simulate_while_scrolling (default on): view_scrolling is 0 while sim_tick_due decides (the game itself pauses
-// while scrolling).
+// Simulation pace (core/sim/pace.h): the logic is the core's, shared with every
+// game layer; here are Emperor's places. Only game_frame's own calls (return addresses 0x536ba8, 0x536bc5) go through
+// it; the extra ticks run right after the game's own one, each as game_frame runs one: sim_after_tick 0x535770
+// (game_frame calls it after every tick; for the last one it does so itself), the counter, sim_tick.
+// gameplay.simulate_while_scrolling: view_scrolling is 0 while sim_tick_due decides (the game itself pauses while
+// scrolling).
 
-constexpr int kMaxTicksPerFrame = 20;
-// Falling behind: a player's log showed passes every 70 ms (the output blocked) and 300+
-// ticks made up per 10 s -- three or four ticks per picture, so the city jumped instead of moving. While the smoothed
-// time between passes is above kBehindMs, a pass runs at most kBehindTicks ticks and what is owed beyond them is
-// dropped (the game runs slower, as the original does when frames are slow); below kCaughtUpMs it catches up again.
-constexpr double kBehindMs = 50.0;    // fewer than 20 passes a second
-constexpr double kCaughtUpMs = 35.0;  // about 28 passes a second
-constexpr int kBehindTicks = 2;
-// A gap between two passes longer than this is a pause, not slow frames: our windows and the panel (draw-only frames
-// do not come here), the game's own confirmations (modal_dialog_run runs its own loop), loading. Its time is not owed:
-// before a fix in testing, closing the pause menu, the options window or the panel made up to 20 ticks at once (the
-// city jumped).
-constexpr DWORD kGapMs = 250;
-constexpr DWORD kCappedMs = 16;
-core::diag::Feature g_paceFeature{"simulation pace (games/emperor)"};
-bool g_catchUp = true;
-bool g_fullSpeedCapped = true; // gameplay.full_speed (default capped)
-bool g_simWhileScrolling = true; // gameplay.simulate_while_scrolling (default on)
-
-
-struct DueCall {
-    int result;
-    core::diag::Restore r;
-};
-
-void DueBody(DueCall &c)
+int OriginalDue()
 {
-    g_pace.extra = 0;
-    if (g_simWhileScrolling) {
-        c.r.Set(kViewScrolling.ptr(), 0);
-    }
-    int idx = (100 - *kGameSpeed) / 10;
-    idx = idx < 0 ? 0 : idx;
-    const bool full = idx == 0;
-    if (!g_catchUp || idx >= 10 || (full && !g_fullSpeedCapped)) {
-        g_pace.valid = false;
-        c.result = Original(o_SimDue, kSimDue)();
-        c.r.Undo();
-        return;
-    }
-    const DWORD interval = full ? kCappedMs : static_cast<DWORD>(reinterpret_cast<const int *>(
-                                                  kTickTable + emperor::g_imageShift)[idx] + 2);
-    const DWORD now = timeGetTime();
-    if (!g_pace.valid) {
-        g_pace.last = *kSimLastTick;
-        g_pace.valid = true;
-    }
-    if (g_pace.lastPass != 0) {
-        double dt = static_cast<double>(now - g_pace.lastPass);
-        dt = dt > 200 ? 200 : dt; // a pause (panel, loading) counts as one slow pass, not as many
-        g_pace.passMs = g_pace.passMs * 0.9 + dt * 0.1;
-        if (!g_pace.behind && g_pace.passMs > kBehindMs) {
-            g_pace.behind = true;
-            g_pace.droppedSpell = 0;
-            core_log("emperor: falling behind (a pass every %.0f ms): at most %d ticks per pass, the rest is dropped "
-                     "(the game runs slower instead of jumping)", g_pace.passMs, kBehindTicks);
-        }
-        else if (g_pace.behind && g_pace.passMs < kCaughtUpMs) {
-            g_pace.behind = false;
-            core_log("emperor: no longer behind (a pass every %.0f ms): ticks are made up again; %ld dropped",
-                     g_pace.passMs, g_pace.droppedSpell);
-        }
-    }
-    if (g_pace.lastPass != 0 && now - g_pace.lastPass > kGapMs) {
-        g_pace.last = now - interval; // after a pause: one tick as soon as allowed, nothing made up
-        ++g_pace.gaps;
-    }
-    g_pace.lastPass = now;
-    if (static_cast<int>(now - g_pace.last) < 0) {
-        g_pace.last = now - interval; // the clock went back: one tick owed
-    }
-    const bool owed = now - g_pace.last >= interval;
-    // The game's own time test agrees with ours: far in the past when a tick is owed, now when not.
-    c.r.Set(kSimLastTick.ptr(), owed ? now - 100000 : now);
-    c.result = Original(o_SimDue, kSimDue)();
-    c.r.Undo();
-    if (c.result > 0) {
-        DWORD n = (now - g_pace.last) / interval;
-        const DWORD cap = g_pace.behind ? kBehindTicks : kMaxTicksPerFrame;
-        if (n > cap) {
-            if (g_pace.behind) {
-                g_pace.dropped += static_cast<long>(n - cap);
-                g_pace.droppedSpell += static_cast<long>(n - cap);
-            }
-            n = cap;
-            g_pace.last = now - (now - g_pace.last) % interval; // more is not made up (Augustus: at most 20)
-        }
-        else {
-            g_pace.last += n * interval;
-        }
-        g_pace.extra = *kFastForward ? 0 : static_cast<int>(n) - 1;
-        if (g_pace.extra + 1 > g_pace.mostInOnePass) {
-            g_pace.mostInOnePass = g_pace.extra + 1;
-        }
-    }
-    else if (owed) {
-        g_pace.last = now - interval; // held back (pause, another screen, scrolling): one tick as soon as allowed
-    }
-    *kSimLastTick = g_pace.last;
+    return Original(o_SimDue, kSimDue)();
 }
 
 int __cdecl SimDue_detour()
 {
-    if (g_drawOnly) {
+    if (core::sim::panel_pause::DrawOnly()) {
         return 0;
     }
-    if (GameAddress(__builtin_return_address(0)) != kDueFromFrame || !core::diag::Enabled(g_paceFeature)) {
-        return Original(o_SimDue, kSimDue)(); // another frame loop (0x5034e0), or switched off after an error
+    if (GameAddress(__builtin_return_address(0)) != kDueFromFrame) {
+        return OriginalDue(); // another frame loop (0x5034e0)
     }
-    DueCall c{0, {}};
-    if (core::diag::Guarded(g_paceFeature, [](void *p) { DueBody(*static_cast<DueCall *>(p)); }, &c, &c.r)) {
-        return c.result;
-    }
-    g_pace = Pace{};
-    core_log("emperor: simulation pace back to the game's own after an error");
-    return Original(o_SimDue, kSimDue)();
+    return core::sim::Due(kPace, &OriginalDue);
 }
 
-void ExtraTicks(int n)
+char g_tickScreen = 0; // the screen when the game's own tick ran: the ticks made up stop when it changes
+
+bool ExtraTickAllowed()
 {
-    const char screen = *kGameScreen;
-    for (int k = 0; k < n; ++k) {
-        if (*kFastForward || *kSimPaused || *kGameScreen != screen) {
-            break; // the last tick opened a message, paused the game or changed the screen
-        }
-        Function<void(__cdecl *)()>(kAfterTick)(); // what game_frame does after each tick
-        *kTickCounter = *kTickCounter + 1;
-        ++g_ticks;
-        ++g_pace.caughtUp;
-        o_SimTick();
-    }
+    return !*kFastForward && !*kSimPaused && *kGameScreen == g_tickScreen; // a message, the pause, another screen
+}
+
+void ExtraTick()
+{
+    Function<void(__cdecl *)()>(kAfterTick)(); // what game_frame does after each tick
+    *kTickCounter = *kTickCounter + 1;
+    ++g_ticks;
+    o_SimTick();
 }
 
 void __cdecl SimTick_detour()
@@ -507,14 +394,9 @@ void __cdecl SimTick_detour()
     ++g_ticks;
     perf::Scope timed(kSimPhase);
     o_SimTick();
-    if (g_pace.extra > 0 && GameAddress(__builtin_return_address(0)) == kTickFromFrame &&
-        core::diag::Enabled(g_paceFeature)) {
-        int n = g_pace.extra;
-        g_pace.extra = 0;
-        if (!core::diag::Guarded(g_paceFeature, [](void *p) { ExtraTicks(*static_cast<int *>(p)); }, &n)) {
-            g_pace = Pace{};
-            core_log("emperor: simulation pace back to the game's own after an error in a tick made up");
-        }
+    if (GameAddress(__builtin_return_address(0)) == kTickFromFrame) {
+        g_tickScreen = *kGameScreen;
+        core::sim::RunOwedTicks(kPace, &ExtraTickAllowed, &ExtraTick);
     }
 }
 
@@ -529,6 +411,10 @@ void __cdecl ScreenPresent_detour(int param)
         param = 1; // present the frame just drawn: the output thread is ready for it
     }
     o_ScreenPresent(param);
+    // The smoke test's steps, once per frame shown. Not in game_loop_step: on the main menu with no input the game
+    // does not call it at all (game_main skips it on every pass that dispatched a message, and WM_PAINT keeps
+    // coming), and the menu is drawn only by WM_PAINT's screen_present(1) (seen in the smoke test).
+    core::diag::autorun::Frame();
 }
 
 bool ApplySmooth(int, const char *v, bool initial)
@@ -541,21 +427,14 @@ bool ApplyResolution(int, const char *, bool initial)
     return initial || emperor::resolution::SettingsChanged(core_config_get());
 }
 
-// [ui] info_window: registered by this layer before the file is loaded.
-const char *const kInfoWindow[] = {"original", "centered", "cursor"};
-const char *const kFullSpeed[] = {"capped", "original"};
-const char *const kFullSpeedLabels[] = {"capped (steady, a step above 90%)", "original (as fast as the computer can)"};
-const char *const kInfoWindowLabels[] = {"original (above or below, as the game does it)",
-                                         "centered (in the city area)", "cursor (beside the cursor)"};
-
-bool ApplyInfoWindow(int, const char *v, bool)
+// The key filter (our DirectDraw's window only; installed also without resolution): F5 and Alt+Enter are our window
+// mode (core/display/window_key.h; F5 is also what the Display options button "Windowed screen" posts), so
+// screen_fullscreen stays 1 and Emperor.inf only ever holds the original's own value; then F6 and Shift+F7 while
+// resolution is installed.
+bool KeyFilter(UINT message, WPARAM key, LPARAM l)
 {
-    int i = 0;
-    while (i < 2 && std::strcmp(v, kInfoWindow[i]) != 0) {
-        ++i;
-    }
-    emperor::resolution::SetInfoMode(static_cast<emperor::resolution::InfoMode>(i));
-    return true;
+    return core::display::WindowKey(message, key, l, "resolution") || // the log's prefix as before
+           emperor::resolution::KeyFilter(message, key, l);
 }
 
 // The game's state for a canary report (core/ddraw/surface_memory.h; game thread, reads only).
@@ -617,38 +496,10 @@ extern "C" void emperor_register_settings(void)
         "Where the window opens when you right-click a building. original: as the game does it (above or below, "
         "moved with the center of the city area); centered: in the middle of the city area; cursor: beside the "
         "cursor, never past the edges. Applies to the next window you open.",
-        Type::Choice, "cursor", Effect::Live, true, true, 0, 0, 0, nullptr, kInfoWindow, kInfoWindowLabels, 3});
-    core::settings::OnChange(i, &ApplyInfoWindow);
-    i = core::settings::Register(Item{
-        "gameplay", "keep_speed", "Keep the game speed",
-        "on: ticks owed because a frame took long (large city, high resolution) are made up in the next frame, as "
-        "Augustus does, so the game runs at its set speed at any resolution; off: the game's own pace (one tick per "
-        "frame at most, slower when frames are slow).",
-        Type::Bool, "on", Effect::Live, true, true, 0, 0, 0, nullptr, nullptr, nullptr, 0});
-    core::settings::OnChange(i, [](int, const char *v, bool) {
-        g_catchUp = std::strcmp(v, "on") == 0;
-        return true;
-    });
-    i = core::settings::Register(Item{
-        "gameplay", "full_speed", "Game speed behavior",
-        "Only matters at game speed 100%. capped (default): always the same pace, a step above 90% (90% runs 45 "
-        "steps a second, 100% 62; Augustus does the same). original: the game's own 100% -- it runs as fast as your "
-        "computer can draw, so it changes with the city and the resolution: in a small city many times faster "
-        "than 90%, in a large city on a big screen only a little faster.",
-        Type::Choice, "capped", Effect::Live, true, true, 0, 0, 0, nullptr, kFullSpeed, kFullSpeedLabels, 2});
-    core::settings::OnChange(i, [](int, const char *v, bool) {
-        g_fullSpeedCapped = std::strcmp(v, "capped") == 0;
-        return true;
-    });
-    i = core::settings::Register(Item{
-        "gameplay", "simulate_while_scrolling", "Simulate while scrolling",
-        "on (default): the city goes on while the view scrolls (as in Augustus with smooth scrolling); off: it "
-        "stands still while scrolling, as in the original.",
-        Type::Bool, "on", Effect::Live, true, true, 0, 0, 0, nullptr, nullptr, nullptr, 0});
-    core::settings::OnChange(i, [](int, const char *v, bool) {
-        g_simWhileScrolling = std::strcmp(v, "on") == 0;
-        return true;
-    });
+        Type::Choice, "cursor", Effect::Live, true, true, 0, 0, 0, nullptr, core::ui::info_window::kChoices,
+        core::ui::info_window::kChoiceLabels, core::ui::info_window::kChoiceCount});
+    core::ui::info_window::Watch(i, "resolution: "); // the choices and the mode are the core's (shared with Zeus)
+    core::sim::RegisterSettings(); // [gameplay] keep_speed, full_speed, simulate_while_scrolling
     emperor::china_map::RegisterSettings();
     emperor::fullscreen::RegisterSettings();
     emperor::master_volume::RegisterSettings(); // first in [sound]: the volume over all
@@ -697,18 +548,28 @@ extern "C" void emperor_attach(void)
     if (!Matches(kAfterTick)) {
         core_log("emperor: %s at 0x%lx does not match: the game's own simulation pace", kAfterTick.name,
                  kAfterTick.address);
-        g_catchUp = false;
-        core::diag::Disable(g_paceFeature, "sim_after_tick does not match");
+        core::sim::TurnOff(kPace, "sim_after_tick does not match");
     }
     if (threaded) {
         Install(kScreenPresent, &ScreenPresent_detour, o_ScreenPresent);
     }
     core_log("emperor: known build; game hooks installed (screen_present %s)",
              threaded ? "hooked: frames follow the display" : "not hooked: the game's own presentation");
+    // The smoke test's steps run in screen_present's detour, hooked only with the output thread, which its shots
+    // need anyway (main menu 0x00, city 0x01).
+    if (threaded) {
+        core::diag::autorun::Start({&AutorunScreen, 0x00, 0x01, &AutorunTicks, &AutorunQuit, &AutorunDescribe,
+                                    emperor::smoke::kActions, &emperor::smoke::Action, &emperor::smoke::DialogOffset});
+    }
     bool scroll = emperor::scroll::Attach(cfg->smooth_scroll != 0);
     bool resolution = emperor::resolution::Attach(cfg);
+    core::display::SetKeyFilter(&KeyFilter);
     if (resolution) {
-        emperor::fullscreen::Attach();
+        if (emperor::fullscreen::Attach() && !scroll) {
+            // The menus' city background is taken in smooth scrolling's city_render hook (so its absence is logged).
+            core_log("fullscreen: no city behind the menus (smooth scrolling's city_render hook is not installed): the "
+                     "panel pattern around them, or your own menu_background picture");
+        }
         emperor::china_map::Attach(); // needs the emulated DirectDraw's resolutions (the map only fits beyond 1024)
         emperor::display_options::Attach(); // our display settings in the game's Display options
         if (scroll) {
@@ -730,7 +591,7 @@ extern "C" void emperor_attach(void)
     emperor::game_menu::Attach();        // Esc and the pause menu (after the window; before the File menu)
     emperor::options_entry::Attach();    // after the window and options_original: the menus open the window
     emperor::keys::Attach();             // 0.2.0 item 7: the key bindings (F6 opens the options window)
-    emperor::intro::Attach(); // 0.2.0: [display] intro_movie (Emperor.ini is not changed)
+    emperor::intro::Attach(); // 0.2.0: [ui] intro_movie (Emperor.ini is not changed)
     // Settings this layer applies when they change in our panel (core/settings/settings.h).
     if (scroll) {
         core::settings::OnChange(core::settings::Find("gameplay", "smooth_scroll"), &ApplySmooth);

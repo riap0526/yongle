@@ -37,7 +37,9 @@ Not for now. Yongle works inside the original Windows `Emperor.exe`, so it runs 
 
 ### Which versions of Emperor does Yongle work with?
 
-Yongle is made and tested with the **GOG release**, version 1.0.1.0 (the `Emperor.exe` SHA256 is in the [README](../README.md#requirements)). Other releases (the original CDs, other stores) and other language editions have not been tested. Before changing the game, Yongle checks that the parts of `Emperor.exe` it changes are the ones it knows; if they are not, none of its game changes are made, and the game runs as the original at its own 1024×768, only shown in Yongle's window (the log says so at the start). If you have another version, please tell us how it went, with the log.
+Yongle is made and tested with the **English GOG release**, version 1.0.1.0 (the `Emperor.exe` SHA256 is in the [README](../README.md#requirements)). GOG only sells the English edition. Other languages were only sold on the original retail CDs; those editions, and other releases, have not been tested: Yongle may work with them, but it may have problems, or some of its features may not work.
+
+With any `Emperor.exe` other than the tested one, Yongle shows "Untested Emperor.exe" at the top of the screen for 20 seconds at the start, and the log says which exe it is. Before changing the game, Yongle also checks that the parts of `Emperor.exe` it changes are the ones it knows; if they are not, none of its game changes are made, and the game runs as the original at its own 1024×768, only shown in Yongle's window (the log says so at the start). If you have another version, please tell us how it went, with the log.
 
 **Use an unmodified `Emperor.exe`.** An exe changed by another tool, such as a widescreen patch, may stop Yongle from working, or cause problems: Yongle only checks the parts it changes itself, not everything such a tool may have changed. If you have used one, restore the original exe (for example by reinstalling or verifying the game in GOG Galaxy) before installing Yongle.
 

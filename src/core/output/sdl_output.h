@@ -2,7 +2,7 @@
 // picture; the window, its messages and all input stay with the game's Win32 code).
 //
 // The SDL window wraps the existing HWND; the window procedure is given straight back to its previous owner (SDL
-// subclasses the window when wrapping it; verified by tools/sdl_hwnd_test). Without its window procedure SDL does not
+// subclasses the window when wrapping it; verified with a test program). Without its window procedure SDL does not
 // notice size changes, so the output compares sizes and rebuilds the SDL window and renderer when needed
 // (re-instating the current window procedure, which SDL_DestroyWindow resets). SDL is told not to touch the system
 // timer resolution (SDL_HINT_TIMER_RESOLUTION=0); that is the engine's own setting (core/platform/timing.h).
@@ -117,9 +117,19 @@ void SetCaption(const char *utf8, int frameY);
 // picture saved: ..."; drawn after the screen is read back for a screenshot, so it is never in one. A new message
 // replaces the one shown.
 void SetNotice(const char *utf8, unsigned ms);
+// The same, but the ms count from the first frame drawn on (for a message set at start-up, before there is a
+// picture; e.g. core/platform/exe_identity). A SetNotice before that frame replaces it.
+void SetNoticeFromFirstFrame(const char *utf8, unsigned ms);
 
 // Any thread: the next frame drawn is read back from the screen (before our panel is drawn) and saved by
 // core/capture as <stem>_screen_<w>x<h>_<time>.png. stem and time are the capture's.
 void RequestScreenCapture(const char *stem, const char *time);
+
+// The unattended smoke test (core/diag/autorun.h): a screenshot or a report as if its key was pressed, taken by the
+// output thread on its next pass (present = display or cap60 only). ScreenshotsSaved counts the screenshots and
+// report pictures handed to the writer so far. Any thread.
+void RequestScreenshot();
+void RequestReport();
+long ScreenshotsSaved();
 
 } // namespace core::output

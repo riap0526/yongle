@@ -1,6 +1,8 @@
-// Custom logical resolution; the city screen's layout
-// (the city screen's layout).
+// Custom logical resolution and the city screen's layout
+// (resolution.cpp lists the parts).
 #pragma once
+
+#include "core/ui/info_window.h"
 
 #include "core/config.h"
 #include "games/emperor/site.h"
@@ -34,27 +36,31 @@ void DrawSidebarFiller();
 
 // Where the building information window opens ([ui] info_window): the game's own rule (moved with the centre
 // of the city area), centred in the city area, or beside the cursor. Takes effect from the next window opened.
-enum class InfoMode { Original, Centered, Cursor };
-void SetInfoMode(InfoMode mode);
-
-// The city area the window must stay in (right and bottom exclusive).
-struct InfoArea {
-    int left, top, right, bottom;
-};
-// The top left corner of a w x h window for Centered and Cursor (Original: the area's top left). Never past the
-// area's right or bottom; when the window is larger than the area, at its left or top.
-POINT InfoPosition(InfoMode mode, const InfoArea &area, int w, int h, int mouseX, int mouseY);
+// The mode, the city area and the position are the core's (core/ui/info_window, shared with Zeus).
+using InfoMode = core::ui::info_window::Mode;
+using InfoArea = core::ui::info_window::Area;
+inline void SetInfoMode(InfoMode mode)
+{
+    core::ui::info_window::Set(mode);
+}
+inline POINT InfoPosition(InfoMode mode, const InfoArea &area, int w, int h, int mouseX, int mouseY)
+{
+    return core::ui::info_window::Position(mode, area, w, h, mouseX, mouseY);
+}
 
 // The row of the sidebar backdrop (China_Interface entry 2045) drawn at screen row y in a column that starts at
 // screen row top: 0 right of the sidebar (the top bar's band, then the leather with the edge), 761 or 768 below it
 // (leather with the edge only; no band). See resolution.cpp.
 int SidebarBackdropRow(int y, int top);
 
+// The key filter's part (emperor.cpp): F6 blocked and Shift+F7 (core/display/resolution_switch) while resolution is
+// installed. True when the key is ours (the game does not see it).
+bool KeyFilter(UINT message, WPARAM key, LPARAM l);
+
 // For the offline tests (src/games/emperor/test_restore.cpp): the detours by site; the state Attach would set (without
-// hooks or patches); Shift+F7; China_Interface.sg3 from another place than DATA next to the exe.
+// hooks or patches); China_Interface.sg3 from another place than DATA next to the exe.
 const Detour *Detours(int *count);
 void InstalledForTest(const core_config *cfg);
-bool KeyFilterForTest(UINT message, WPARAM key, LPARAM l);
 void SetInterfacePackForTest(const wchar_t *path);
 
 } // namespace emperor::resolution

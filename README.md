@@ -52,7 +52,8 @@ Yongle is a single `ddraw.dll` in the game folder. It replaces the game's Direct
 
 ## Requirements
 
-- *Emperor: Rise of the Middle Kingdom*, version 1.0.1.0. Developed and tested with the **GOG release** (`Emperor.exe` SHA256 `6373328bfc5c4886d9abc9544eb706e89e7d465b18176ea8205fe27aaee53c0e`). Use an unmodified `Emperor.exe`: on an unknown build Yongle makes none of its game changes and the game runs as the original, only shown in Yongle's window; an exe changed by another tool (a widescreen patch, say) may not work or may cause problems (see the [FAQ](docs/FAQ.md#which-versions-of-emperor-does-yongle-work-with)).
+- The **English** *Emperor: Rise of the Middle Kingdom*, version 1.0.1.0. Developed and tested with the **GOG release** (`Emperor.exe` SHA256 `6373328bfc5c4886d9abc9544eb706e89e7d465b18176ea8205fe27aaee53c0e`). GOG only sells the English edition. Other languages were only sold on the original retail CDs: Yongle may work with them, but it may have problems, or some of its features may not work.
+- Use an unmodified `Emperor.exe`: an exe changed by another tool (a widescreen patch, say) may not work or may cause problems. With any `Emperor.exe` other than the one above, Yongle shows "Untested Emperor.exe" at the top of the screen for 20 seconds at the start (see the [FAQ](docs/FAQ.md#which-versions-of-emperor-does-yongle-work-with)).
 - Windows 10 or 11 and a graphics card with Direct3D 11.
 
 ## Installation

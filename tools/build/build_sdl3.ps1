@@ -1,6 +1,6 @@
 # Builds SDL3 3.4.18 as a 32-bit static library with llvm-mingw and installs it into build\sdl3-i686-install,
 # where CMakeLists.txt looks for it (SDL3_DIR). Only needed once, or after deleting build\.
-# The source is the verified release tarball (docs/third_party.md: SHA256 and GPG signature checked), extracted to
+# The source is the verified release tarball (SHA256 and GPG signature checked; license in THIRD_PARTY_NOTICES.md), extracted to
 # C:\tools\src\SDL3-3.4.18.
 param(
     [string]$Source = 'C:\tools\src\SDL3-3.4.18',
@@ -8,7 +8,7 @@ param(
     [string]$CMake = 'C:\tools\cmake-4.4.4-windows-x86_64\bin\cmake.exe'
 )
 $ErrorActionPreference = 'Stop'
-$root = Resolve-Path (Join-Path $PSScriptRoot '..')
+$root = Resolve-Path (Join-Path $PSScriptRoot '..\..') # this script is in tools\build\
 $build = Join-Path $root 'build\sdl3-i686'
 $install = Join-Path $root 'build\sdl3-i686-install'
 $env:PATH = (Join-Path $Toolchain 'bin') + ';' + $env:PATH

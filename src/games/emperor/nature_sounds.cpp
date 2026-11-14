@@ -1,4 +1,4 @@
-// The unused nature sounds.
+// The unused nature sounds (0.2.0 item 10): see nature_sounds.h.
 //
 // Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e; mss32.dll Miles 6.0i):
 //   - sound_manager 0x1156bc8 + 0x178: the digital driver (HDIGDRIVER). sound_init passes its address to

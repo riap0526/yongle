@@ -262,21 +262,23 @@ int main()
 
     // Tooltip: only after a pause on the label.
     p = Draw(w);
+    // Positions are kept as numbers: p = Draw(w) below replaces p.ops, and pointers into it would dangle.
     const Op *game = p.FindText("Game speed");
+    const int gameX = game->x, gameY = game->y;
     w.Tick(5000);
-    w.MouseMove(game->x + 3, game->y + 3);
+    w.MouseMove(gameX + 3, gameY + 3);
     w.Tick(5000);
     w.Tick(5000 + co::Window::kTipDelayMs / 2);
     Check(!w.TipShown(), "no tooltip before the pause");
     w.Tick(5000 + co::Window::kTipDelayMs);
     p = Draw(w);
     Check(w.TipShown() && p.Find("tip") && p.FindText("How fast it goes."), "tooltip after the pause");
-    Check(p.Find("tip")->x == game->x + 3 + 20 && p.Find("tip")->y == game->y + 3 + 40 && AllInside(p),
+    Check(p.Find("tip")->x == gameX + 3 + 20 && p.Find("tip")->y == gameY + 3 + 40 && AllInside(p),
           "tooltip beside the cursor (20 right, 40 down), inside the window");
-    w.MouseMove(game->x + 9, game->y + 4);
+    w.MouseMove(gameX + 9, gameY + 4);
     w.Tick(5000 + co::Window::kTipDelayMs + 16);
     p = Draw(w);
-    Check(w.TipShown() && p.Find("tip")->x == game->x + 9 + 20, "tooltip follows the cursor on the same label");
+    Check(w.TipShown() && p.Find("tip")->x == gameX + 9 + 20, "tooltip follows the cursor on the same label");
     w.MouseMove(5, 5);
     w.Tick(6000);
     Check(!w.TipShown(), "tooltip goes when the mouse leaves");
@@ -417,7 +419,9 @@ int main()
     Check(star && star->font == co::Font::Disabled && star->x > res->x + res->w && star->y == res->y,
           "red * after a restart row's label");
     const Op *value = p.FindText("Scaled");
-    w.MouseMove(Cx(value), Cy(value));
+    const int resX = res->x, resY = res->y; // kept as numbers: p is drawn again below
+    const int valueX = Cx(value), valueY = Cy(value), valueTop = value->y;
+    w.MouseMove(valueX, valueY);
     w.Tick(20000);
     w.Tick(20000 + co::Window::kTipDelayMs);
     p = Draw(w);
@@ -428,26 +432,27 @@ int main()
     for (const Op &o : p.ops) {
         if (o.op == "arrow" && o.extra / 10 == static_cast<int>(co::Arrow::Right) && !more2) more2 = &o;
     }
-    w.MouseMove(Cx(more2), Cy(more2));
+    const int more2X = Cx(more2), more2Y = Cy(more2);
+    w.MouseMove(more2X, more2Y);
     w.Tick(20200 + co::Window::kTipDelayMs);
     Check(!w.TipShown(), "no tooltip on an arrow");
-    w.MouseDown(Cx(more2), Cy(more2), 20500);
-    w.MouseUp(Cx(more2), Cy(more2));
+    w.MouseDown(more2X, more2Y, 20500);
+    w.MouseUp(more2X, more2Y);
     w.Tick(20500 + co::Window::kTipDelayMs);
     Check(!w.TipShown() && w.Draft(1, 0, 0) == 1, "an arrow changes the value, still no tooltip");
-    w.MouseMove(Cx(value), value->y - 4); // above the text, within the row
+    w.MouseMove(valueX, valueTop - 4); // above the text, within the row
     w.Tick(21000);
     w.Tick(21000 + co::Window::kTipDelayMs);
     p = Draw(w);
     Check(w.TipShown() && p.FindText("Help for 1024."), "a little above the value: the new value's tooltip");
-    w.MouseMove(res->x + 4, res->y + 14); // below the name's text, within the row
+    w.MouseMove(resX + 4, resY + 14); // below the name's text, within the row
     w.Tick(22000);
     w.Tick(22000 + co::Window::kTipDelayMs);
     p = Draw(w);
     Check(w.TipShown() && p.FindText("Pick a size.") && p.FindText("Restart first."),
           "a little below the name: its tooltip, with the restart line");
-    Click(w, Cx(more2), Cy(more2));
-    w.MouseMove(Cx(value), Cy(value));
+    Click(w, more2X, more2Y);
+    w.MouseMove(valueX, valueY);
     w.Tick(23000);
     w.Tick(23000 + co::Window::kTipDelayMs);
     Check(!w.TipShown(), "a value without help: no tooltip");
@@ -476,7 +481,8 @@ int main()
         for (const Op &o : q.ops) {
             if (o.op == "arrow" && o.extra / 10 == static_cast<int>(co::Arrow::Right)) more3 = &o;
         }
-        Click(r, Cx(more3), Cy(more3), 1000);
+        const int more3X = Cx(more3), more3Y = Cy(more3); // kept as numbers: q is drawn again below
+        Click(r, more3X, more3Y, 1000);
         q = Draw(r);
         Click(r, Cx(q.FindText("Apply")), Cy(q.FindText("Apply")), 1000);
         q = Draw(r);
@@ -484,14 +490,14 @@ int main()
               "relayout: applied, then asks to keep it");
         Click(r, Cx(q.FindText("Keep")), Cy(q.FindText("Keep")), 2000);
         Check(!r.Confirming() && kept == 1 && g_values[8] == 2, "Keep: kept, the owner told");
-        Click(r, Cx(more3), Cy(more3), 3000);
+        Click(r, more3X, more3Y, 3000);
         q = Draw(r);
         Click(r, Cx(q.FindText("Apply")), Cy(q.FindText("Apply")), 3000);
         r.Tick(3000 + 14000);
         Check(r.Confirming() && g_values[8] == 0, "still asking after 14 s");
         r.Tick(3000 + 15001);
         Check(!r.Confirming() && g_values[8] == 2 && kept == 1, "no answer in 15 s: the previous value back");
-        Click(r, Cx(more3), Cy(more3), 20000);
+        Click(r, more3X, more3Y, 20000);
         q = Draw(r);
         r.MouseDown(Cx(q.FindText("OK")), Cy(q.FindText("OK")), 20000);
         co::Action ra = r.MouseUp(Cx(q.FindText("OK")), Cy(q.FindText("OK")));
@@ -533,7 +539,8 @@ int main()
         for (const Op &o : q.ops) hotkeysButtons += o.op == "text" && o.text == "Hotkeys" && o.y > 400;
         Check(hotkeysButtons == 0 && AllInside(q), "no Hotkeys button; everything inside");
         const Op *ins = q.FindText("Insert");
-        Click(kw, Cx(ins), Cy(ins));
+        const int insX = Cx(ins), insY = Cy(ins); // kept as numbers: q is drawn again below
+        Click(kw, insX, insY);
         q = Draw(kw);
         Check(kw.WaitingForKey() && q.FindText("Press a key") && q.Count("frame") >= 1, "a click on a key waits");
         kw.Key(0x10, core::ui::kModShift); // Shift alone
@@ -545,7 +552,7 @@ int main()
         kw.Key(0x1b, 0);
         Check(!kw.WaitingForKey() && kw.Draft(0, 0, 1) == co::KeyCode(0x2d, 0) && kw.EndedWaitVk() == 0x1b,
               "Esc: not changed");
-        Click(kw, Cx(ins), Cy(ins));
+        Click(kw, insX, insY);
         kw.Key(0x50, core::ui::kModCtrl); // Ctrl+P
         q = Draw(kw);
         Check(!kw.WaitingForKey() && kw.Draft(0, 0, 1) == co::KeyCode(0x50, core::ui::kModCtrl) && q.FindText("Ctrl+P") &&
@@ -590,6 +597,7 @@ int main()
         kw.Open(0, 0);
         FakePainter q = Draw(kw);
         const Op *alt = q.FindText("Shift+F10"), *f10 = q.FindText("F10");
+        const int f10X = f10 ? f10->x : 0, f10Y = f10 ? f10->y : 0; // kept as numbers: q is drawn again below
         Check(q.FindText("Hotkey") && q.FindText("Alternative") && q.FindText("Global hotkeys") && alt && f10 &&
                   alt->x > f10->x && AllInside(q),
               "two columns: Hotkey and Alternative, a section title, the alternative at the right");
@@ -615,7 +623,7 @@ int main()
         const Op *empty = nullptr;
         q = Draw(kw);
         for (const Op &o : q.ops) {
-            if (o.op == "strip" && o.y > (f10 ? f10->y - 8 : 0) && o.y < (f10 ? f10->y + 8 : 0) && o.x > f10->x) empty = &o;
+            if (o.op == "strip" && f10 && o.y > f10Y - 8 && o.y < f10Y + 8 && o.x > f10X) empty = &o;
         }
         Check(empty != nullptr, "the empty alternative still has its strip");
         Click(kw, Cx(empty), Cy(empty));
@@ -690,7 +698,8 @@ int main()
         FakePainter q = Draw(v);
         Check(!q.FindText("*"), "a value that needs a restart: no * after the name");
         const Op *name = q.FindText("Frame output"), *val = q.FindText("Display");
-        v.MouseMove(Cx(val), Cy(val));
+        const int nameX = Cx(name), nameY = Cy(name), valX = Cx(val), valY = Cy(val); // q is drawn again below
+        v.MouseMove(valX, valY);
         v.Tick(30000);
         v.Tick(30000 + co::Window::kTipDelayMs);
         q = Draw(v);
@@ -701,13 +710,13 @@ int main()
             if (o.op == "arrow" && o.extra / 10 == static_cast<int>(co::Arrow::Right) && !more) more = &o;
         }
         Click(v, Cx(more), Cy(more));
-        v.MouseMove(Cx(val), Cy(val));
+        v.MouseMove(valX, valY);
         v.Tick(31000);
         v.Tick(31000 + co::Window::kTipDelayMs);
         q = Draw(v);
         const Op *red = q.FindText("Restart first."), *own = q.FindText("The game's own.");
         Check(v.TipShown() && red && own && red->y < own->y, "that value: the red line first, then its description");
-        v.MouseMove(Cx(name), Cy(name));
+        v.MouseMove(nameX, nameY);
         v.Tick(32000);
         v.Tick(32000 + co::Window::kTipDelayMs);
         q = Draw(v);
@@ -733,14 +742,15 @@ int main()
         Check(q.FindText("Pause") && q.FindText("Pause")->font == co::Font::Title && q.Count("frame") == 0,
               "pause menu: the title; no hover frame yet");
         const Op *save = q.FindText("Save game");
-        m.MouseMove(Cx(save), Cy(save));
+        const int saveX = Cx(save), saveY = Cy(save), panelX = panel->x, panelY = panel->y; // q is replaced below
+        m.MouseMove(saveX, saveY);
         q = FakePainter();
         m.Draw(q);
         Check(q.Count("frame") == 1 && q.Find("frame")->y == q.Find("bar", 3)->y, "pause menu: hover frame on Save game");
-        m.MouseDown(Cx(save), Cy(save));
-        Check(m.MouseUp(Cx(save), Cy(save)) == 3, "pause menu: a click on Save game gives item 3");
-        m.MouseDown(Cx(save), Cy(save));
-        Check(m.MouseUp(panel->x + 4, panel->y + 4) == co::Menu::kNone, "pause menu: released off the button: nothing");
+        m.MouseDown(saveX, saveY);
+        Check(m.MouseUp(saveX, saveY) == 3, "pause menu: a click on Save game gives item 3");
+        m.MouseDown(saveX, saveY);
+        Check(m.MouseUp(panelX + 4, panelY + 4) == co::Menu::kNone, "pause menu: released off the button: nothing");
         Check(m.Key(0x1b) == co::Menu::kClose && m.Key('P') == co::Menu::kNone && m.RightClick() == co::Menu::kClose,
               "pause menu: Esc and right click close; other keys nothing");
     }

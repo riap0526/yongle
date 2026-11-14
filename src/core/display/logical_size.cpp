@@ -21,8 +21,11 @@ LogicalSize ChooseLogicalSize(int native_w, int native_h, core_resolution_kind k
 {
     LogicalSize r;
     if (kind == CORE_RESOLUTION_FIXED || native_w <= 0 || native_h <= 0) {
-        r.w = fixed_w;
+        // Even widths, as for scaled below: the emulated surface's rows are 4-byte aligned while the games' own pitch
+        // is width x 2, so an odd width drew every row 2 bytes off (a slanted picture in Zeus).
+        r.w = fixed_w & ~1;
         r.h = fixed_h;
+        r.evened = r.w != fixed_w;
         if (r.w < min_w || r.h < min_h) {
             r.w = r.w < min_w ? min_w : r.w;
             r.h = r.h < min_h ? min_h : r.h;

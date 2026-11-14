@@ -25,8 +25,8 @@
 #include <string>
 #include <vector>
 
-// Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e): the addresses below,
-// calling conventions next to each address.
+// Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e): the game's drawing functions and art read from the disassembly;
+// calling conventions checked by disassembly.
 namespace emperor::options_window {
 namespace {
 
@@ -113,7 +113,7 @@ std::vector<int> Positions(int size)
     return out;
 }
 
-// The tile layout of panel_draw_tiles 0x5bed30 and inset_panel_draw_tiles 0x5bf080, as the game
+// The tile layout of panel_draw_tiles 0x5bed30 and inset_panel_draw_tiles 0x5bf080, as the mockups
 // draws it (nine parts).
 struct Nine {
     int perRow, edgeCycle, rowsCycle;

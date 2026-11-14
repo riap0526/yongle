@@ -1,4 +1,4 @@
-// See keys.h. Evidence for every key: game_wndproc 0x4766c0, its WM_CHAR table
+// See keys.h. Every key was found in the game's code (game_wndproc 0x4766c0, its WM_CHAR table
 // 0x477c7c / 0x477bf4, city_alt_keys 0x43cfa0, the R poll 0x5db570; Ghidra and capstone).
 #include "games/emperor/keys.h"
 

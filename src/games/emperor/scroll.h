@@ -1,4 +1,4 @@
-// Pixel (smooth) scrolling of the city view. Evidence in the comments of scroll.cpp.
+// Pixel (smooth) scrolling of the city view. The game itself scrolls in whole tiles.
 #pragma once
 
 #include <cstddef>

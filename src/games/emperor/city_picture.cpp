@@ -1,4 +1,4 @@
-// See city_picture.h. Evidence for every address: the function and variable names below, from Emperor.exe 1.0.1.0.
+// See city_picture.h. Every address was checked in the disassembly.
 #include "games/emperor/city_picture.h"
 
 #include "core/capture/big_picture.h"
@@ -28,7 +28,7 @@ namespace emperor::city_picture {
 
 namespace {
 
-// minimap_draw(x, y, w, h): __cdecl, the caller pops
+// minimap_draw(x, y, w, h): __cdecl, the caller pops (checked by disassembly)
 const Site kMinimapDraw{"minimap_draw", 0x46e730, {0xa1, 0xdc, 0x6d, 0x15, 0x01, 0x8b, 0x4c, 0x24}};
 
 const Var<BYTE *> kDrawBuffer{0x1156df8}; // draw_buffer

@@ -13,8 +13,8 @@
 #include <cstdlib>
 #include <cstring>
 
-// Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e): the addresses below, names and
-// calling conventions next to each address.
+// Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e): view_clamp and the viewports read from the disassembly; names and
+// calling conventions checked by disassembly.
 namespace emperor::zoom {
 namespace {
 
@@ -175,7 +175,7 @@ int LimitNow()
 // The wheel and the middle button over the city as shown, on the city screens (game_screen
 // 1 and the army screens 0x48 / 0x49). Elsewhere (the sidebar: its building categories, other screens) the game has
 // them as always. Not 7: that is a sidebar panel's dialog over the city (religion, monuments, commerce ...;
-// the screens this layer knows), whose lists scroll with the wheel in the game; an earlier version had taken it for a city
+// and so on), whose lists scroll with the wheel in the game; an earlier version had taken it for a city
 // variant, so the wheel zoomed the city behind such a dialog instead of scrolling its list (0.2.0 release test).
 bool CityScreen()
 {

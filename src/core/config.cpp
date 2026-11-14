@@ -240,7 +240,7 @@ void RegisterCoreItems()
                              "simulation and drawing, our copies, the output), in the top left corner while playing.",
                              Type::Bool, "off", Effect::Live, true, true, 0, 0, 0, nullptr, nullptr, nullptr, 0});
     // Moved from [debug] (0.1.1). auto is Direct3D 11 also with the Steam overlay
-    // since the thread affinity setting: the stops with Steam's FPS counter came from the driver's threads
+    // since the processor affinity change: the stops with Steam's FPS counter came from the driver's threads
     // waiting on the game's processor.
     core::settings::Retire("debug", "renderer", &MigrateRenderer);
     // The sections take the names of the options window's pages. Keys that moved elsewhere are moved by
@@ -287,7 +287,7 @@ void RegisterCoreItems()
                              "or screenshot them (they flash by on a fast computer). 0: as fast as the game loads. "
                              "Only at start-up, so set it in {ini} before starting the game.",
                              Type::Int, "0", Effect::Restart, true, false, 0, 5000, 100, nullptr, nullptr, nullptr, 0});
-    // Only in the file (troubleshooting), not in the panel. [debug] cpu_affinity_graphics
+    // Processor affinity: only in the file (troubleshooting), not in the panel. [debug] cpu_affinity_graphics
     // (the 0.1.3 test builds) is part of auto now.
     core::settings::Retire("debug", "cpu_affinity_graphics", nullptr);
     g_cpuAffinity = Add(Item{"compat", "cpu_affinity", "Processor affinity",
