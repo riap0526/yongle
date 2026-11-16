@@ -2,16 +2,15 @@
 
 #include "core/diag/guard.h"
 #include "core/log.h"
-#include "core/output/sdl_output.h"
-#include "games/emperor/options_text.h"
+#include "core/ui/notice.h"
 #include "games/emperor/site.h"
 
-#include <atomic>
 #include <cstdio>
 #include <cstring>
 
 // Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e): the notice boxes read with Ghidra and capstone (
-// calling conventions checked by disassembly.
+// calling conventions checked by disassembly. The queue, the threads and the fallback to our caption
+// line are the core's (core/ui/notice); here are the game's boxes.
 namespace emperor::notice {
 namespace {
 
@@ -40,8 +39,18 @@ constexpr int kNoticeFont = 0x1e14;                        // what city_warning_
 
 const Var<BYTE> kWarningsOn{0x10de131}; // the Help menu's Warnings ON / OFF (0x449520)
 const Var<int> kFrameTime{0x1156dec};   // frame_time (ms): when a box was shown
+const Var<unsigned char> kGameScreen{0x10de045};
+
+// city_warnings_draw calls city_warnings_layout 0x548000 on every frame whose screen is not a city command screen
+// (screen_is_city_command 0x474ed0: 1, 7, 0x48, 0x49) and not 0x12; it clears every box's in-use word (disassembly to
+// its ret): our boxes are made only on those screens.
+bool ShowsBoxes()
+{
+    const unsigned char s = *kGameScreen;
+    return s == 0x01 || s == 0x07 || s == 0x48 || s == 0x49 || s == 0x12;
+}
 constexpr DWORD kSlots = 0x1192778;     // 5 boxes of 0x78 bytes
-constexpr int kSlotCount = 5, kSlotSize = 0x78, kTextSize = 100;
+constexpr int kSlotCount = 5, kSlotSize = 0x78, kTextSize = core::ui::notice::kTextSize;
 
 // One box (the game's layout, city_warning_show 0x547e60).
 #pragma pack(push, 1)
@@ -63,19 +72,6 @@ Slot *SlotAt(int k)
     return reinterpret_cast<Slot *>(kSlots + g_imageShift + k * kSlotSize);
 }
 
-core::diag::Feature g_feature{"notices in the game's boxes (games/emperor/notice)"};
-bool g_attached = false;
-
-// Posted texts (any thread), shown at the next frame.
-struct Posted {
-    char text[kTextSize];
-    bool red;
-};
-SRWLOCK g_lock = SRWLOCK_INIT;
-Posted g_queue[4];
-int g_queued = 0;
-
-std::atomic<int> g_zoom{-1}; // the zoom to show (-1: nothing new)
 int g_zoomSlot = -1;          // the box we made for the zoom (game thread)
 char g_zoomText[kTextSize];   // what that box holds (to tell it is still ours)
 
@@ -85,12 +81,32 @@ char g_zoomText[kTextSize];   // what that box holds (to tell it is still ours)
 // other reference is city_warning_show_text writing it), so a red box of ours gets the first such number.
 constexpr short kRedId = 5;
 
-void ShowText(const char *text)
+// The game's call runs under a guard of its own, so that the Warnings switch is put back also when it faults: the
+// switch is saved in Emperor.inf (0x10de0c8 + 0x32c bytes, settings_save_on_exit 0x476100), and the core's guard
+// around the whole frame would leave it on.
+core::diag::Feature g_showFeature{"notice text through city_warning_show_text (games/emperor/notice)"};
+
+void ShowCall(void *text)
+{
+    *kWarningsOn = 1; // ours answer the player: shown also with the game's warnings off
+    Function<ShowText_fn>(kShowText)(static_cast<const char *>(text), 0);
+}
+
+// False after a fault: the switch put back, our notices switched off (the caption line from then on).
+bool ShowText(const char *text)
 {
     const BYTE on = *kWarningsOn;
-    *kWarningsOn = 1; // ours answer the player: shown also with the game's warnings off
-    Function<ShowText_fn>(kShowText)(text, 0);
+    static int s_loggedOn = -1; // the switch as last logged (a line when it changes, not one per notice)
+    if (on != s_loggedOn) {
+        s_loggedOn = on;
+        core_log("notice: the game's warnings are %s%s", on ? "on" : "off", on ? "" : "; ours are shown all the same");
+    }
+    const bool ok = core::diag::Guarded(g_showFeature, &ShowCall, const_cast<char *>(text));
     *kWarningsOn = on;
+    if (!ok) {
+        core::ui::notice::SwitchOff("city_warning_show_text faulted (the Warnings switch put back)");
+    }
+    return ok;
 }
 
 int FirstFree()
@@ -119,13 +135,16 @@ short BoxWidth(int px)
 }
 
 // A new box with text; its slot index, or -1 when there was no room (five boxes shown, as for the game's own).
+// Game thread (core/ui/notice's frame).
 int NewBox(const char *text, bool red)
 {
     const int k = FirstFree();
     if (k < 0) {
         return -1;
     }
-    ShowText(text);
+    if (!ShowText(text)) {
+        return -1;
+    }
     Slot *s = SlotAt(k);
     if (s->inUse == 0 || s->id != -1) {
         return -1; // not shown (e.g. not on a game screen)
@@ -137,10 +156,15 @@ int NewBox(const char *text, bool red)
     return k;
 }
 
+void NewBoxForCore(const char *text, bool red)
+{
+    NewBox(text, red);
+}
+
 void ShowZoom(int percent)
 {
     char text[32];
-    std::snprintf(text, sizeof(text), emperor::options_text::kNoticeZoom, percent);
+    std::snprintf(text, sizeof(text), core::ui::notice::kZoomFormat, percent);
     if (g_zoomSlot >= 0) {
         Slot *s = SlotAt(g_zoomSlot);
         if (s->inUse != 0 && s->id == -1 && std::memcmp(s->text, g_zoomText, kTextSize) == 0) {
@@ -161,28 +185,9 @@ void ShowZoom(int percent)
     }
 }
 
-void Flush(void *)
-{
-    Posted posted[4];
-    AcquireSRWLockExclusive(&g_lock);
-    const int n = g_queued;
-    std::memcpy(posted, g_queue, sizeof(posted));
-    g_queued = 0;
-    ReleaseSRWLockExclusive(&g_lock);
-    for (int k = 0; k < n; ++k) {
-        NewBox(posted[k].text, posted[k].red);
-    }
-    const int zoom = g_zoom.exchange(-1);
-    if (zoom >= 0) {
-        ShowZoom(zoom);
-    }
-}
-
 void __cdecl Draw_detour()
 {
-    if (core::diag::Enabled(g_feature)) {
-        core::diag::Guarded(g_feature, &Flush, nullptr);
-    }
+    core::ui::notice::OnFrame(); // guarded by the core
     Original(o_Draw, kDraw)();
 }
 
@@ -202,31 +207,14 @@ bool Attach()
         core_log("notice: city_warnings_draw could not be hooked; our messages stay on our own caption line");
         return false;
     }
-    g_attached = true;
-    core_log("notice: our messages are shown in the game's notice boxes (also with the game's warnings off)");
+    InstallForTest();
     return true;
 }
 
-void Post(const char *text, bool red)
+void InstallForTest()
 {
-    core_log("notice%s: %s", red ? " (red)" : "", text);
-    if (!g_attached || !core::diag::Enabled(g_feature)) {
-        core::output::SetNotice(text, 5000);
-        return;
-    }
-    AcquireSRWLockExclusive(&g_lock);
-    if (g_queued < 4) {
-        std::snprintf(g_queue[g_queued].text, kTextSize, "%s", text);
-        g_queue[g_queued++].red = red;
-    }
-    ReleaseSRWLockExclusive(&g_lock);
-}
-
-void Zoom(int percent)
-{
-    if (g_attached) {
-        g_zoom.store(percent);
-    }
+    core::ui::notice::Install(core::ui::notice::Game{"notice", core::ui::notice::Game::Red::kGameFont,
+                                                     &NewBoxForCore, &ShowZoom, &ShowsBoxes});
 }
 
 } // namespace emperor::notice

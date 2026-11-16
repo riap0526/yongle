@@ -37,6 +37,7 @@
 #include "core/diag/perf.h"
 #include "core/diag/present_mode.h"
 #include "core/diag/report.h"
+#include "core/diag/state_line.h"
 #include "core/diag/stall.h"
 #include "core/display/virtual_display.h"
 #include "core/display/window_key.h"
@@ -65,6 +66,8 @@
 #include "games/emperor/scroll.h"
 #include "games/emperor/sound.h"
 #include "games/emperor/intro.h"
+#include "core/scroll/drag.h"
+#include "core/scroll/zoom.h"
 #include "games/emperor/zoom.h"
 #include "games/emperor/site.h"
 #include "games/emperor/smoke.h"
@@ -118,6 +121,7 @@ const Var<int> kScreenW{0x10de01c}, kScreenH{0x10de018};
 const Var<int> kSmallTiles{0x13f8e20};    // city_view_small_tiles
 const Var<int> kCityClipLeft{0xadf89c}, kCityClipTop{0xadf894}, kCityClipRight{0xadf898}, kCityClipBottom{0xadf890};
 const Var<int> kViewCols{0xadf8c4}, kViewRows{0xadf8c0}, kTileW{0xadf8b8}, kTileHalfH{0xadf8ac};
+const Var<int> kDialogX{0x10de014}, kDialogY{0x10de010}; // dialog_offset_x / _y
 
 constexpr DWORD kPresentGateMs = 50; // screen_present presents when more than 49 ms have accumulated
 constexpr DWORD kRateLogMs = 10000;
@@ -171,9 +175,6 @@ void LogRates(const char *why)
     }
     long presented = 0, shown = 0;
     core::output::TakeCounts(&presented, &shown);
-    if (g_loops > 0) {
-        emperor::scroll::SetAverageFrameMs(static_cast<double>(ms) / g_loops);
-    }
     char scroll[256];
     emperor::scroll::TakeStats(scroll, sizeof(scroll));
     char paceNote[128];
@@ -188,8 +189,8 @@ void LogRates(const char *why)
              "(present=%s, display %d Hz, game speed %d%%, screen %d, city zoom %d%% on map %dx%d %s, timer %u us); "
              "frame check: %ld game frames with 2+ presents, %ld torn%s%s",
              why, g_loops / s, g_ticks / s, presented / s, shown / s, ms, kPresent[core_config_get()->present],
-             core::output::RefreshHz(), *kGameSpeed, static_cast<int>(*kGameScreen), emperor::zoom::Percent(), mapCols,
-             mapRows, emperor::zoom::AverageShrink() ? "average" : "nearest", core_timer_resolution_us(), multi, torn,
+             core::output::RefreshHz(), *kGameSpeed, static_cast<int>(*kGameScreen), core::scroll::zoom::Percent(), mapCols,
+             mapRows, core::scroll::zoom::AverageShrink() ? "average" : "nearest", core_timer_resolution_us(), multi, torn,
              scroll, paceNote);
     core::diag::LogRateTail(why); // time, time max, intervals, cpu (the same lines in every game)
     g_loops = 0;
@@ -215,6 +216,7 @@ DWORD g_lastLoop = 0;
 // the game draws frames (at most ~60 per second) and sim_tick_due says no, so the city does not move on.
 void Paused(bool options)
 {
+    core::scroll::drag::End(options ? "the options window opened" : "our panel opened"); // the cursor shown again
     emperor::sound::SetQuiet(true); // no new ambient sound meanwhile, as under the game's own dialogs
     LogRates(options ? " (options window opened: game paused)" : " (panel opened: game paused)");
 }
@@ -437,14 +439,15 @@ bool KeyFilter(UINT message, WPARAM key, LPARAM l)
            emperor::resolution::KeyFilter(message, key, l);
 }
 
-// The game's state for a canary report (core/ddraw/surface_memory.h; game thread, reads only).
+// The game's state for a canary report and the problem report (core/ddraw/surface_memory.h; game thread, reads
+// only): the same fields as Pericles's (core/diag/state_line.h); Emperor's own at the end: the small tiles.
 void DescribeForCanary(char *out, size_t size)
 {
-    std::snprintf(out, size,
-                  "screen 0x%02x, mode %dx%d, city clip (%d,%d)-(%d,%d), view %d x %d (tiles %dx%d%s)",
-                  static_cast<unsigned char>(*kGameScreen), *kScreenW, *kScreenH, *kCityClipLeft, *kCityClipTop,
-                  *kCityClipRight, *kCityClipBottom, *kViewCols, *kViewRows, *kTileW, *kTileHalfH * 2,
-                  *kSmallTiles == 1 ? ", small tiles" : "");
+    core::diag::Format(core::diag::StateLine(static_cast<unsigned char>(*kGameScreen), *kScreenW, *kScreenH,
+                                             *kCityClipLeft, *kCityClipTop, *kCityClipRight, *kCityClipBottom,
+                                             *kViewCols, *kViewRows, *kTileW, *kTileHalfH * 2, *kDialogX, *kDialogY,
+                                             *kGameSpeed, *kSmallTiles == 1 ? "small tiles" : ""),
+                       out, size);
 }
 
 // Screenshot file names start with the current screen (game thread).
@@ -582,6 +585,9 @@ extern "C" void emperor_attach(void)
         if (threaded) {
             emperor::options_window::Attach(); // drawn in screen_present, which is hooked only then
         }
+    }
+    if (scroll) {
+        emperor::scroll::AttachDrag(); // middle-button drag scrolling; after the zoom (its filter passes on to it)
     }
     emperor::ui_fixes::Attach();
     emperor::notice::Attach(); // 0.2.0 item 6: our messages in the game's notice boxes

@@ -580,6 +580,8 @@ std::vector<co::Page> BuildPages()
         Header(c.rows, "Scrolling");
         Add(c.rows, "gameplay", "simulate_while_scrolling");
         Add(c.rows, "gameplay", "smooth_scroll");
+        Add(c.rows, "gameplay", "drag_scroll");
+        Add(c.rows, "gameplay", "edge_scroll_width");
         general.categories.push_back(std::move(c));
     }
     {

@@ -2,6 +2,22 @@
 
 All notable changes to Yongle. Downloads, with the SHA256 of each zip, are on the [Releases](https://github.com/riap0526/yongle/releases) page. To upgrade, replace `ddraw.dll` and `ddraw.syms` in the game folder and keep your `emperor_engine.ini`: new settings take their defaults when they are missing (from 0.2.0 on, the file's descriptions are also brought up to date at the first start, with your values kept).
 
+## Unreleased
+
+### Added
+
+- **Drag scrolling.** Hold the middle mouse button over the city and move the mouse: the city follows it. The cursor is hidden while you drag and comes back where you pressed. A click without moving still goes back to 100 % zoom. It can be turned off in Options.
+- **Edge scrolling width.** How close to the edge of the screen the cursor has to be to scroll the city, from 1 pixel (as before) to 20, or 0 for none. In Options.
+
+### Changed
+
+- **New scroll speeds with smooth scrolling.** Each scroll speed setting now has its own steady speed, the same on every computer. Every setting is slower than before, and 100 % is no longer too fast. New players start at 50 % scroll speed, about as fast as the old 30 %. If you used 30 %, try 50 %.
+- **Screenshots from the city view only.** The city and minimap screenshot keys now work only when no window, dialog or message is open, also not the sidebar's dialogs. With one open, the message says so once you close it.
+
+### Fixed
+
+- Yongle's messages (for example "City screenshot saved") were lost when a window or message was open at that moment. They now appear when you are back in the city.
+
 ## 0.2.0 (2026-11-09)
 
 ### Added

@@ -35,6 +35,7 @@
 
 #include "games/emperor/fullscreen.h"
 #include "games/emperor/scroll.h"
+#include "core/scroll/zoom.h"
 #include "games/emperor/zoom.h"
 
 #include "core/assets/sg3.h"
@@ -283,7 +284,7 @@ void SetViewport(int cols, int rows, int tileW, int tileH)
     // Logged when it changes: a window with a small city view (0x5a25c0) sets the viewport again every frame.
     static int logged[7] = {-1, -1, -1, -1, -1, -1, -1};
     const int key[7] = {cols, rows, tileW, *kScreenWidth, *kScreenHeight, mapCols, mapRows};
-    if (!emperor::zoom::Moving() && std::memcmp(key, logged, sizeof(key)) != 0) { // not every wheel frame
+    if (!core::scroll::zoom::Moving() && std::memcmp(key, logged, sizeof(key)) != 0) { // not every wheel frame
         std::memcpy(logged, key, sizeof(key));
         core_log("resolution: city viewport %d x %d (tiles %dx%d) for %dx%d; current map view range %d x %d%s", cols,
                  rows, tileW, tileH, *kScreenWidth, *kScreenHeight, mapCols, mapRows,
@@ -319,7 +320,7 @@ bool StandardSize(int w, int h)
 void __cdecl ViewportSmall_detour() // 58x30 tiles: 640/800/1024 -> 10x31, 13x39, 17x50
 {
     int w = *kScreenWidth, h = *kScreenHeight;
-    emperor::zoom::ResetView(); // the large tiles only
+    core::scroll::zoom::ResetView(); // the large tiles only
     if (StandardSize(w, h) || w < 1024) {
         Original(o_ViewportSmall, kViewportSmall)();
     }
@@ -333,7 +334,7 @@ void __cdecl ViewportLarge_detour() // 78x40 tiles: 800 -> 7x29, 1024 -> 10x37 (
 {
     int w = *kScreenWidth, h = *kScreenHeight;
     if (StandardSize(w, h) || w < 1024) {
-        emperor::zoom::ResetView(); // our layout only
+        core::scroll::zoom::ResetView(); // our layout only
         Original(o_ViewportLarge, kViewportLarge)();
         UpdateCityExtent(true);
         return;
@@ -341,7 +342,7 @@ void __cdecl ViewportLarge_detour() // 78x40 tiles: 800 -> 7x29, 1024 -> 10x37 (
     // The zoomed view for the city as shown on the screen, from
     // the top bar to the bottom and to the sidebar; capped to the map's range by games/emperor/zoom.
     int cols = LargeColumns(w), rows = (h - kTopBar) / 20 + 1;
-    emperor::zoom::ViewFor(*kSidebarX, h - kTopBar, 0x4e + 2, 0x28 / 2, &cols, &rows);
+    core::scroll::zoom::ViewFor(*kSidebarX, h - kTopBar, 0x4e + 2, 0x28 / 2, &cols, &rows);
     Viewport({cols, rows, 0x4e, 0x28}, {10, 37, 0x4e, 0x28});
     UpdateCityExtent(true);
 }

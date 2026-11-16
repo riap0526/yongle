@@ -83,6 +83,9 @@ SetWindowLong_fn own_SetWindowLongA = SetWindowLongA;
 // Windowed (a window that can be moved and sized) or covering the monitor. The game is not told: it stays in
 // its fullscreen mode; only the window's style and place change, and the output follows the client area.
 bool g_windowed = false;
+bool g_cursorHidden = false;    // HideCursor: a drag scroll is on
+POINT g_hiddenCursor{};         // ... where the exe's GetCursorPos sees the cursor meanwhile (mode pixels)
+HCURSOR g_exeCursor = nullptr; // the exe's last SetCursor (shown again after HideCursor(false))
 SIZE g_settled{0, 0};    // the client size when the window last came to rest (what the layout uses)
 bool g_inSizeMove = false;
 // The smallest layout: the game's own size (core/game.h).
@@ -242,6 +245,10 @@ BOOL WINAPI GetCursorPos_detour(LPPOINT pt)
     if (pt && Acting(caller, nullptr) && g_autoMouse) { // the smoke test: where it last put the mouse
         LONG x = g_autoCursor.x, y = g_autoCursor.y;
         *pt = POINT{x < 2 ? 2 : x > g_mode.cx - 3 ? g_mode.cx - 3 : x, y < 2 ? 2 : y > g_mode.cy - 3 ? g_mode.cy - 3 : y};
+        return TRUE;
+    }
+    if (pt && Acting(caller, nullptr) && g_cursorHidden) {
+        *pt = g_hiddenCursor; // a drag scroll: the game sees the cursor where the drag began (no shaking preview)
         return TRUE;
     }
     if (pt && Acting(caller, nullptr) && (core::ui::IsOpen() || g_modalHeld)) {
@@ -439,6 +446,12 @@ BOOL WINAPI MoveWindow_detour(HWND hwnd, int x, int y, int w, int h, BOOL repain
 // so the exe's SetCursor is not applied while the cursor is outside the client area.
 HCURSOR WINAPI SetCursor_detour(HCURSOR cursor)
 {
+    if (FromExe(__builtin_return_address(0))) {
+        g_exeCursor = cursor;
+        if (g_cursorHidden) {
+            return GetCursor(); // hidden while dragging: the game's own cursor waits
+        }
+    }
     if (g_windowed && g_hwnd && FromExe(__builtin_return_address(0))) {
         POINT p{};
         RECT client{};
@@ -1102,6 +1115,10 @@ LRESULT CALLBACK SubclassProc(HWND hwnd, UINT m, WPARAM w, LPARAM l)
     else if (hwnd == g_hwnd && g_clipped) {
         UpdateClip(); // fullscreen again: released
     }
+    if (hwnd == g_hwnd && m == WM_SETCURSOR && g_cursorHidden) {
+        o_SetCursor(nullptr); // a drag scroll (HideCursor): no cursor, not even the class's
+        return TRUE;
+    }
     if (hwnd == g_hwnd && g_focusHandler && ((m == WM_ACTIVATEAPP && w != 0) || m == WM_SETFOCUS)) {
         g_focusHandler(); // before the panel (which may keep the message) and the game
     }
@@ -1438,6 +1455,26 @@ SIZE ClientSize()
 void SetMouseFilter(MouseFilter filter)
 {
     g_mouseFilter = filter;
+}
+
+void HideCursor(bool hidden)
+{
+    if (hidden == g_cursorHidden) {
+        return;
+    }
+    if (hidden && g_hwnd) {
+        POINT c{};
+        o_GetCursorPos(&c);
+        o_ScreenToClient(g_hwnd, &c);
+        g_hiddenCursor = ToVirtual(c);
+    }
+    g_cursorHidden = hidden;
+    o_SetCursor(hidden ? nullptr : g_exeCursor);
+}
+
+HWND GameWindow()
+{
+    return g_hwnd;
 }
 
 void SetKeyTranslator(KeyTranslator translator)

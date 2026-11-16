@@ -114,8 +114,15 @@ const Text kTexts[] = {
     {"gameplay", "simulate_while_scrolling", "The city goes on while the view scrolls. Off: it stands still while "
                                              "scrolling, as in the original.",
      nullptr, 0},
-    {"gameplay", "smooth_scroll", "The city scrolls pixel by pixel, at the game's own average speed, easing in and "
-                                  "out. Off: the game's steps of whole tiles.",
+    {"gameplay", "smooth_scroll", "The city scrolls pixel by pixel, easing in and out, at a steady speed for each "
+                                  "scroll speed setting. Off: the game's steps of whole tiles.",
+     nullptr, 0},
+    {"gameplay", "drag_scroll", "Hold the middle mouse button over the city and move the mouse: the city follows "
+                                "it. A click without moving goes back to 100% zoom.",
+     nullptr, 0},
+    {"gameplay", "edge_scroll_width", "How close to the edge of the screen the cursor scrolls the city, in pixels. 1 "
+                                      "is the original; 0 turns edge scrolling off (the arrow keys and dragging "
+                                      "still scroll).",
      nullptr, 0},
     {"video", "window", "Full screen or a window. F5 switches between them.", kWindow, N(kWindow)},
     {"video", "resolution", "The size the game is drawn at. Menus and loading screens are shown as large as the "
@@ -228,16 +235,6 @@ const char *const kKeyClearHint = "Backspace: no key.";
 const char *const kKeyTip = "Click to change; right-click to remove.";
 const char *const kKeepTitle = "Keep this setting?";
 const char *const kKeepCountdown = "The previous setting comes back in %d s.";
-// Widths in the notice font, measured from the game's font.
-const char *const kNoticeCitySaved = "City screenshot saved in the shots folder.";       // 279
-const char *const kNoticeMinimapSaved = "Minimap screenshot saved in the shots folder."; // 309 (still the 400 box)
-const char *const kNoticeNotSaved = "Screenshot could not be saved; see the log.";      // 291
-const char *const kNoticeBusy = "Still saving the last screenshot.";                    // 212
-const char *const kNoticeOnlyCity = "Screenshots work only in the city view.";           // 265
-const char *const kNoticeUnavailable = "The screenshots are not available now.";        // 261
-const char *const kNoticeNoMemory = "No memory for the screenshot; not saved.";         // 279
-const char *const kNoticeClosePanel = "Close the debug panel first.";                   // 186
-const char *const kNoticeZoom = "Zoom: %d%%";
 const char *const kMenuCityScreenshot = "Save city screenshot";       // 136 in the menu font
 const char *const kMenuMinimapScreenshot = "Save minimap screenshot"; // 165
 const char *const kMenuReplayMap = "Replay map";               // the game's "Replay mission" (Open Play is no mission)

@@ -38,13 +38,13 @@ Back to the [README](../README.md). Most settings are in the Options window (F6,
 
 - **The File menu** has the same items, plus the two city screenshots: Replay map, Load game, Save game, Save city screenshot, Save minimap screenshot, Delete game, Exit to main menu, Exit game.
 
-- **New players start at 80 % game speed and 30 % scroll speed** (the original defaults are 90 % and 60 %), which work better with smooth scrolling. If you have played before, your settings stay the same.
+- **New players start at 80 % game speed and 50 % scroll speed** (the original defaults are 90 % and 60 %), which work better with smooth scrolling. If you have played before, your settings stay the same.
 
 - **Intro movie**: play it (default) or skip it (Options > General Settings). The game's own files are not changed.
 
 ## Gameplay feel
 
-- **Smooth scrolling.** The city scrolls pixel by pixel, at the same average speed as the original, and eases in and out.
+- **Smooth scrolling.** The city scrolls pixel by pixel and eases in and out. Each scroll speed setting has its own steady speed, the same on every computer, from slow at 10 % to fast at 100 %.
 - **City zoom.** Turn the mouse wheel over the city to zoom out and see more, or zoom in to see it bigger, in steps of 25 % from 50 % to 150 % (less on small maps, so the view stays inside the map). A "Zoom" message at the top shows the current level. The spot under the cursor stays in place, and the zoom is animated when smooth scrolling is on. The middle mouse button goes back to 100 %. Over the sidebar, the wheel still changes the building category. Clicking, building, selecting and sounds all work at any zoom, and the sidebar and menus keep their size. You can set the zoom the game starts with (*Starting city zoom* in Options > Video); zooming with the wheel is not saved, and saved games are not affected. Zooming out is slower, because the game has more of the city to draw.
 
   ![The city zoomed out to 50 %, with the zoom message](../screenshots/city-zoom.webp)

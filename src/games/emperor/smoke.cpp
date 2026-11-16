@@ -93,7 +93,7 @@ bool Lose(char *why, int size)
     *kLoseReason = 0x573;
     *kLoseMessage = 0x573;
     *kLoseMessage2 = 0x572;
-    core_log("emperor: smoke: lose: lose_reason = 0x573 (time for the objectives over), as the objectives check writes "
+    core_log("emperor: smoke: lose: lose_reason = 0x573 (in debt too long), as the objectives check writes "
              "it; mission_check takes it on its next two checks");
     return true;
 }

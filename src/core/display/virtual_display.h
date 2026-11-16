@@ -91,6 +91,13 @@ void SetKeyStateFilter(KeyStateFilter filter);
 using MouseFilter = bool (*)(UINT message, WPARAM wparam, int x, int y);
 void SetMouseFilter(MouseFilter filter);
 
+// Game thread: no cursor is shown while hidden (core/scroll/drag: a drag scroll); the exe's own SetCursor calls are
+// not applied meanwhile and its last one is shown again when it ends. Windows' WM_SETCURSOR of the game window is
+// answered with no cursor too, and the exe's GetCursorPos answers where the cursor was when it was hidden.
+void HideCursor(bool hidden);
+// The game window (nullptr before attach).
+HWND GameWindow();
+
 // A modal window of a game layer's own (e.g. its options window): while active() is true, the game window's keys,
 // characters and mouse messages go to message() on the game thread instead of the game (mouse positions in the mode's
 // coordinates; the wheel too), after our panel and the action keys had them; Alt+F4 still reaches the game. A button

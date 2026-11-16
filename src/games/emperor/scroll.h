@@ -4,6 +4,7 @@
 #include <cstddef>
 
 #include "core/diag/guard.h"
+#include "core/scroll/picture.h"
 #include "games/emperor/site.h"
 
 namespace emperor::scroll {
@@ -12,6 +13,10 @@ namespace emperor::scroll {
 // installed either way; with smooth off (gameplay.smooth_scroll) the direction hook hands the game its own tile
 // steps and the pixel remainder stays 0, which makes every other hook pass the calls through unchanged.
 bool Attach(bool smooth);
+
+// Drag scrolling (core/scroll/drag): the middle button drags the city. After the zoom's Attach (the drag's mouse filter
+// passes the rest on to the zoom's). Only with Attach's hooks installed.
+void AttachDrag();
 
 // The setting changed while running (game thread; the game is paused by our panel then). Off: the view snaps to the
 // whole tile it is on. False when it cannot be switched on: the feature was switched off after an error.
@@ -22,9 +27,6 @@ void OnLoop(double frameMs);
 
 // After a pause (our panel was open): the scroll speed starts again from rest instead of from the time before it.
 void Resume();
-
-// Average milliseconds per main-loop iteration over the last log window (used for the speed match).
-void SetAverageFrameMs(double ms);
 
 // Scroll statistics since the last call, formatted for the rate log ("" when the view did not scroll).
 void TakeStats(char *out, size_t size);
@@ -48,20 +50,16 @@ bool Working();
 // The screen position is on the city as shown (not the sidebar, not the top bar).
 bool OnCity(int x, int y);
 
+// The picture's view of Emperor, for the core's zoom (games/emperor/zoom: core/scroll/zoom.h ZoomGame).
+const core::scroll::picture::PictureGame &Picture();
+
 // Called right after the game drew the city (before the interface), with the back buffer and the city's
 // rectangle on it (right and bottom exclusive). Game thread; the callback runs its own guard.
 using CityDrawn = void (*)(const BYTE *back, int pitch, int left, int top, int right, int bottom);
 void SetCityDrawn(CityDrawn fn);
 
-// City picture: called at the end of every city_render (after the city was drawn
-// and shown as usual, before the interface), with the drawing's direction argument. Game thread; the callback runs
-// its own guard. One callback.
-using AfterCity = void (*)(int orientation);
-void SetAfterCity(AfterCity fn);
-// City picture: our hooks treat the next drawings as drawings into a buffer of right x bottom pixels at 100%, without
-// the pixel remainder (no conversion of the positions they make); the changes go into r (the caller undoes it after
-// the drawings, also when they are abandoned). Then DrawCityForPicture draws with the game's own city_render.
-void PictureDrawing(core::diag::Restore &r, int right, int bottom);
+// City picture (core/capture/city_picture, which sets the after-city callback and the picture's drawing state with
+// core/scroll/picture itself): one strip drawn with the game's own city_render (timed as the picture's).
 void DrawCityForPicture(int vx, int vy, int orientation);
 
 // For the offline tests (src/games/emperor/test_restore.cpp): the detours by site, and the pixel remainder.

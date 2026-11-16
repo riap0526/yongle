@@ -40,12 +40,6 @@ extern const char *const kOptionsTitle, *const kHotkeysTitle, *const kColumnActi
     *const kSectionGlobal, *const kPressKey, *const kKeyNotChanged, *const kKeyNotUsable, *const kKeyInUse,
     *const kKeyReserved, *const kKeyClearHint, *const kKeyTip, *const kKeepTitle, *const kKeepCountdown, *const kKeep, *const kRevert;
 
-// Our notices in the game's notice boxes (games/emperor/notice). Our box is 400 pixels
-// wide for a text up to 320 pixels (with its side ornaments), 460 for a longer one. Errors are shown in red.
-extern const char *const kNoticeCitySaved, *const kNoticeMinimapSaved, *const kNoticeNotSaved, *const kNoticeBusy,
-    *const kNoticeOnlyCity, *const kNoticeUnavailable, *const kNoticeNoMemory, *const kNoticeClosePanel;
-extern const char *const kNoticeZoom; // printf format with the zoom in percent
-
 // The Hotkeys window (games/emperor/keys): a section's title (keys::Section).
 const char *KeySection(int section);
 extern const char *const kOverlayName; // printf format: an overlay's name in the Hotkeys window

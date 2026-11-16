@@ -4,7 +4,7 @@
 //
 // The city is drawn by the game into a buffer of the zoomed size (s/100 times the city's size on the screen) and then
 // scaled onto the screen. The game's view (columns x half rows) covers that buffer; while it draws, one more column
-// and two more half rows cover the smooth-scrolling remainder (games/emperor/scroll). The game's view must never be
+// and two more half rows cover the smooth-scrolling remainder (core/scroll/zoom). The game's view must never be
 // larger than the map's range: its column flags (5 x 231 bytes, no bounds check) and an overlay pass that reads the
 // view table without a check rely on the view being clamped inside the map.
 #pragma once

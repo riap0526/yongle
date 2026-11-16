@@ -19,7 +19,7 @@
 //   window_lock_cursor = off ; on: windowed, the cursor stays inside the window while it is the active one
 //
 //   [gameplay]
-//   smooth_scroll = on     ; on: pixel scrolling with the game's own average speed | off: the game's tile steps
+//   smooth_scroll = on     ; on: pixel scrolling at a steady speed per setting | off: the game's tile steps
 //
 //   [ui]
 //   panel_key = Insert     ; opens and closes our settings panel; syntax in core/ui/hotkey.h (e.g. Ctrl+F12)
@@ -83,6 +83,8 @@ struct core_config {
     unsigned panel_key2_vk, panel_key2_mods;
     unsigned screenshot_key2_vk, screenshot_key2_mods;
     unsigned report_key2_vk, report_key2_mods;
+    int drag_scroll;           /* nonzero: drag the city with the middle mouse button (core/scroll/drag.h) */
+    int edge_scroll_width;     /* edge scrolling: pixels from the screen's edge, 0..20 (0: none; with smooth scrolling) */
 };
 
 #define CORE_WINDOW_CENTER (-2147483647 - 1)

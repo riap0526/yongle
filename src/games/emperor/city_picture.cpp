@@ -1,32 +1,27 @@
-// See city_picture.h. Every address was checked in the disassembly.
+// See city_picture.h. Every address was checked in the disassembly. The pictures themselves (keys, requests, the
+// strips, the minimap's crop, file names, settings) are the core's (core/capture/city_picture, shared with Pericles
+// this file gives it Emperor's variables, the drawing and the player's city.
 #include "games/emperor/city_picture.h"
 
-#include "core/capture/big_picture.h"
-#include "core/capture/screenshot.h"
+#include "core/capture/city_picture.h"
 #include "core/diag/guard.h"
 #include "core/display/city_strips.h"
-#include "core/display/virtual_display.h"
 #include "core/log.h"
-#include "core/output/sdl_output.h"
 #include "core/settings/settings.h"
 #include "core/ui/hotkey.h"
-#include "core/ui/panel.h"
 #include "core/ui/settings_view.h"
-#include "games/emperor/notice.h"
-#include "games/emperor/options_text.h"
 #include "games/emperor/scroll.h"
 #include "games/emperor/site.h"
 #include "games/emperor/zoom.h"
 
-#include <atomic>
-#include <cstdint>
 #include <cstdio>
-#include <cstdlib>
 #include <cstring>
 
 namespace emperor::city_picture {
 
 namespace {
+
+namespace cp = core::capture::city_picture;
 
 // minimap_draw(x, y, w, h): __cdecl, the caller pops (checked by disassembly)
 const Site kMinimapDraw{"minimap_draw", 0x46e730, {0xa1, 0xdc, 0x6d, 0x15, 0x01, 0x8b, 0x4c, 0x24}};
@@ -75,69 +70,21 @@ const Site kCityNameGet{"city_name_get", 0x4451c0, {0x8a, 0x41, 0x07, 0x3c, 0xfe
 using CityNameGet_fn = const char *(__fastcall *)(const void *city); // ecx = city; edx unused
 bool g_cityNameOk = false; // kCityNameGet matched at Attach
 
-constexpr std::uint16_t kKey = 0xF81F; // magenta: the minimap's drawing area before it is drawn (cropped to it)
-constexpr int kOverlapRows = 4;        // half rows drawn again by the next strip
-// No room above the view's top row: the game's maps are desert outside the playable range, so the half
-// rows above it show desert the player never sees; the picture starts where the topmost view does.
-constexpr int kTopRows = 0;
-
-core::diag::Feature g_feature{"city picture (games/emperor/city_picture)"};
 bool g_attached = false;
-std::atomic<bool> g_busy{false}; // a picture is being written
-
-enum class Kind { None, City, Minimap };
-Kind g_pending = Kind::None;
-
-core::display::ActionKey g_cityKey{0x79 /* F10 */, 0, nullptr};
-core::display::ActionKey g_minimapKey{0x79, core::ui::kModShift, nullptr};
-int g_minimapScale = 2;
-int g_stripRows = 64;
 
 template <typename T> T *At(DWORD address)
 {
     return reinterpret_cast<T *>(address + g_imageShift);
 }
 
-namespace ot = emperor::options_text;
-
-// In the game's own notice boxes (games/emperor/notice; on our caption line when those are not available).
-void Notice(const char *text)
+// The player's city's name as the game gives it; nullptr (logged) when there is none.
+const unsigned char *CityName()
 {
-    emperor::notice::Post(text);
-}
-
-// An error or something to do first: in red, as the game's own warnings.
-void Warn(const char *text)
-{
-    emperor::notice::Post(text, true);
-}
-
-std::atomic<int> g_saving{0}; // the kind being written (Kind), for the message when it is done
-
-// A game text of at most size bytes, for the log: printable characters as they are, others as \xNN; "(none)" when it
-// does not end within size.
-void LogText(const char *what, const unsigned char *p, int size)
-{
-    char out[300];
-    int n = 0, i = 0;
-    for (; i < size && p[i] != 0 && n < static_cast<int>(sizeof(out)) - 5; ++i) {
-        n += p[i] >= 0x20 && p[i] < 0x7f ? std::snprintf(out + n, sizeof(out) - n, "%c", p[i])
-                                         : std::snprintf(out + n, sizeof(out) - n, "\\x%02x", p[i]);
-    }
-    out[n] = 0;
-    core_log("picture: %s \"%s\"%s", what, out, i < size && p[i] == 0 ? "" : " (not ended)");
-}
-
-// The file names' first part: the player's city as the game names it, letters and digits kept, '-' for
-// anything else between them; "city" when there is no city or no usable name.
-void CityStem(char *out, size_t size)
-{
-    std::snprintf(out, size, "city");
     const int index = *At<int>(kPlayerCity);
     if (index < 0 || index >= kCityCount) {
         core_log("picture: the player's city index is %d (not 0..%d): file names start with \"city\"", index,
                  kCityCount - 1);
-        return;
+        return nullptr;
     }
     const auto *city = At<unsigned char>(kCities) + static_cast<size_t>(index) * kCityStride;
     const unsigned char text = city[kCityTextAt];
@@ -145,10 +92,10 @@ void CityStem(char *out, size_t size)
         core_log("picture: the player's city %d has its own name, not ended within %d bytes: file names start with "
                  "\"city\"",
                  index, kCityNameSize);
-        return;
+        return nullptr;
     }
     if (!g_cityNameOk) {
-        return; // logged at Attach
+        return nullptr; // logged at Attach
     }
     struct NameCall {
         const void *city;
@@ -163,12 +110,12 @@ void CityStem(char *out, size_t size)
                                      Function<CityNameGet_fn>(kCityNameGet)(c->city));
                              },
                              &call)) {
-        return; // logged by the guard
+        return nullptr; // logged by the guard
     }
     const unsigned char *name = call.name;
     if (!name) {
         core_log("picture: the game gave no name for the player's city %d: file names start with \"city\"", index);
-        return;
+        return nullptr;
     }
     static int logged = -1;
     if (logged != index * 256 + text) { // once per city
@@ -176,386 +123,143 @@ void CityStem(char *out, size_t size)
         char what[80];
         std::snprintf(what, sizeof(what), "the player's city is %d of the empire, name %s %u:", index,
                       text == 0xfe ? "of its own (+8), marker" : "text 21 /", static_cast<unsigned>(text));
-        LogText(what, name, 64);
+        cp::LogText(what, name, 64);
     }
-    char stem[kCityNameSize + 1];
-    size_t n = 0;
-    bool gap = false;
-    for (int i = 0; i < 64 && name[i] != 0 && n + 2 < sizeof(stem); ++i) {
-        const unsigned char c = name[i];
-        const bool keep = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9');
-        if (!keep) {
-            gap = n > 0;
-            continue;
-        }
-        if (gap) {
-            stem[n++] = '-';
-            gap = false;
-        }
-        stem[n++] = static_cast<char>(c);
-    }
-    stem[n] = 0;
-    if (n == 0) {
-        core_log("picture: no usable city name: file names start with \"city\"");
-        return;
-    }
-    std::snprintf(out, size, "%s", stem);
+    return name;
 }
 
+// The city screens without a window (no picture with
+// any window, message, dialog or map open, the same in both games): the city (1), with a company selected (0x48) and
+// controlling a god (0x49). Not the sidebar panels' dialogs (7) any more.
 bool CityScreen()
 {
     const char s = *kGameScreen;
-    return s == 1 || s == 7 || s == 0x48 || s == 0x49;
+    return s == 1 || s == 0x48 || s == 0x49;
 }
 
-void Done(bool ok, const char *text)
+int GameScreen()
 {
-    core_log("picture: %s %s", ok ? "saved:" : "not saved:", text ? text : "");
-    if (!ok) {
-        Warn(ot::kNoticeNotSaved);
-    }
-    else {
-        Notice(g_saving.load() == static_cast<int>(Kind::Minimap) ? ot::kNoticeMinimapSaved : ot::kNoticeCitySaved);
-    }
-    g_busy = false;
+    return static_cast<unsigned char>(*kGameScreen);
 }
 
-void Request(Kind kind)
+void TileSize(int *tileWidth, int *halfHeight)
 {
-    const char *what = kind == Kind::City ? "city picture" : "minimap picture";
-    if (!g_attached || !core::diag::Enabled(g_feature) || !emperor::scroll::Working()) {
-        core_log("picture: %s key pressed, but the pictures are off (see above)", what);
-        Warn(ot::kNoticeUnavailable);
-        return;
-    }
-    if (core::ui::IsOpen()) { // the game is paused: the city is not drawn until the panel closes
-        Warn(ot::kNoticeClosePanel);
-        return;
-    }
-    if (!CityScreen()) {
-        core_log("picture: %s key pressed outside the city (screen 0x%02x)", what,
-                 static_cast<unsigned char>(*kGameScreen));
-        Warn(ot::kNoticeOnlyCity);
-        return;
-    }
-    if (g_busy.load()) {
-        core_log("picture: %s key pressed while the last picture is still being written", what);
-        Warn(ot::kNoticeBusy);
-        return;
-    }
-    g_pending = kind;
-    core_log("picture: %s asked for", what);
+    *tileWidth = *kTileWidth;
+    *halfHeight = *kTileHalfHeight;
 }
 
-void FireCity()
+int ViewRows()
 {
-    Request(Kind::City);
+    return *kHeightRows;
 }
 
-void FireMinimap()
+void BeginCityDrawing(core::diag::Restore &r, core::diag::Restore &r2, const core::display::StripPlan &p, BYTE *buf,
+                      int pitchPx)
 {
-    Request(Kind::Minimap);
+    r.Set(kDrawBuffer.ptr(), buf);
+    r.Set(kScreenPitch.ptr(), pitchPx * 2);
+    r.Set(kDdWidth.ptr(), pitchPx);
+    r.Set(kDdHeight.ptr(), p.bufH);
+    r.Set(kClipLeft.ptr(), 0);
+    r.Set(kClipTop.ptr(), 0);
+    r.Set(kClipRight.ptr(), p.clipRight);
+    r.Set(kClipBottom.ptr(), p.clipBottom);
+    r.Set(kWidthTiles.ptr(), p.cols + 1);
+    r.Set(kHeightRows.ptr(), p.viewRows + 2);
+    r.Set(kOriginX.ptr(), 0);
+    r.Set(kOriginY.ptr(), p.topPx);
+    r.Save(kViewDrawnX.ptr());
+    r.Save(kViewDrawnY.ptr());
+    r.Set(kOverlay.ptr(), 0);
+    r.Set(kPreviewShown.ptr(), 0);
+    r2.Set(kMarkers.ptr(), 0);
+    r2.Save(kRenderCount.ptr());
+    r2.Save(kCountdown.ptr());
 }
-
-// ---------------------------------------------------------------------------------------------
-// The city in strips (section 4)
-
-struct CityCall {
-    core::display::StripInput in;
-    core::display::StripPlan plan;
-    int orientation;
-    BYTE *buf;
-    int pitchPx;
-    core::capture::BigPicture *pic;
-    core::diag::Restore r;  // the game's variables (put back by the guard when abandoned)
-    core::diag::Restore r2; // the counters and our hooks' state (put back by the caller in every case)
-    std::int64_t drawMs;
-};
-
-void DrawStrips(CityCall &c)
-{
-    const core::display::StripPlan &p = c.plan;
-    c.r.Set(kDrawBuffer.ptr(), c.buf);
-    c.r.Set(kScreenPitch.ptr(), c.pitchPx * 2);
-    c.r.Set(kDdWidth.ptr(), c.pitchPx);
-    c.r.Set(kDdHeight.ptr(), p.bufH);
-    c.r.Set(kClipLeft.ptr(), 0);
-    c.r.Set(kClipTop.ptr(), 0);
-    c.r.Set(kClipRight.ptr(), p.clipRight);
-    c.r.Set(kClipBottom.ptr(), p.clipBottom);
-    c.r.Set(kWidthTiles.ptr(), p.cols + 1);
-    c.r.Set(kHeightRows.ptr(), p.viewRows + 2);
-    c.r.Set(kOriginX.ptr(), 0);
-    c.r.Set(kOriginY.ptr(), p.topPx);
-    c.r.Save(kViewDrawnX.ptr());
-    c.r.Save(kViewDrawnY.ptr());
-    c.r.Set(kOverlay.ptr(), 0);
-    c.r.Set(kPreviewShown.ptr(), 0);
-    c.r2.Set(kMarkers.ptr(), 0);
-    c.r2.Save(kRenderCount.ptr());
-    c.r2.Save(kCountdown.ptr());
-    emperor::scroll::PictureDrawing(c.r2, p.clipRight, p.clipBottom);
-    std::memset(At<BYTE>(kTimerFlags), 0, kTimerFlagCount); // no animation moves on between the strips
-    const DWORD start = GetTickCount();
-    for (int k = 0; k < p.count; ++k) {
-        const core::display::Strip s = core::display::StripAt(c.in, p, k);
-        auto *px = reinterpret_cast<std::uint16_t *>(c.buf);
-        const size_t n = static_cast<size_t>(c.pitchPx) * p.bufH;
-        std::memset(c.buf, 0, n * 2); // black where the game draws nothing, as on the screen
-        emperor::scroll::DrawCityForPicture(c.in.left, s.viewY, c.orientation);
-        for (int y = 0; y < s.rows; ++y) {
-            std::memcpy(c.pic->Row(s.toY + y), px + static_cast<size_t>(s.fromY + y) * c.pitchPx,
-                        static_cast<size_t>(p.imageW) * 2);
-        }
-    }
-    c.drawMs = GetTickCount() - start;
-}
-
-// The city drawn with keepRows half rows per strip; nullptr (logged, the player told) when it could not be.
-core::capture::BigPicture *DrawCity(int orientation, int keepRows)
-{
-    CityCall c{};
-    c.orientation = orientation;
-    int left, right, top, bottom, mapRows;
-    emperor::zoom::ViewLimits(&left, &right, &top, &bottom, &mapRows);
-    c.in = core::display::StripInput{left,          right,         top,         bottom,  mapRows, *kTileWidth + 2,
-                                     *kTileHalfHeight, keepRows, kOverlapRows, kTopRows};
-    if (!core::display::PlanStrips(c.in, &c.plan)) {
-        core_log("picture: no city to draw (columns %d..%d, half rows %d..%d of %d, tiles %d x %d)", left, right, top,
-                 bottom, mapRows, *kTileWidth, *kTileHalfHeight);
-        Warn(ot::kNoticeNotSaved);
-        return nullptr;
-    }
-    const core::display::StripPlan &p = c.plan;
-    c.pitchPx = (p.bufW + 15) & ~15;
-    const size_t bytes = static_cast<size_t>(c.pitchPx) * 2 * p.bufH;
-    core_log("picture: city %d x %d px (%.1f MB): map columns %d..%d, half rows %d..%d (map %d), tiles %d x %d; %d "
-             "strip(s) of %d half rows kept (view %d x %d, +%d drawn again), buffer %d x %d px (%.1f MB)",
-             p.imageW, p.imageH, static_cast<double>(p.imageW) * p.imageH * 2 / (1024.0 * 1024.0), left, right, top,
-             bottom, mapRows, *kTileWidth, *kTileHalfHeight, p.count, p.keepRows, p.cols, p.viewRows,
-             p.viewRows - p.keepRows, c.pitchPx, p.bufH, bytes / (1024.0 * 1024.0));
-    c.pic = core::capture::BigPicture::Create(p.imageW, p.imageH);
-    c.buf = c.pic ? static_cast<BYTE *>(VirtualAlloc(nullptr, bytes, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE))
-                  : nullptr;
-    if (!c.buf) {
-        if (c.pic) {
-            core_log("picture: no memory for the drawing buffer (%.1f MB)", bytes / (1024.0 * 1024.0));
-        }
-        delete c.pic;
-        Warn(ot::kNoticeNoMemory);
-        return nullptr;
-    }
-    BYTE timers[kTimerFlagCount];
-    int ambient[kAmbientCountCount];
-    std::memcpy(timers, At<BYTE>(kTimerFlags), sizeof(timers));
-    std::memcpy(ambient, At<int>(kAmbientCounts), sizeof(ambient));
-    const bool ok = core::diag::Guarded(g_feature, [](void *v) { DrawStrips(*static_cast<CityCall *>(v)); }, &c, &c.r);
-    c.r.Undo(); // the drawing's changes were for its duration only (already undone when it was abandoned)
-    c.r2.Undo();
-    std::memcpy(At<BYTE>(kTimerFlags), timers, sizeof(timers));
-    std::memcpy(At<int>(kAmbientCounts), ambient, sizeof(ambient));
-    VirtualFree(c.buf, 0, MEM_RELEASE);
-    if (!ok) {
-        delete c.pic;
-        core_log("picture: the city picture is off for the rest of the run (an error while drawing; the game's "
-                 "state was put back)");
-        Warn(ot::kNoticeNotSaved);
-        return nullptr;
-    }
-    core_log("picture: the city drawn in %lu ms", static_cast<unsigned long>(c.drawMs));
-    return c.pic;
-}
-
-void Save(core::capture::BigPicture *pic, const char *kind, int scale, Kind which)
-{
-    core::capture::BigOptions o;
-    o.kind = kind;
-    o.scale = scale;
-    o.transparent = false;
-    o.done = &Done;
-    g_busy = true;
-    g_saving = static_cast<int>(which);
-    core::capture::SaveBig(pic, o);
-}
-
-// [debug] city_picture_seam_check: the same moment drawn a second time in as few strips as the map allows (nothing
-// moves between the two: the animation timers are held still in both), saved as city-fewest_...; the two pictures
-// must be equal.
-bool g_seamCheck = false;
-
-void TakeCity(int orientation)
-{
-    core::capture::BigPicture *pic = DrawCity(orientation, g_stripRows);
-    if (!pic) {
-        return;
-    }
-    core::capture::BigPicture *fewest = g_seamCheck ? DrawCity(orientation, 100000) : nullptr;
-    char stem[48], kind[64];
-    CityStem(stem, sizeof(stem));
-    Save(pic, stem, 1, Kind::City);
-    if (fewest) {
-        std::snprintf(kind, sizeof(kind), "%s-fewest", stem);
-        Save(fewest, kind, 1, Kind::City);
-    }
-}
-
-// ---------------------------------------------------------------------------------------------
-// The minimap (section 10)
 
 using MinimapDraw_fn = void(__cdecl *)(int, int, int, int);
 
-struct MinimapCall {
-    BYTE *buf;
-    int pitchPx, rows, x0, y0;
-    core::diag::Restore r;
-};
-
-void DrawMinimap(MinimapCall &c)
+// Emperor's minimap draws the map's range only: the area stays the core's (the view table's rows).
+void DrawMinimap(core::diag::Restore &r, BYTE *buf, int pitchPx, int rows, int x0, int y0, RECT *)
 {
-    c.r.Set(kDrawBuffer.ptr(), c.buf);
-    c.r.Set(kScreenPitch.ptr(), c.pitchPx * 2);
-    c.r.Set(kDdWidth.ptr(), c.pitchPx);
-    c.r.Set(kDdHeight.ptr(), c.rows);
-    c.r.Set(kOverlay.ptr(), 0);
+    r.Set(kDrawBuffer.ptr(), buf);
+    r.Set(kScreenPitch.ptr(), pitchPx * 2);
+    r.Set(kDdWidth.ptr(), pitchPx);
+    r.Set(kDdHeight.ptr(), rows);
+    r.Set(kOverlay.ptr(), 0);
     // the view's frame below the minimap, in the part of the buffer that is cut away
-    c.r.Set(kViewDrawnX.ptr(), 0);
-    c.r.Set(kViewDrawnY.ptr(), kViewTableRows + 8);
-    Function<MinimapDraw_fn>(kMinimapDraw)(c.x0, c.y0, kViewTableCols, kViewTableRows);
+    r.Set(kViewDrawnX.ptr(), 0);
+    r.Set(kViewDrawnY.ptr(), kViewTableRows + 8);
+    Function<MinimapDraw_fn>(kMinimapDraw)(x0, y0, kViewTableCols, kViewTableRows);
 }
 
-void TakeMinimap()
-{
-    MinimapCall c{};
-    c.x0 = 8;
-    c.y0 = 8;
-    c.pitchPx = (c.x0 + 2 * kViewTableCols + 32 + 15) & ~15;
-    c.rows = c.y0 + kViewTableRows + 8 + (*kHeightRows > 0 ? *kHeightRows : 0) + 16;
-    const size_t n = static_cast<size_t>(c.pitchPx) * c.rows;
-    c.buf = static_cast<BYTE *>(std::malloc(n * 2));
-    if (!c.buf) {
-        Warn(ot::kNoticeNoMemory);
-        return;
-    }
-    auto *px = reinterpret_cast<std::uint16_t *>(c.buf);
-    for (size_t i = 0; i < n; ++i) {
-        px[i] = kKey;
-    }
-    int state[kMinimapStateCount], clip[4];
-    std::memcpy(state, At<int>(kMinimapState), sizeof(state));
-    std::memcpy(clip, At<int>(kScreenClip), sizeof(clip));
-    const bool ok = core::diag::Guarded(g_feature, [](void *v) { DrawMinimap(*static_cast<MinimapCall *>(v)); }, &c,
-                                        &c.r);
-    c.r.Undo();
-    std::memcpy(At<int>(kMinimapState), state, sizeof(state));
-    std::memcpy(At<int>(kScreenClip), clip, sizeof(clip));
-    if (!ok) {
-        std::free(c.buf);
-        core_log("picture: the pictures are off for the rest of the run (an error while drawing the minimap; the "
-                 "game's state was put back)");
-        Warn(ot::kNoticeNotSaved);
-        return;
-    }
-    // what was drawn: the rows of the minimap only (its view frame lies below them)
-    int x1 = c.pitchPx, y1 = c.rows, x2 = -1, y2 = -1;
-    for (int y = c.y0; y < c.y0 + kViewTableRows; ++y) {
-        const std::uint16_t *row = px + static_cast<size_t>(y) * c.pitchPx;
-        for (int x = 0; x < c.pitchPx; ++x) {
-            if (row[x] != kKey) {
-                x1 = x < x1 ? x : x1;
-                x2 = x > x2 ? x : x2;
-                y1 = y < y1 ? y : y1;
-                y2 = y > y2 ? y : y2;
-            }
-        }
-    }
-    if (x2 < 0) {
-        std::free(c.buf);
-        core_log("picture: the minimap drew nothing");
-        Warn(ot::kNoticeNotSaved);
-        return;
-    }
-    const int w = x2 - x1 + 1, h = y2 - y1 + 1;
-    core::capture::BigPicture *pic = core::capture::BigPicture::Create(w, h);
-    if (!pic) {
-        std::free(c.buf);
-        Warn(ot::kNoticeNoMemory);
-        return;
-    }
-    for (int y = 0; y < h; ++y) {
-        std::uint16_t *out = pic->Row(y);
-        std::memcpy(out, px + static_cast<size_t>(y1 + y) * c.pitchPx + x1, static_cast<size_t>(w) * 2);
-        for (int x = 0; x < w; ++x) {
-            out[x] = out[x] == kKey ? 0 : out[x]; // the corners outside the map: black
-        }
-    }
-    std::free(c.buf);
-    core_log("picture: minimap %d x %d px (at (%d,%d) of the %d x %d drawing), scale %d", w, h, x1, y1, c.pitchPx,
-             c.rows, g_minimapScale);
-    char stem[48], kind[64];
-    CityStem(stem, sizeof(stem));
-    std::snprintf(kind, sizeof(kind), "%s_minimap", stem);
-    Save(pic, kind, g_minimapScale, Kind::Minimap);
-}
+// What the drawings change on their own, copied for the picture's duration: the city's animation timers (held at 0
+// meanwhile: no animation moves on between the strips) and the ambient sound's tile counts; the minimap's position,
+// size and origin and the screen clip.
+BYTE g_timers[kTimerFlagCount];
+int g_ambient[kAmbientCountCount];
+int g_minimapState[kMinimapStateCount], g_clip[4];
 
-// After every city_render: a picture asked for is made now (the frame has been drawn as usual).
-void AfterCity(int orientation)
+void Hold(cp::Drawing d)
 {
-    if (g_pending == Kind::None) {
-        return;
-    }
-    const Kind kind = g_pending;
-    g_pending = Kind::None;
-    if (!core::diag::Enabled(g_feature) || g_busy.load()) {
-        return;
-    }
-    if (kind == Kind::City) {
-        TakeCity(orientation);
+    if (d == cp::Drawing::City) {
+        std::memcpy(g_timers, At<BYTE>(kTimerFlags), sizeof(g_timers));
+        std::memcpy(g_ambient, At<int>(kAmbientCounts), sizeof(g_ambient));
+        std::memset(At<BYTE>(kTimerFlags), 0, kTimerFlagCount);
     }
     else {
-        TakeMinimap();
+        std::memcpy(g_minimapState, At<int>(kMinimapState), sizeof(g_minimapState));
+        std::memcpy(g_clip, At<int>(kScreenClip), sizeof(g_clip));
     }
 }
 
-// ---------------------------------------------------------------------------------------------
-// Settings
-
-bool ApplyKey(core::display::ActionKey *key, unsigned fallbackVk, unsigned fallbackMods, const char *v)
+void Drawn(cp::Drawing)
 {
-    core::ui::Hotkey k[core::ui::kMaxKeys] = {{fallbackVk, fallbackMods}, {0, 0}};
-    core::ui::ParseHotkeyList(v, v + std::strlen(v), k); // one key, or two (the second the alternative)
-    key->vk = k[0].vk;
-    key->mods = k[0].mods;
-    key->vk2 = k[1].vk;
-    key->mods2 = k[1].mods;
+}
+
+void Release(cp::Drawing d)
+{
+    if (d == cp::Drawing::City) {
+        std::memcpy(At<BYTE>(kTimerFlags), g_timers, sizeof(g_timers));
+        std::memcpy(At<int>(kAmbientCounts), g_ambient, sizeof(g_ambient));
+    }
+    else {
+        std::memcpy(At<int>(kMinimapState), g_minimapState, sizeof(g_minimapState));
+        std::memcpy(At<int>(kScreenClip), g_clip, sizeof(g_clip));
+    }
+}
+
+// Yongle draws a picture in any city_render, as the game's own drawing (no drawing state of its own to keep).
+bool DrawingNow()
+{
     return true;
 }
 
-bool ApplyCityKey(int, const char *v, bool)
+bool AroundDrawing(void (*fn)(void *), void *ctx)
 {
-    return ApplyKey(&g_cityKey, 0x79, 0, v);
-}
-
-bool ApplyMinimapKey(int, const char *v, bool)
-{
-    return ApplyKey(&g_minimapKey, 0x79, core::ui::kModShift, v);
-}
-
-bool ApplyScale(int, const char *v, bool)
-{
-    const int s = std::atoi(v);
-    g_minimapScale = s == 1 || s == 4 ? s : 2;
+    fn(ctx);
     return true;
 }
 
-bool ApplyStripRows(int, const char *v, bool)
-{
-    g_stripRows = std::atoi(v);
-    return true;
-}
-
-const char *const kScale[] = {"1", "2", "4"};
-const char *const kScaleLabels[] = {"1 (as in the game, the smallest)", "2 (twice as large)",
-                                    "4 (four times as large)"};
+const cp::CityPictureGame kGame{
+    &emperor::scroll::Working,
+    &CityScreen,
+    &GameScreen,
+    &emperor::zoom::ViewLimits,
+    &TileSize,
+    kViewTableCols,
+    kViewTableRows,
+    &ViewRows,
+    &BeginCityDrawing,
+    &emperor::scroll::DrawCityForPicture,
+    &DrawMinimap,
+    &Hold,
+    &Drawn,
+    &Release,
+    &DrawingNow,
+    &AroundDrawing,
+    &CityName,
+};
 
 // Keys the game itself uses and Yongle's own (F5, Alt+Enter,
 // Shift+F7): shown in the panel when one of them is chosen as one of our keys.
@@ -599,43 +303,9 @@ const char *GameKeyNote(unsigned vk, unsigned mods)
 
 void RegisterSettings()
 {
-    using core::settings::Effect;
-    using core::settings::Item;
-    using core::settings::Type;
-    int i = core::settings::Register(Item{
-        "ui", "city_picture_key", "Full city screenshot: key",
-        "Saves the whole city as one picture (PNG) in shots\\ in Yongle's folder, at the game's own size and without "
-        "the interface; the game stops for a moment while it is drawn. Change: press the new key, alone or with Ctrl, "
-        "Shift or Alt.",
-        Type::Hotkey, "F10", Effect::Live, true, true, 0, 0, 0, nullptr, nullptr, nullptr, 0});
-    core::settings::OnChange(i, &ApplyCityKey);
-    i = core::settings::Register(Item{
-        "ui", "minimap_picture_key", "Minimap screenshot: key",
-        "Saves the minimap of the whole map as a picture (PNG) in shots\\ in Yongle's folder. Change: press the new "
-        "key, alone or with Ctrl, Shift or Alt.",
-        Type::Hotkey, "Shift+F10", Effect::Live, true, true, 0, 0, 0, nullptr, nullptr, nullptr, 0});
-    core::settings::OnChange(i, &ApplyMinimapKey);
+    cp::RegisterSettings();
     // Only in test builds (the maps are desert outside the playable range, so there was nothing to choose).
     core::settings::Retire("ui", "city_picture_background", nullptr);
-    i = core::settings::Register(Item{"ui", "minimap_picture_scale", "Minimap screenshot: size",
-                                      "How large the minimap screenshot saved with its key is, in times the minimap "
-                                      "in the game (not the minimap beside the city).",
-                                      Type::Choice, "2",
-                                      Effect::Live, true, true, 0, 0, 0, nullptr, kScale, kScaleLabels, 3});
-    core::settings::OnChange(i, &ApplyScale);
-    i = core::settings::Register(Item{
-        "debug", "city_picture_strip_rows", "City picture: half rows per strip (test)",
-        "For checking the seams: the city is drawn in strips of this many half rows.", Type::Int, "64", Effect::Live,
-        false, true, 4, 1000, 2, nullptr, nullptr, nullptr, 0});
-    core::settings::OnChange(i, &ApplyStripRows);
-    i = core::settings::Register(Item{
-        "debug", "city_picture_seam_check", "City picture: seam check (test)",
-        "on: the city picture is also drawn in as few strips as possible at the same moment (city-fewest_...).",
-        Type::Bool, "off", Effect::Live, false, true, 0, 0, 0, nullptr, nullptr, nullptr, 0});
-    core::settings::OnChange(i, [](int, const char *v, bool) {
-        g_seamCheck = std::strcmp(v, "on") == 0;
-        return true;
-    });
     core::settings::Retire("debug", "city_picture_name_probe", nullptr); // test builds only
 }
 
@@ -655,34 +325,25 @@ bool Attach(bool scrollAttached)
         core_log("picture: %s at 0x%lx does not match; picture file names start with \"city\"", kCityNameGet.name,
                  kCityNameGet.address);
     }
-    g_cityKey.fire = &FireCity;
-    g_minimapKey.fire = &FireMinimap;
-    core::display::AddActionKey(&g_cityKey);
-    core::display::AddActionKey(&g_minimapKey);
     core::ui::SetGameKeyNote(&GameKeyNote);
-    emperor::scroll::SetAfterCity(&AfterCity);
+    cp::Install(kGame);
     g_attached = true;
-    char city[40], minimap[40];
-    core::ui::FormatHotkey(core::ui::Hotkey{g_cityKey.vk, g_cityKey.mods}, city, sizeof(city));
-    core::ui::FormatHotkey(core::ui::Hotkey{g_minimapKey.vk, g_minimapKey.mods}, minimap, sizeof(minimap));
-    core_log("picture: city picture (%s) and minimap picture (%s) installed; minimap x%d", city, minimap,
-             g_minimapScale);
     return true;
 }
 
 bool Available()
 {
-    return g_attached;
+    return g_attached && cp::Available();
 }
 
 void RequestCity()
 {
-    FireCity();
+    cp::RequestCity();
 }
 
 void RequestMinimap()
 {
-    FireMinimap();
+    cp::RequestMinimap();
 }
 
 } // namespace emperor::city_picture

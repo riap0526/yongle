@@ -19,6 +19,8 @@
 #include "core/diag/guard.h"
 #include "core/display/city_zoom.h"
 #include "core/display/logical_size.h"
+#include "core/display/map_screen.h"
+#include "core/ui/notice.h"
 #include "core/log.h"
 #include "core/settings/settings.h"
 #include "games/emperor/china_map.h"
@@ -26,11 +28,13 @@
 #include "games/emperor/display_options.h"
 #include "games/emperor/emperor.h"
 #include "games/emperor/fullscreen.h"
+#include "games/emperor/notice.h"
 #include "games/emperor/resolution.h"
 #include "games/emperor/scroll.h"
 #include "games/emperor/site.h"
 #include "games/emperor/smoke.h"
 #include "games/emperor/ui_fixes.h"
+#include "core/scroll/zoom.h"
 #include "games/emperor/zoom.h"
 
 #define WIN32_LEAN_AND_MEAN
@@ -86,6 +90,10 @@ using FocusHandler = void (*)();
 void SetFocusHandler(FocusHandler) {}
 using MouseFilter = bool (*)(UINT, WPARAM, int, int);
 void SetMouseFilter(MouseFilter) {}
+void HideCursor(bool) {} // drag scrolling: no game window here (its own offline test is test_drag)
+HWND GameWindow() { return nullptr; }
+struct Placement;
+bool ModePlacement(Placement *) { return false; }
 bool Windowed() { return false; }
 void SetWindowClient(int, int) {}
 struct ActionKey;
@@ -101,7 +109,8 @@ void TakeCounts(long *a, long *b) { *a = *b = 0; }
 int RefreshHz() { return 60; }
 void MeasureFromNow() {}
 void TakeIntervals(char *out, std::size_t) { out[0] = 0; }
-void SetNotice(const char *, unsigned) {}
+int g_captionNotices = 0; // notice_boxes: texts on our caption line (core/ui/notice's fallback)
+void SetNotice(const char *, unsigned) { ++g_captionNotices; }
 } // namespace core::output
 
 namespace core::ui {
@@ -944,7 +953,8 @@ void ZoomConversions()
 {
     // The city on the screen: (0, 40) to (1678, 1080), 1678 x 1040; at 150% the buffer part shown is 2518 x 1561.
     emperor::scroll::SetCityExtent(1678, 1080);
-    emperor::zoom::SetForTest(150, 2518, 1561);
+    emperor::zoom::InstallForTest(); // the drag's limits need the zoom's view of the game (sidebar_x)
+    core::scroll::zoom::SetForTest(150, 2518, 1561);
     emperor::scroll::SetRemainderForTest(5, 6);
     const double fx = 2518.0 / 1678, fy = 1561.0 / 1040;
     namespace cd = core::display;
@@ -1875,6 +1885,19 @@ void ChinaMap()
         Check(g_map.mouseY >= 778 && g_map.mouseY <= 782 && At<int>(aDdH) == 768,
               "1364x768: the map's lowest rows answer (y 780 of 786); dd_height back afterwards");
     }
+    // Shrinking the map fails -- logged, the game's drawing as it drew it, the real
+    // mouse.
+    MapScreen(1364, 768, 1138);
+    emperor::china_map::SetModeForTest(1, 0);
+    core::display::map_screen::FailScalingForTest(true);
+    draw();
+    core::display::map_screen::FailScalingForTest(false);
+    Check(LogContains("could not be shrunk to") && LogContains("drawn the game's way"),
+          "1364x768, shrinking fails: logged, drawn the game's way");
+    At<int>(aMouseX) = 500;
+    At<int>(aMouseY) = 400;
+    input();
+    Check(g_map.mouseX == 500 && g_map.mouseY == 400, "shrinking failed: the real mouse (nothing of ours shown)");
     MapScreen(1364, 768, 1138); // the first map (not loaded yet): drawn at the screen's height, then again whole
     At<int>(aMapW) = 0;
     At<int>(aMapH) = 0;
@@ -2163,6 +2186,72 @@ void SmokeActions()
     Check(x == 192 && y == 144, "smoke dialog offset (dialog_offset_x / _y)");
 }
 
+// --- The notice boxes with core/ui/notice. city_warning_show_text(text, flag) is
+// __cdecl (2 arguments, ret), text_get_width __cdecl (2); image_get_id __thiscall (ecx = the image table, 1 argument,
+// ret 4): the fakes are the same (__fastcall with an unused edx for __thiscall).
+constexpr DWORD aNoticeSlots = 0x1192778, aWarnings = 0x10de131;
+int g_noticeCalls = 0, g_noticeWarnings = -1;
+
+void __cdecl FakeShowText(const char *text, char)
+{
+    ++g_noticeCalls;
+    g_noticeWarnings = At<BYTE>(aWarnings);
+    if (Fires("city_warning_show_text")) {
+        Fault();
+    }
+    if (At<BYTE>(aWarnings) == 0) {
+        return;
+    }
+    for (int k = 0; k < 5; ++k) {
+        const DWORD slot = aNoticeSlots + k * 0x78;
+        if (At<short>(slot + 6) != 0) {
+            continue;
+        }
+        At<short>(slot + 6) = 1;
+        At<short>(slot) = -1;
+        std::strncpy(reinterpret_cast<char *>(slot + 0x12 + g_imageShift), text, 99);
+        return;
+    }
+}
+int __fastcall FakeNoticeImageId(void *, void *, int id)
+{
+    return id;
+}
+int __cdecl FakeNoticeWidth(const char *text, int)
+{
+    return static_cast<int>(std::strlen(text)) * 7;
+}
+
+void NoticeBoxes()
+{
+    Thunk(0x547d30, reinterpret_cast<const void *>(&FakeShowText));
+    Thunk(0x408170, reinterpret_cast<const void *>(&FakeNoticeImageId));
+    Thunk(0x527a80, reinterpret_cast<const void *>(&FakeNoticeWidth));
+    At<BYTE>(aWarnings) = 0; // the player's warnings off
+    emperor::notice::InstallForTest();
+    core::ui::notice::Post("Emperor test");
+    core::ui::notice::OnFrame();
+    Check(g_noticeCalls == 1 && g_noticeWarnings == 1 && At<BYTE>(aWarnings) == 0,
+          "shown with the switch on for the call only; off again afterwards");
+    Check(At<short>(aNoticeSlots + 6) == 1 && At<short>(aNoticeSlots) == -1 && At<short>(aNoticeSlots + 0xa) == 200,
+          "the box: slot 0, id -1, 84 px -> 200");
+    core::ui::notice::Post("Red", true);
+    core::ui::notice::OnFrame();
+    Check(At<short>(aNoticeSlots + 0x78) == 5, "a red one: id 5 (the game's red warning font)");
+    Check(LogContains("notice: the game's warnings are off; ours are shown all the same"), "log: the switch was off");
+
+    g_fault = "city_warning_show_text";
+    core::ui::notice::Post("faults");
+    core::ui::notice::OnFrame();
+    Check(At<BYTE>(aWarnings) == 0, "a fault in the game's call: the Warnings switch put back (off)");
+    Check(LogContains("feature \"notices in the game's boxes (core/ui/notice)\" switched off"), "log: notices off");
+    const int calls = g_noticeCalls, caption = core::output::g_captionNotices;
+    core::ui::notice::Post("after");
+    core::ui::notice::OnFrame();
+    Check(g_noticeCalls == calls && core::output::g_captionNotices == caption + 1,
+          "afterwards: our caption line, the game not called");
+}
+
 struct Scenario {
     const char *name;
     void (*run)();
@@ -2183,6 +2272,7 @@ const Scenario kScenarios[] = {
     {"china_map", &ChinaMap},   {"display_options", &DisplayOptions},
     {"falling_behind", &FallingBehind}, {"zoom_conversions", &ZoomConversions},
     {"key_bindings", &KeyBindings},
+    {"notice_boxes", &NoticeBoxes},
 };
 
 } // namespace

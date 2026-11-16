@@ -68,11 +68,12 @@ const Channel kChannels[] = {
 bool g_ok = false;
 
 // Our starting speeds: 80% as Julius / Augustus (the walkers and animations at a natural pace);
-// scroll 30%, near Augustus' 70% in feel, since smooth scrolling makes the game's 60% fast. The defaults of
+// scroll 50%: smooth scrolling takes Augustus's speeds (core/scroll/camera), where 50% feels like the 30% this
+// layer started players at with the game's own timing (0.2.0). The defaults of
 // Restore defaults, and a new player's: screen_select_initial_mode 0x4761a0 writes its defaults before it reads
 // Emperor.inf (0x52a7f0), so a player who has the file keeps their values; one who has none starts with
 // ours. Each is a "mov dword ptr [variable], value" (C7 05, address, value); only the value is changed.
-constexpr int kStartGameSpeed = 80, kStartScrollSpeed = 30;
+constexpr int kStartGameSpeed = 80, kStartScrollSpeed = 50;
 struct StartValue {
     DWORD instruction;
     DWORD variable;

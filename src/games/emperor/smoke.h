@@ -13,8 +13,8 @@ extern const char kActions[];
 //   win   the game's own cheat "I win again", as when typed into the cheat box: cheat_run(1) sets cheat_win, and the
 //         next mission_check takes the mission as won. Only on the city screen, not governing on after a won
 //         mission, not already won.
-//   lose  what the objectives check writes when the time for the objectives has run out (lose_reason 0x573 and the
-//         two words of its message); mission_check takes it on its next two checks. Writes the game's variables
+//   lose  what the objectives check writes when the city has stayed in debt too long (lose_reason 0x573 and the
+//         two words of its message; the defeat screen says the city could not be brought out of debt); mission_check takes it on its next two checks. Writes the game's variables
 //         (there is no lose cheat). Only on the city screen, not governing on, not already lost.
 // false with why when it cannot be done.
 bool Action(const char *name, char *why, int size);

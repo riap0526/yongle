@@ -86,6 +86,8 @@ set(CORE_SOURCES
     src/core/display/city_layout.cpp
     src/core/display/window_move.cpp
     src/core/ui/info_window.cpp
+    src/core/ui/notice.cpp
+    src/core/ui/notice_text.cpp
     src/core/display/moved_rect.cpp
     src/core/display/scaled_rect.cpp
     src/core/display/city_zoom.cpp
@@ -94,8 +96,10 @@ set(CORE_SOURCES
     src/core/capture/screenshot.cpp
     src/core/capture/big_picture.cpp
     src/core/capture/png_stream.cpp
+    src/core/capture/city_picture.cpp
     src/core/diag/guard.cpp
     src/core/diag/report.cpp
+    src/core/diag/state_line.cpp
     src/core/diag/perf.cpp
     src/core/diag/environment.cpp
     src/core/diag/stall.cpp
@@ -112,6 +116,11 @@ set(CORE_SOURCES
     src/core/ddraw/ddraw_emu.cpp
     src/core/ddraw/surface_memory.cpp
     src/core/scroll/smooth_scroll.cpp
+    src/core/scroll/camera.cpp
+    src/core/scroll/drag.cpp
+    src/core/scroll/drag_system.cpp
+    src/core/scroll/picture.cpp
+    src/core/scroll/zoom.cpp
     src/core/ui/panel.cpp
     src/core/ui/hotkey.cpp
     src/core/options/window.cpp
@@ -198,6 +207,47 @@ add_executable(test_scroll proxy/ddraw/test_scroll.cpp src/core/scroll/smooth_sc
 target_include_directories(test_scroll PRIVATE src)
 target_link_options(test_scroll PRIVATE -static)
 target_link_libraries(test_scroll PRIVATE augustus_core winmm)
+
+# Offline test of core/scroll/camera: smooth scrolling's camera on a fake game (shared by both games).
+add_executable(test_camera proxy/ddraw/test_camera.cpp src/core/scroll/camera.cpp src/core/scroll/smooth_scroll.cpp
+    src/core/diag/guard.cpp src/core/log.cpp)
+target_include_directories(test_camera PRIVATE src)
+target_link_options(test_camera PRIVATE -static)
+target_link_libraries(test_camera PRIVATE augustus_core winmm)
+
+# Offline test of core/scroll/drag: middle-button drag scrolling on a fake game and a fake system
+# (shared by both games).
+add_executable(test_drag proxy/ddraw/test_drag.cpp src/core/scroll/drag.cpp src/core/scroll/camera.cpp
+    src/core/scroll/smooth_scroll.cpp src/core/diag/guard.cpp src/core/log.cpp)
+target_include_directories(test_drag PRIVATE src)
+target_link_options(test_drag PRIVATE -static)
+target_link_libraries(test_drag PRIVATE augustus_core winmm)
+
+# Offline test of core/scroll/picture: smooth scrolling's picture on a fake game.
+add_executable(test_picture proxy/ddraw/test_picture.cpp src/core/scroll/picture.cpp src/core/scroll/camera.cpp
+    src/core/scroll/smooth_scroll.cpp src/core/display/city_zoom.cpp src/core/diag/perf.cpp
+    src/core/diag/guard.cpp src/core/log.cpp)
+target_include_directories(test_picture PRIVATE src)
+target_link_options(test_picture PRIVATE -static)
+target_link_libraries(test_picture PRIVATE augustus_core winmm)
+
+# Offline test of core/scroll/zoom: the city's zoom on a fake game.
+add_executable(test_zoom proxy/ddraw/test_zoom.cpp src/core/scroll/zoom.cpp src/core/scroll/picture.cpp
+    src/core/scroll/camera.cpp src/core/scroll/smooth_scroll.cpp src/core/display/city_zoom.cpp
+    src/core/display/scaled_rect.cpp src/core/platform/parallel.cpp src/core/platform/affinity.cpp
+    src/core/diag/environment.cpp src/core/platform/files.cpp src/core/game.cpp
+    src/core/diag/perf.cpp src/core/diag/guard.cpp src/core/log.cpp)
+target_include_directories(test_zoom PRIVATE src)
+target_link_options(test_zoom PRIVATE -static)
+target_link_libraries(test_zoom PRIVATE augustus_core winmm)
+
+# Offline test of core/capture/city_picture: the city and minimap pictures on a fake game.
+add_executable(test_city_picture_core proxy/ddraw/test_city_picture_core.cpp src/core/capture/city_picture.cpp
+    src/core/capture/big_picture.cpp src/core/capture/png_stream.cpp src/core/display/city_strips.cpp
+    src/core/ui/notice_text.cpp src/core/ui/hotkey.cpp src/core/diag/guard.cpp src/core/log.cpp)
+target_include_directories(test_city_picture_core PRIVATE src)
+target_link_options(test_city_picture_core PRIVATE -static)
+target_link_libraries(test_city_picture_core PRIVATE png_encode)
 
 # Offline test of core/display/logical_size (the display scale rules).
 add_executable(test_logical proxy/ddraw/test_logical.cpp src/core/display/logical_size.cpp)
@@ -325,6 +375,13 @@ add_custom_command(TARGET test_guard POST_BUILD
     COMMAND ${PYTHON_EXE} -I ${CMAKE_CURRENT_SOURCE_DIR}/tools/build/make_syms.py ${LLVM_BIN}/llvm-objdump.exe
             $<TARGET_FILE:test_guard> ${CMAKE_CURRENT_BINARY_DIR}/test_guard.syms
     VERBATIM)
+
+# Offline test of core/ui/notice: the queue of our messages for the game's notice boxes on a fake game layer
+# (shared by both games).
+add_executable(test_notice proxy/ddraw/test_notice.cpp src/core/ui/notice.cpp src/core/ui/notice_text.cpp
+    src/core/diag/guard.cpp src/core/log.cpp)
+target_include_directories(test_notice PRIVATE src)
+target_link_options(test_notice PRIVATE -static)
 
 # The chosen game's own offline tests (game_add_tests in its game.cmake).
 game_add_tests()

@@ -65,10 +65,16 @@ macro(game_add_tests)
         src/games/emperor/intro.cpp src/core/settings/intro_movie.cpp src/games/emperor/smoke.cpp
         src/games/emperor/zoom.cpp src/core/display/city_zoom.cpp
         src/games/emperor/city_picture.cpp src/games/emperor/notice.cpp src/games/emperor/keys.cpp
+        src/core/ui/notice.cpp src/core/ui/notice_text.cpp src/core/diag/state_line.cpp
         src/core/display/city_strips.cpp
         src/core/capture/big_picture.cpp
         src/core/capture/png_stream.cpp
-        src/core/scroll/smooth_scroll.cpp src/core/diag/guard.cpp src/core/diag/report.cpp src/core/diag/perf.cpp
+        src/core/capture/city_picture.cpp
+        src/core/scroll/smooth_scroll.cpp src/core/scroll/camera.cpp src/core/scroll/picture.cpp
+        src/core/scroll/drag.cpp src/core/scroll/drag_system.cpp
+        src/core/scroll/zoom.cpp
+        src/core/diag/guard.cpp src/core/diag/report.cpp
+        src/core/diag/perf.cpp
         src/core/diag/rate_log.cpp src/core/sim/pace.cpp
         src/core/diag/environment.cpp src/core/diag/stall.cpp src/core/platform/affinity.cpp src/core/log.cpp
         src/core/diag/present_mode.cpp src/core/diag/present_mode_tracker.cpp src/core/diag/screen_programs.cpp

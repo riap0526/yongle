@@ -15,6 +15,14 @@
 #   test_settings the settings model: load, requests, callbacks, saving (no DLL; rewrites the ini next to it,
 #               which is put back to the default at the end)
 #   test_scroll core/scroll: cruise speed, easing, stop (no DLL; ~4 s)
+#   test_camera core/scroll/camera: smooth scrolling's camera on a fake game (carries, edges, speed, keys, a fault)
+#               (no DLL; writes test_camera.log; ~2 s)
+#   test_drag   core/scroll/drag: middle-button drag scrolling on a fake game and system (click, drag, scales,
+#               whole tiles, buttons, ends, the setting, the edge width, a fault) (no DLL; writes test_drag.log)
+#   test_picture core/scroll/picture: smooth scrolling's picture on a fake game (the buffer, the extent, a clip past
+#               the bottom, conversions, the drag, a fault) (no DLL; writes test_picture.log)
+#   test_zoom   core/scroll/zoom: the city's zoom on a fake game (the wheel, the middle button, the map's limit,
+#               the zoomed drawing, a scaling that fails) (no DLL; writes test_zoom.log)
 #   test_logical core/display/logical_size: display scale rules (no DLL)
 #   test_moved_rect core/display/moved_rect: a rectangle shown elsewhere, every buffer between no-access pages
 #   test_city_layout core/display/city_layout: spare rows, the top bar's tiling, the sidebar filler's inset panel,
@@ -26,6 +34,9 @@
 #               (no DLL)
 #   test_city_picture the city picture's strips and its PNG written a row at a time, read back (no DLL; writes and
 #               deletes test_city_picture_*.png)
+#   test_city_picture_core core/capture/city_picture: the city and minimap pictures on a fake game (the refusals, the
+#               strips, the put-back order, a fault, the minimap's two key colors, file names) (no DLL; writes
+#               test_city_picture_core.log)
 #   test_framing core/display/framing: the framed full-screen picture geometry (no DLL)
 #   test_surface_memory core/ddraw/surface_memory: spare rows with a canary below each emulated surface, guard
 #               pages around it (no DLL)
@@ -37,6 +48,7 @@
 #               where our files are (no DLL; ~4 s)
 #   test_stall  core/diag/stall: long passes sampled with their call stack (no DLL)
 #   test_autorun core/diag/autorun: the smoke test's script and steps on a fake game and clock (no DLL)
+#   test_notice core/ui/notice: our messages' queue for the game's notice boxes on a fake game layer (no DLL)
 #   test_present_mode core/diag/present_mode: mode changes, errors counted, giving up, the once-a-second line, the
 #               not-Direct3D-11 path (no DLL; writes test_present_mode.log)
 #   test_affinity core/platform/affinity: scenarios on one processor in child processes, the last one
@@ -90,10 +102,15 @@ Run 'test_options' 'emulated' @()
 Run 'test_ini' 'emulated' @()
 Run 'test_settings' 'emulated' @()
 Run 'test_scroll' 'emulated' @()
+Run 'test_camera' 'emulated' @()
+Run 'test_drag' 'emulated' @()
+Run 'test_picture' 'emulated' @()
+Run 'test_zoom' 'emulated' @()
 Run 'test_logical' 'emulated' @()
 Run 'test_common_sizes' 'emulated' @()
 Run 'test_city_zoom' 'emulated' @()
 Run 'test_city_picture' 'emulated' @()
+Run 'test_city_picture_core' 'emulated' @()
 Run 'test_framing' 'emulated' @()
 Run 'test_moved_rect' 'emulated' @()
 Run 'test_city_layout' 'emulated' @()
@@ -106,6 +123,7 @@ Run 'test_guard' 'emulated' @()
 Run 'test_env' 'emulated' @()
 Run 'test_stall' 'emulated' @()
 Run 'test_autorun' 'emulated' @()
+Run 'test_notice' 'emulated' @()
 Run 'test_present_mode' 'emulated' @()
 Run 'test_affinity' 'emulated' @()
 Run 'test_screenshot' 'emulated' @()

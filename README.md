@@ -35,7 +35,7 @@ See **[CHANGELOG.md](CHANGELOG.md)** for what changed in each release.
 - **Any resolution:** the sidebar, top bar, city and dialogs fit your screen, and a display scale (100–250 % or *Auto*) makes every screen bigger.
 - **Menus, loading screens and the empire map** are shown in a frame, over a blurred picture of your city.
 - **Windowed mode** (F5 or Alt+Enter). You can resize the window, and its size and position are remembered.
-- **Smooth scrolling** of the city, at the same average speed as the original.
+- **Smooth scrolling** of the city, with a steady speed for each scroll speed setting.
 - **City zoom** with the mouse wheel (50–150 %, less on small maps), toward the cursor. The middle mouse button goes back to 100 %.
 - **Options window** (F6) with the game's settings and Yongle's together.
 - **Key rebinding** for almost every key, with two keys per action.
@@ -81,7 +81,7 @@ Yongle's keys (the defaults):
 | F12             | Problem report (when something looks wrong)                                                                                 |
 | Insert          | Open / close the debug panel                                                                                                |
 | Mouse wheel     | Over the city: zoom in and out. Over the sidebar: the building category, as in the original                                 |
-| Middle button   | Over the city: zoom back to 100 %                                                                                           |
+| Middle button   | Over the city: hold and move to drag the city; click to zoom back to 100 %                                                  |
 
 The game's own keys work as in the original. Almost all of them, and Yongle's keys above, can be changed in **Options > Hotkeys**, with a second key for each action. Not offered: the multiplayer and developer keys of the game, keys used for typing text, and Esc, Enter, the mouse wheel and the middle button (F5 and Alt+Enter cannot be changed either).
 

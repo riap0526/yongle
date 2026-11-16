@@ -26,7 +26,8 @@ core_config g_config = {CORE_BACKEND_EMULATED, CORE_SCALING_SHARP_BILINEAR, CORE
                         CORE_RESOLUTION_SCALED, 1024, 768, 100, 1, 1, 0x2D /* Insert */, 0, 0,
                         0x7A /* F11 */, 0, 0x7B /* F12 */, 0, 0, 0, 0, 0,
                         0 /* fail_direct3d9 */, 0 /* d3d9_pacing */, 0, 0, 0, CORE_WINDOW_CENTER, CORE_WINDOW_CENTER, 0, 0 /* cpu_affinity */,
-                        1 /* present_mode_log */, 0 /* window_background_test */, 0, 0, 0, 0, 0, 0};
+                        1 /* present_mode_log */, 0 /* window_background_test */, 0, 0, 0, 0, 0, 0,
+                        1 /* drag_scroll */, 1 /* edge_scroll_width */};
 
 const char *const kBackend[] = {"emulated", "system"};
 const char *const kBackendLabels[] = {"emulated (our own DirectDraw)", "system (Windows' DirectDraw, logged)"};
@@ -81,7 +82,7 @@ void Keys(const char *v, unsigned fallbackVk, unsigned *vk, unsigned *mods, unsi
 
 int g_backend, g_scaling, g_present, g_resolution, g_scale, g_timer, g_smooth, g_panelScale, g_panelKey,
     g_shotKey, g_reportKey, g_labels, g_loadingHold, g_perfOverlay, g_renderer, g_failD3d9, g_d3d9Pacing, g_window, g_windowW, g_windowH,
-    g_windowX, g_windowY, g_windowLock, g_cpuAffinity, g_presentModeLog, g_windowBackground;
+    g_windowX, g_windowY, g_windowLock, g_cpuAffinity, g_presentModeLog, g_windowBackground, g_drag, g_edgeWidth;
 
 // Keeps core_config in step with the model (registered first, so owners' callbacks see the new typed value).
 bool Sync(int i, const char *v, bool)
@@ -108,6 +109,8 @@ bool Sync(int i, const char *v, bool)
     else if (i == g_scale) g_config.scale_percent = std::strcmp(v, "auto") == 0 ? 0 : std::atoi(v);
     else if (i == g_timer) g_config.high_resolution_timer = std::strcmp(v, "on") == 0;
     else if (i == g_smooth) g_config.smooth_scroll = std::strcmp(v, "on") == 0;
+    else if (i == g_drag) core_config_set_live(&g_config.drag_scroll, std::strcmp(v, "on") == 0);
+    else if (i == g_edgeWidth) core_config_set_live(&g_config.edge_scroll_width, std::atoi(v));
     else if (i == g_panelScale) core_config_set_live(&g_config.panel_scale_percent, std::strcmp(v, "auto") == 0 ? 0 : std::atoi(v));
     else if (i == g_panelKey) {
         Keys(v, 0x2D, &g_config.panel_key_vk, &g_config.panel_key_mods, &g_config.panel_key2_vk,
@@ -213,10 +216,18 @@ void RegisterCoreItems()
                        "machine (otherwise 15.6 ms unless another program raised it).",
                        Type::Bool, "on", Effect::Live, true, true, 0, 0, 0, nullptr, nullptr, nullptr, 0});
     g_smooth = Add(Item{"gameplay", "smooth_scroll", "Smooth scrolling",
-                        "Pixel scrolling of the city at the game's own average speed, with easing. Off: the game's "
-                        "whole-tile steps. Either way the simulation pauses while the view scrolls, as in the "
-                        "original.",
+                        "Pixel scrolling of the city with easing, at a steady speed for each scroll speed setting, the "
+                        "same on every computer. Off: the game's whole-tile steps.",
                         Type::Bool, "on", Effect::Live, true, true, 0, 0, 0, nullptr, nullptr, nullptr, 0});
+    g_drag = Add(Item{"gameplay", "drag_scroll", "Drag scrolling",
+                      "Hold the middle mouse button over the city and move the mouse: the city follows it. A click "
+                      "without moving goes back to 100% zoom. Off: the middle button only goes back to 100% zoom.",
+                      Type::Bool, "on", Effect::Live, true, true, 0, 0, 0, nullptr, nullptr, nullptr, 0});
+    g_edgeWidth = Add(Item{"gameplay", "edge_scroll_width", "Edge scrolling: width",
+                           "How close to the edge of the screen the cursor scrolls the city, in pixels. 1 is the "
+                           "original; 0 turns edge scrolling off (the arrow keys and dragging still scroll).",
+                           Type::Int, "1", Effect::Live, true, true, 0, 20, 1, nullptr, nullptr, nullptr, 0,
+                           "px"});
     g_panelScale = Add(Item{"ui", "panel_scale", "Panel size",
                             "Size of this panel in percent. Auto: the output height divided by 1080 (1440p: 133%).",
                             Type::Int, "auto", Effect::Live, true, true, 100, 300, 10, "auto", nullptr, nullptr, 0, "%"});

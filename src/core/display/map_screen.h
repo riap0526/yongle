@@ -129,5 +129,7 @@ int ScalePercent();
 // For the offline tests. mode: 0 scaled, 1 native, 2 original (the game's own drawing); scalePercent 0: fit.
 void SetModeForTest(int mode, int scalePercent);
 void SetBackgroundForTest(bool city);
+// For the offline test: the map's scaling and shrinking fail as if they were given sizes they cannot do.
+void FailScalingForTest(bool on);
 
 } // namespace core::display::map_screen

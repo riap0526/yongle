@@ -209,8 +209,11 @@ double Scale(int areaW, int areaH, int mapW, int mapH)
     return s < 1.0 ? 1.0 : s;
 }
 
-// Backdrop and the framed map into `target` (the buffer the game draws to outside our call).
-void Compose(const Layout &l, BYTE *target, bool backdrop)
+bool g_failScalingForTest = false;
+
+// Backdrop and the framed map into `target` (the buffer the game draws to outside our call). False (logged) when the
+// map could not be scaled: the caller shows the game's drawing as it drew it (the backdrop may be there already).
+bool Compose(const Layout &l, BYTE *target, bool backdrop)
 {
     const int top = Game().topBarH;
     const int areaW = l.sidebarX, areaH = l.ddH - top;
@@ -240,7 +243,11 @@ void Compose(const Layout &l, BYTE *target, bool backdrop)
         // Smaller than its own size (a map taller than the area): each pixel the average of the canvas area it
         // covers (ScaleRgb565 only enlarges), then put in place inside the area.
         g_shrunk.assign(static_cast<size_t>(tw) * th, 0);
-        core::display::ShrinkRgb565(canvas, tw, th, true, core::display::Target16{g_shrunk.data(), tw, tw, th});
+        if (g_failScalingForTest ||
+            !core::display::ShrinkRgb565(canvas, tw, th, true, core::display::Target16{g_shrunk.data(), tw, tw, th})) {
+            Log("the %dx%d map could not be shrunk to %dx%d: drawn the game's way", g_canvasW, g_canvasH, tw, th);
+            return false;
+        }
         const int left = std::max(static_cast<int>(area.left), tx), right = std::min(static_cast<int>(area.right), tx + tw);
         const int top0 = std::max(static_cast<int>(area.top), ty), bottom = std::min(static_cast<int>(area.bottom), ty + th);
         for (int y = top0; y < bottom && left < right; ++y) {
@@ -250,9 +257,13 @@ void Compose(const Layout &l, BYTE *target, bool backdrop)
     }
     else {
         const bool whole = std::fabs(s - std::round(s)) < 1e-9;
-        core::display::ScaleRgb565(canvas, s, !whole, dst, tx, ty, area);
+        if (g_failScalingForTest || !core::display::ScaleRgb565(canvas, s, !whole, dst, tx, ty, area)) {
+            Log("the %dx%d map could not be scaled to %dx%d: drawn the game's way", g_canvasW, g_canvasH, tw, th);
+            return false;
+        }
     }
     g_shown = ShownMap{true, l.ddW, l.ddH, l.sidebarX, tx, ty, s, g_border, g_canvasW, g_canvasH, l.mapW, l.mapH};
+    return true;
 }
 
 // The real mouse in the game's own map coordinates while the map is shown by us. Outside the map but inside the
@@ -372,7 +383,10 @@ void DrawLayer(void *p)
     }
     else {
         core::diag::perf::Scope timed(g_phase);
-        Compose(c.l, c.target, true);
+        if (!Compose(c.l, c.target, true)) {
+            AsDrawn(c);
+            g_shown.valid = false;
+        }
     }
     if (g_topPending) {
         g_topPending = false;
@@ -411,7 +425,10 @@ void CampaignLayer(Call &c, void (*original)())
         std::memcpy(c.target + static_cast<size_t>(y) * pitch + x0 * 2,
                     g_layer + static_cast<size_t>(y) * pitch + x0 * 2, bytes);
     }
-    Compose(c.l, c.target, false);
+    if (!Compose(c.l, c.target, false)) {
+        AsDrawn(c); // the map and its markers as the game drew them into our layer
+        g_shown.valid = false;
+    }
 }
 
 } // namespace
@@ -581,6 +598,11 @@ void SetModeForTest(int mode, int scalePercent)
 {
     g_mode = mode;
     g_scalePercent = scalePercent;
+}
+
+void FailScalingForTest(bool on)
+{
+    g_failScalingForTest = on;
 }
 
 void SetBackgroundForTest(bool city)
