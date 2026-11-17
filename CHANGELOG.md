@@ -23,7 +23,7 @@ All notable changes to Yongle. Downloads, with the SHA256 of each zip, are on th
 - **Yongle's files go to Documents when needed.** If the game folder needs administrator rights to write to (for example under `C:\Program Files (x86)`), Yongle's settings, log and screenshots now go to `Documents\My Games\Yongle` instead of Windows' VirtualStore. Your settings are copied there at the first start.
 - **`emperor_engine.ini` is updated when you upgrade.** It gets the new version's descriptions and keeps your values. The old file is saved as `emperor_engine.ini.bak`. If the file is missing, it is created again.
 - **The settings panel is now a debug panel** (Insert), for testing and for fixing the display if something goes wrong. All other settings are in Options.
-- **Ctrl+arrow keys no longer scroll faster**; you can bind Ctrl+arrows to other actions instead. F6, F7 and F8 are no longer passed to the game.
+- **Ctrl+arrow keys are free for your own bindings.** In the original game they scroll like the arrow keys alone; now they do nothing until you bind them in Options > Hotkeys. F6, F7 and F8 are no longer passed to the game.
 - **No new ambient sounds while Yongle's windows are open**, the same as with the game's own dialogs.
 
 ### Fixed
