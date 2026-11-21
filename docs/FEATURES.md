@@ -24,7 +24,7 @@ Back to the [README](../README.md). Most settings are in the Options window (F6,
 
 ## Options and keys
 
-- **Options window.** A settings window that looks like the game's own dialogs, made from the game's panels, buttons and font. It has the game's settings (game speed, scroll speed, autosave, messages, music, speech and sound volumes) and Yongle's settings together, on General, Video and Audio pages. Open it with **F6**, from the Options menu in the city (General Settings, Video, Audio, Hotkeys), or from **Options** on the main menu. Hover over a setting to see what it does. *Restore defaults* resets only the section you are looking at. If you change the resolution or display scale, the game asks "Keep this setting?" and switches back after 15 seconds if you don't answer. The game's own settings are still saved in the game's files, so they are the same without Yongle.
+- **Options window.** A settings window that looks like the game's own dialogs, made from the game's panels, buttons and font. It has the game's settings (game speed, scroll speed, autosave, messages, music, speech and sound volumes) and Yongle's settings together, on General, Video and Audio pages. Open it with **F6**, from the Options menu in the city (General Settings, Video, Audio, Hotkeys, Difficulty), or from **Options** on the main menu. Hover over a setting to see what it does. *Restore defaults* resets only the section you are looking at. If you change the resolution or display scale, the game asks "Keep this setting?" and switches back after 15 seconds if you don't answer. The game's own settings are still saved in the game's files, so they are the same without Yongle.
 
   ![The Options window, Video page](../screenshots/options-window.webp)
 
@@ -37,6 +37,11 @@ Back to the [README](../README.md). Most settings are in the Options window (F6,
   ![The Pause menu](../screenshots/pause-menu.webp)
 
 - **The File menu** has the same items, plus the two city screenshots: Replay map, Load game, Save game, Save city screenshot, Save minimap screenshot, Delete game, Exit to main menu, Exit game.
+
+- **Difficulty and auto defend.** The game has both, but its own menus never let you change them. While you play a city alone, they are in Options > General > Difficulty, and the Options menu has Difficulty and Auto defend too.
+  - *Difficulty* changes at once, one level at a time, as the game itself does it. The mission's result counts the lowest difficulty you played it at: once you lower it, raising it again later does not change that.
+  - *Auto defend* is the game's own Auto Combat: when enemies come, your soldiers gather and march out by themselves. They stay out after the enemies have left: switch it off, then send them back yourself. The army panel shows "Auto Combat On" while it is on. It can't be changed while enemies are attacking.
+  - Both are saved in the game's own files and saved games, as the game keeps them. The game without Yongle has no switch for auto defend: **turn it off before you remove Yongle**, or it stays on.
 
 - **New players start at 80 % game speed and 50 % scroll speed** (the original defaults are 90 % and 60 %), which work better with smooth scrolling. If you have played before, your settings stay the same.
 
@@ -58,7 +63,7 @@ Back to the [README](../README.md). Most settings are in the Options window (F6,
 - **Master volume and mute** for all music and sounds (Options > Audio). The game's own volume settings are kept.
 - **Music and sounds pause when you switch away** (Alt+Tab, clicking another window, minimizing) and continue where they left off when you come back. The original stops them and starts a different song (you can switch back to that).
 - **Ambient sounds at a steady rate**, about one every two seconds on any computer and at any resolution. In the original, the rate depends on how fast the game runs (you can switch back to that).
-- **Unused nature sounds.** The game comes with recordings of birds, wind, crickets, frogs and wind chimes that it never actually played. Yongle plays one of them now and then in the city, about every 30 seconds, moving slowly around you, at the sound effects volume. On by default; you can turn it off in Options > Audio.
+- **Unused nature sounds.** The game comes with recordings of birds, wind, crickets, frogs and wind chimes that it never actually played. Yongle plays one of them now and then in the city, about every 30 seconds, the way the game designed them as 3D sounds, recreated in stereo: it comes down from above, moves around you for a while and rises away again, at the ambient sounds volume. On by default; you can turn it off in Options > Audio > Nature sounds.
 
 ## Screenshots and tools
 

@@ -5,6 +5,7 @@
 #include "core/display/logical_size.h"
 #include "core/display/virtual_display.h"
 #include "core/log.h"
+#include "core/options/hotkeys_page.h"
 #include "core/platform/files.h"
 #include "core/settings/settings.h"
 #include "core/ui/hotkey.h"
@@ -741,7 +742,8 @@ void CaptureKey(unsigned vk, bool ctrl, bool shift, bool alt)
     g_dirty[i] = true;
     Commit(i);
     core_log("panel: %s.%s set to %s with a key press", cs::Get(i).section, cs::Get(i).key, text);
-    const char *game = g_gameKeyNote ? g_gameKeyNote(key.vk, key.mods) : nullptr;
+    // Our fixed keys first (the same in both games), then the game layer's own keys.
+    const char *game = core::options::hotkeys_page::KeyNote(key.vk, key.mods, g_gameKeyNote);
     if (game) {
         char why[200];
         std::snprintf(why, sizeof(why), "Saved. %s", game);

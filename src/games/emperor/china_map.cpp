@@ -41,14 +41,14 @@ const Site kFrameDraw{"china_map_frame_draw", 0x5b81d0, {0xa1, 0xd8, 0xd0, 0xc5,
 // anim_advance_ui (__cdecl id, frame; ret; only china_map_draw calls it): images with animation speed 0 (the allies'
 // flags, group 0x25a: 5 frames, speed 0 in China_Interface.sg3) step on every main-loop pass, so how fast they look
 // depends on how often a frame is shown: about 20 per second in the original, about 100 with our output (seen in
-// test: the flags flap much faster than in the original). Here speed 0 steps at most every 50 ms, as at 20 FPS
+// testing: the flags flap much faster than in the original). Here speed 0 steps at most every 50 ms, as at 20 FPS
 // (core/sim/ui_anim.h).
 const Site kAnim{"anim_advance_ui", 0x5b9760, {0x53, 0x8b, 0x5c, 0x24, 0x0c, 0x56, 0x57, 0x33}};
 // The city map panels of screen 0x16 ("Consult Spy Map" and the like; __thiscall on the panel object, x, y, w, h;
 // ret 0x10), called by 0x5ca230 with the map window (0, 40, sidebar_x, height - 40). They lay the 231 x 457 grid of
 // view_to_grid centred in that rectangle, 4 x 2 px per cell; but a row before the grid's first (when the rectangle is
 // higher than 914 px) is skipped without moving down, so the city is drawn too high, above its panel (seen in
-// test). The rectangle given to them is cut to 924 x 914 around the same centre; the panel's click test (0x5cc1a0)
+// testing). The rectangle given to them is cut to 924 x 914 around the same centre; the panel's click test (0x5cc1a0)
 // uses the rectangle they store, so it follows.
 const Site kSpyPanel{"city_map_panel_spy", 0x5cbc30, {0x81, 0xec, 0x90, 0x00, 0x00, 0x00, 0x56, 0x8b}};
 const Site kCityPanel{"city_map_panel", 0x5cb170, {0x81, 0xec, 0xe4, 0x00, 0x00, 0x00, 0x8b, 0x81}};

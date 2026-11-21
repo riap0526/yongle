@@ -8,7 +8,7 @@
 #include <cstdio>
 #include <cstring>
 
-// Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e): the notice boxes read with Ghidra and capstone (
+// Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e): the notice boxes read with Ghidra and capstone;
 // calling conventions checked by disassembly. The queue, the threads and the fallback to our caption
 // line are the core's (core/ui/notice); here are the game's boxes.
 namespace emperor::notice {

@@ -1,54 +1,61 @@
-// The options window's texts for players: for each setting a short
-// description (the tooltip of its name) and, for choices, one description per choice (the tooltip of the value).
-// The registry's own help (core/settings) stays as it is for the panel and the settings file; these are shorter,
-// because each choice is explained only when it is the one shown. American English; checked for internal notes by
-// a text check.
+// The options window's texts for players: Yongle's own here (its game's files and folders, the empire map);
+// the ones both games share are in core/options/option_text (the settings' descriptions and the game's own options)
+// and core/options/menu_text (the menus, the Hotkeys window, "keep this setting?"), named here as before.
 #pragma once
+
+#include "core/options/menu_text.h"
+#include "core/options/option_text.h"
 
 namespace emperor::options_text {
 
-struct ChoiceText {
-    const char *spell; // the ini spelling; "*": any other value (e.g. a resolution's sizes)
-    const char *help;  // '\n' starts a new line
-    const char *shown = nullptr; // the value's name in the window (nullptr: made from the spelling, "Sharp bilinear")
-    bool restart = false;        // this value takes effect after a restart (red first line in its tooltip)
-};
+using core::options::option_text::Choice;
+using core::options::option_text::ChoiceText;
+using core::options::option_text::Find; // Yongle's own table first (Register), then the shared one
+using core::options::option_text::Text;
 
-struct Text {
-    const char *section;
-    const char *key;
-    const char *summary;         // the name's tooltip (nullptr: the registry's help)
-    const ChoiceText *choices;   // nullptr: none (the values explain themselves)
-    int choiceCount;
-    bool noRestartMark = false;  // a restart item that needs no mark (it only ever acts at start-up)
-    const char *label = nullptr; // the row's name (nullptr: the registry's); section "game": the game's own options
-};
+// Gives the core Yongle's own table (before the options window is built).
+void Register();
 
-const Text *Find(const char *section, const char *key);
-const ChoiceText *Choice(const Text &t, const char *spell); // its own entry, else "*", else nullptr
+extern const char *const kOptionsTitle;
 
-// The red first line of the tooltips of a setting marked "*".
-extern const char *const kRestartTip;
+// The debug panel's note for a key the game itself uses, chosen for one of our key settings (core::ui::SetGameKeyNote;
+// registered by games/emperor/keys); nullptr when the game does not use it.
+const char *GameKeyNote(unsigned vk, unsigned mods);
 
-// The game's Options menu (in the city) and the main menu's button that open the window (options_entry).
-extern const char *const kMenuGeneral, *const kMenuVideo, *const kMenuAudio, *const kMainMenuOptions,
-    *const kMenuHotkeys;
-extern const char *const kCategoryMessages; // the options window's General > Messages (the message list opens it)
-
-// The Hotkeys window and "keep this setting?" (core/options Window::Texts; %s / %d as there).
-extern const char *const kOptionsTitle, *const kHotkeysTitle, *const kColumnAction, *const kColumnKey, *const kColumnAlternative,
-    *const kSectionGlobal, *const kPressKey, *const kKeyNotChanged, *const kKeyNotUsable, *const kKeyInUse,
-    *const kKeyReserved, *const kKeyClearHint, *const kKeyTip, *const kKeepTitle, *const kKeepCountdown, *const kKeep, *const kRevert;
-
-// The Hotkeys window (games/emperor/keys): a section's title (keys::Section).
-const char *KeySection(int section);
-extern const char *const kOverlayName; // printf format: an overlay's name in the Hotkeys window
-extern const char *const kPausedOneKey, *const kPausedTwoKeys, *const kPausedNoKey; // the pause banner (keys::PauseText)
-
-// The File menu's items for the screenshots (options_entry).
-extern const char *const kMenuCityScreenshot, *const kMenuMinimapScreenshot;
-// The File menu's renamed items (also the titles of their confirmations) and the pause menu.
-extern const char *const kMenuReplayMap, *const kMenuExitToMainMenu;
-extern const char *const kPauseTitle, *const kPauseContinue, *const kPauseOptions;
+using core::options::menu_text::kCategoryDifficulty;
+using core::options::menu_text::kCategoryMessages;
+using core::options::menu_text::kMenuAutoDefendOff;
+using core::options::menu_text::kMenuAutoDefendOn;
+using core::options::menu_text::kMenuDifficulty;
+using core::options::menu_text::kColumnAction;
+using core::options::menu_text::kColumnAlternative;
+using core::options::menu_text::kColumnKey;
+using core::options::menu_text::kHotkeysTitle;
+using core::options::menu_text::kKeep;
+using core::options::menu_text::kKeepCountdown;
+using core::options::menu_text::kKeepTitle;
+using core::options::menu_text::kKeyClearHint;
+using core::options::menu_text::kKeyInUse;
+using core::options::menu_text::kKeyNotChanged;
+using core::options::menu_text::kKeyNotUsable;
+using core::options::menu_text::kKeyReserved;
+using core::options::menu_text::kKeyTip;
+using core::options::menu_text::kMainMenuOptions;
+using core::options::menu_text::kMenuAudio;
+using core::options::menu_text::kMenuCityScreenshot;
+using core::options::menu_text::kMenuExitToMainMenu;
+using core::options::menu_text::kMenuGeneral;
+using core::options::menu_text::kMenuHotkeys;
+using core::options::menu_text::kMenuMinimapScreenshot;
+using core::options::menu_text::kMenuReplayMap;
+using core::options::menu_text::kMenuVideo;
+using core::options::menu_text::KeySection; // the Hotkeys window's section titles
+using core::options::menu_text::kOverlayName;
+using core::options::menu_text::kPauseContinue;
+using core::options::menu_text::kPauseOptions;
+using core::options::menu_text::kPauseTitle;
+using core::options::menu_text::kPressKey;
+using core::options::menu_text::kRestartTip;
+using core::options::menu_text::kRevert;
 
 } // namespace emperor::options_text

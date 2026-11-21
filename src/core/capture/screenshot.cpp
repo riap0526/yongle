@@ -168,7 +168,7 @@ void Write(Job *job)
 
 // One writer thread for all pictures, one at a time, at normal priority: encoding a large PNG takes seconds, and three
 // at once on their own threads slowed the game on a laptop three times over.
-// A lower priority made each picture slow while the game ran: Windows' background mode 26-200 s for 2560x1440 (second
+// A lower priority made each picture slow while the game ran: Windows' background mode 26-200 s for 2560x1440,
 // THREAD_PRIORITY_LOWEST 13-18 s, against 0.8 s at normal priority: the
 // whole process runs on one logical processor, so a lower priority only runs while the game waits.
 // Started on the first picture; it lives as long as the game.

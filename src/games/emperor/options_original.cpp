@@ -1,21 +1,23 @@
 #include "games/emperor/options_original.h"
 
+#include "core/diag/guard.h"
 #include "core/log.h"
-#include "games/emperor/options_text.h"
+#include "core/options/game_options.h"
+#include "core/platform/files.h"
+#include "games/emperor/resolution.h"
 #include "games/emperor/site.h"
 
 #include <algorithm>
-#include <cstring>
 #include <cstdint>
+#include <initializer_list>
 #include <string>
 
-// Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e): the game's own options dialogs read from the disassembly
+// Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e): the game's own options dialogs read from the disassembly;
 // calling conventions checked by disassembly.
 namespace emperor::options_original {
 namespace {
 
-namespace co = core::options;
-namespace ot = emperor::options_text;
+namespace go = core::options::game_options;
 
 // The sound manager's methods (__thiscall, ecx = sound_manager 0x1156bc8): channel 0 music, 1 speech, 2 ambient.
 const Site kChannelVolume{"sound_channel_volume_set", 0x762eec, {0x55, 0x8b, 0xec, 0x51, 0x89, 0x4d, 0xfc, 0x8b}};
@@ -29,12 +31,17 @@ const Site kAmbientStop{"ambient_layer1_stop", 0x5c2f50, {0x53, 0x8b, 0xd9, 0x55
 const Site kAutosaveToggle{"autosave_toggle", 0x449460, {0xa1, 0x5c, 0xe1, 0x0d, 0x01, 0x85, 0xc0, 0x74}};
 // lang_get_string(group, index) 0x5278b0 (__cdecl; ret).
 const Site kLangString{"lang_get_string", 0x5278b0, {0x8b, 0x44, 0x24, 0x04, 0x8b, 0x15, 0xcc, 0xd8}};
+// screen_select_initial_mode 0x4761a0 (__cdecl, no arguments): writes the options' defaults, then reads Emperor.inf
+// (0x52a7f0). Hooked by games/emperor/resolution when it is installed (it then calls us after the original); hooked
+// here otherwise.
+const Site kInitialMode{"screen_select_initial_mode", 0x4761a0, {0x53, 0x56, 0xbb, 0x01, 0x00, 0x00, 0x00, 0xbe}};
 
 using Volume2_fn = void(__thiscall *)(void *, int, int);
 using Volume1_fn = void(__thiscall *)(void *, int);
 using Void_fn = void(__cdecl *)();
 using This_fn = void(__thiscall *)(void *);
 using Lang_fn = const char *(__cdecl *)(int group, int index);
+using InitialMode_fn = int(__cdecl *)();
 
 const DWORD kSoundManager = 0x1156bc8, kAmbientSounds = 0x1103218;
 
@@ -50,78 +57,26 @@ const DWORD kMessageDefaults = 0xc7f5bc;    // the kinds' defaults from the mess
 const Var<int> kAmbientLayer{0x10de3f0};    // not 0: the first ambient layer plays (stopped with the switch)
 constexpr int kTextMessageKinds = 176, kTextMessageModes = 183; // EmperorText.eng groups
 
-struct Channel {
-    const char *key;   // options_text
-    DWORD on;          // a byte: the switch
-    DWORD volume;      // an int 0..100
-    int stream;        // the sound manager's channel, -1: none (general sounds are read when they play)
-    const Site *setter; // the channel's own volume method, nullptr: none
-    int defaultVolume; // screen_select_initial_mode 0x4761a0
+// Per channel: the switch (a byte), the volume (an int 0..100), the sound manager's stream (-1: none, general sounds
+// are read when they play) and its own volume method.
+struct ChannelSite {
+    DWORD on, volume;
+    int stream;
+    const Site *setter;
 };
-const Channel kChannels[] = {
-    {"music", 0x10de0d4, 0x10de138, 0, &kMusicVolume, 50},
-    {"speech", 0x10de0d5, 0x10de13c, 1, &kSpeechVolume, 100},
-    {"sound_effects", 0x10de0d3, 0x10de134, -1, nullptr, 80},
-    {"ambient_volume", 0x10de130, 0x10de140, 2, &kAmbientVolume, 80},
+const ChannelSite kChannelSites[go::kChannelCount] = {
+    {0x10de0d4, 0x10de138, 0, &kMusicVolume},
+    {0x10de0d5, 0x10de13c, 1, &kSpeechVolume},
+    {0x10de0d3, 0x10de134, -1, nullptr},
+    {0x10de130, 0x10de140, 2, &kAmbientVolume},
 };
-
-bool g_ok = false;
-
-// Our starting speeds: 80% as Julius / Augustus (the walkers and animations at a natural pace);
-// scroll 50%: smooth scrolling takes Augustus's speeds (core/scroll/camera), where 50% feels like the 30% this
-// layer started players at with the game's own timing (0.2.0). The defaults of
-// Restore defaults, and a new player's: screen_select_initial_mode 0x4761a0 writes its defaults before it reads
-// Emperor.inf (0x52a7f0), so a player who has the file keeps their values; one who has none starts with
-// ours. Each is a "mov dword ptr [variable], value" (C7 05, address, value); only the value is changed.
-constexpr int kStartGameSpeed = 80, kStartScrollSpeed = 50;
-struct StartValue {
-    DWORD instruction;
-    DWORD variable;
-    int original, ours;
+// Defaults: screen_select_initial_mode 0x4761a0.
+const go::Channel kChannels[go::kChannelCount] = {
+    {"music", 50, true},
+    {"speech", 100, true},
+    {"sound_effects", 80, false},
+    {"ambient_volume", 80, true},
 };
-const StartValue kStartValues[] = {
-    {0x476220, 0x10de0dc, 90, kStartGameSpeed},  // game_speed
-    {0x47622a, 0x10de120, 90, kStartGameSpeed},  // the speed kept (game_speed_kept)
-    {0x476234, 0x10de0e0, 60, kStartScrollSpeed}, // scroll_speed
-    {0x47632d, 0x10de120, 90, kStartGameSpeed},  // the speed kept again, for an Emperor.inf older than 101 (or none)
-};
-
-void StartDefaults()
-{
-    for (const StartValue &s : kStartValues) {
-        BYTE expect[10] = {0xc7, 0x05};
-        std::memcpy(expect + 2, &s.variable, 4);
-        std::memcpy(expect + 6, &s.original, 4);
-        const void *at = reinterpret_cast<const void *>(s.instruction + g_imageShift);
-        MEMORY_BASIC_INFORMATION mbi{};
-        if (!VirtualQuery(at, &mbi, sizeof(mbi)) || mbi.State != MEM_COMMIT ||
-            std::memcmp(at, expect, sizeof(expect)) != 0) {
-            core_log("options window: the game's start-up defaults at 0x%lx are not as expected; the game's own kept",
-                     s.instruction);
-            return; // all or none: every one is checked before any is changed
-        }
-    }
-    for (const StartValue &s : kStartValues) {
-        PatchCode(s.instruction + 6 + g_imageShift, reinterpret_cast<const BYTE *>(&s.ours), 4);
-    }
-    core_log("options window: a new player (no Emperor.inf) starts at game speed %d%%, scroll speed %d%%",
-             kStartGameSpeed, kStartScrollSpeed);
-}
-
-// The rows' contexts: what << 8 | index.
-enum What : intptr_t { kSpeed = 1, kAutosave, kMessage, kSoundOn, kSoundVolume };
-const void *Ctx(What w, int i)
-{
-    return reinterpret_cast<const void *>(static_cast<intptr_t>(w) << 8 | i);
-}
-What WhatOf(const void *c)
-{
-    return static_cast<What>(reinterpret_cast<intptr_t>(c) >> 8);
-}
-int IndexOf(const void *c)
-{
-    return static_cast<int>(reinterpret_cast<intptr_t>(c) & 0xff);
-}
 
 volatile BYTE &Byte(DWORD address)
 {
@@ -132,23 +87,20 @@ volatile int &Int(DWORD address)
     return *Var<int>{address};
 }
 
-int Get(const void *c)
+std::string Lang(int group, int index)
 {
-    const int i = IndexOf(c);
-    switch (WhatOf(c)) {
-    case kSpeed: return i == 0 ? *kGameSpeed : *kScrollSpeed;
-    case kAutosave: return *kAutosaveOff == 0;
-    case kMessage: return 2 - std::clamp<int>(Byte(kMessages + i), 0, 2); // the row shows Full, Condensed, Off
-    case kSoundOn: return Byte(kChannels[i].on) != 0;
-    case kSoundVolume: return Int(kChannels[i].volume);
-    }
-    return 0;
+    const char *s = Function<Lang_fn>(kLangString)(group, index);
+    return s ? s : "";
 }
 
-void SetSpeed(int i, int v)
+int Speed(int which)
 {
-    v = std::clamp(v / 10 * 10, 10, 100);
-    if (i == 1) {
+    return which == 0 ? *kGameSpeed : *kScrollSpeed;
+}
+
+void SetSpeed(int which, int v)
+{
+    if (which == 1) {
         *kScrollSpeed = v;
         return;
     }
@@ -163,9 +115,54 @@ void SetSpeed(int i, int v)
     }
 }
 
+bool Autosave()
+{
+    return *kAutosaveOff == 0;
+}
+
+void SetAutosave(bool)
+{
+    Function<Void_fn>(kAutosaveToggle)(); // the core calls it only when the switch differs
+}
+
+int MessageKinds()
+{
+    return std::min(static_cast<int>(*kMessageKinds), 14) - 1; // as 0x5bb520(0)
+}
+
+std::string MessageName(int kind)
+{
+    return Lang(kTextMessageKinds, kind);
+}
+
+std::string MessageModeName(int mode)
+{
+    return Lang(kTextMessageModes, mode);
+}
+
+int Message(int kind)
+{
+    return Byte(kMessages + kind);
+}
+
+void SetMessage(int kind, int value)
+{
+    Byte(kMessages + kind) = static_cast<BYTE>(value);
+}
+
+int MessageDefault(int kind)
+{
+    return Byte(kMessageDefaults + kind);
+}
+
+bool SoundOn(int i)
+{
+    return Byte(kChannelSites[i].on) != 0;
+}
+
 void SetSoundOn(int i, bool on)
 {
-    const Channel &ch = kChannels[i];
+    const ChannelSite &ch = kChannelSites[i];
     Byte(ch.on) = on ? 1 : 0;
     if (on || ch.stream < 0) { // the Sound options' switch 0x4021b0: switching on only sets it
         return;
@@ -176,10 +173,14 @@ void SetSoundOn(int i, bool on)
     }
 }
 
-void SetSoundVolume(int i, int v)
+int Volume(int i)
 {
-    const Channel &ch = kChannels[i];
-    v = std::clamp(v, 0, 100);
+    return Int(kChannelSites[i].volume);
+}
+
+void SetVolume(int i, int v)
+{
+    const ChannelSite &ch = kChannelSites[i];
     Int(ch.volume) = v;
     if (ch.stream >= 0) { // as the Sound options' Cancel 0x4020c0 hands the volumes on
         Function<Volume2_fn>(kChannelVolume)(reinterpret_cast<void *>(kSoundManager), ch.stream, v);
@@ -187,51 +188,149 @@ void SetSoundVolume(int i, int v)
     }
 }
 
-void Set(const void *c, int v)
+const go::GameOptions kGame(&Speed, &SetSpeed, &Autosave, &SetAutosave, &MessageKinds, &MessageName,
+                            &MessageModeName, &Message, &SetMessage, &MessageDefault,
+                            -1, // every kind Emperor's Messages dialog shows can be changed
+                            kChannels, &SoundOn, &SetSoundOn, &Volume, &SetVolume);
+
+// A new player: the GOG and Steam installs bring an Emperor.inf with 60 / 10; the game's own defaults (no Emperor.inf)
+// are 90 / 60.
+const int kShipped[][2] = {{90, 60}, {60, 10}};
+
+bool HasPlayer()
 {
-    const int i = IndexOf(c);
-    switch (WhatOf(c)) {
-    case kSpeed: SetSpeed(i, v); break;
-    case kAutosave:
-        if ((*kAutosaveOff == 0) != (v != 0)) {
-            Function<Void_fn>(kAutosaveToggle)();
-        }
-        break;
-    case kMessage: Byte(kMessages + i) = static_cast<BYTE>(2 - std::clamp(v, 0, 2)); break;
-    case kSoundOn: SetSoundOn(i, v != 0); break;
-    case kSoundVolume: SetSoundVolume(i, v); break;
-    }
-    static const char *const kNames[] = {"", "speed", "autosave", "message kind", "sound switch", "sound volume"};
-    const int w = static_cast<int>(WhatOf(c));
-    core_log("options window: the game's %s %d = %d", w > 0 && w < 6 ? kNames[w] : "?", i,
-             w == kMessage ? 2 - std::clamp(v, 0, 2) : v); // messages: the game's value (0 Off, 1 Condensed, 2 Full)
+    return go::PlayerFileIn(core_files_module_folder());
 }
 
-co::Value V(What w, int i)
+// Emperor.inf has been read: the game speed, the speed it goes back to, and the scroll speed.
+void WriteSpeeds(int game, int scroll)
 {
-    return {&Get, &Set, Ctx(w, i)};
+    *kGameSpeed = game;
+    *kRememberedSpeed = game;
+    *kScrollSpeed = scroll;
 }
 
-std::string Lang(int group, int index)
+const go::NewPlayer kNewPlayer(kShipped, 2, &HasPlayer, &Speed, &WriteSpeeds);
+
+// --- Difficulty and auto defend (core/options/game_options Difficulty). The game has the code for both but no way in:
+// its difficulty dialog (screen 0x45) is never opened, and nothing writes auto_combat (the game only reads it, from
+// Emperor.inf and the saved games, and sends the army out by itself when it is on).
+// difficulty_step 0x401f80 (__cdecl, no arguments; ret): button_param 0 one level up, else one down, clamped to 0..4,
+// then the game's data for the level read again and screen_redraw set (on the mission briefing, screen 0x35, it also
+// resets the starting money: the rows are never there).
+const Site kDifficultyStep{"difficulty_step", 0x401f80, {0xa1, 0x60, 0x6f, 0x0c, 0x01, 0x85, 0xc0, 0xa1}};
+
+const Var<int> kDifficulty{0x10de2e0};       // 0..4; Emperor.inf and the saved games keep it
+const Var<int> kDifficultyLowest{0x1312620}; // the lowest difficulty of this mission (its result reads it)
+const Var<int> kButtonParam{0x10c6f60};      // the pressed button's parameter (difficulty_step reads it)
+const Var<BYTE> kAutoCombat{0x10de2e8};      // 0 / 1 (the army panel's "Auto Combat On")
+const Var<int> kInvasionA{0x1312564}, kInvasionB{0x1312780}; // not 0: enemies attacking (as Zeus's auto defend test)
+const Var<char> kGameScreen{0x10de045};
+const Var<int> kEditorMode{0x88ec38};   // 1: the map editor
+const Var<char> kScreenRedraw{0x10de036};
+constexpr int kTextDifficulty = 153;    // EmperorText.eng: 1..5 Very Easy .. Very Hard
+
+int Difficulty()
 {
-    const char *s = Function<Lang_fn>(kLangString)(group, index);
-    return s ? s : "";
+    return *kDifficulty;
+}
+int DifficultyLowest()
+{
+    return *kDifficultyLowest;
+}
+void SetDifficultyLowest(int v)
+{
+    *kDifficultyLowest = v;
+}
+int ButtonParam()
+{
+    return *kButtonParam;
+}
+void SetButtonParam(int v)
+{
+    *kButtonParam = v;
+}
+void __cdecl DifficultyStep()
+{
+    Function<Void_fn>(kDifficultyStep)();
+}
+std::string LevelName(int level)
+{
+    return Lang(kTextDifficulty, level + 1);
+}
+bool AutoCombat()
+{
+    return *kAutoCombat != 0;
+}
+// As Zeus's auto_defend_toggle 0x5692d0 (the core calls it only with no enemies attacking); the army panel drawn
+// again with or without its "Auto Combat On". Only 0 and 1, the values the game itself reads.
+void ToggleAutoCombat()
+{
+    *kAutoCombat = *kAutoCombat != 0 ? 0 : 1;
+    *kScreenRedraw = 1;
+}
+bool UnderAttack()
+{
+    return *kInvasionA != 0 || *kInvasionB != 0;
+}
+// The city being played: the city screen, or with a company (0x48) or a god (0x49) selected -- the screens where Esc
+// opens the pause menu (games/emperor/game_menu); the Options menu puts the city screen back before calling its items.
+bool InCity()
+{
+    const int s = static_cast<unsigned char>(*kGameScreen);
+    return *kEditorMode != 1 && (s == 1 || s == 0x48 || s == 0x49);
+}
+// One player: menu_bar_select 0x449590 picks the single-player menu bars (their Options menu has Autosave) when the
+// game state's +0x10 is 0 (0x4fae50); the other four bars are the multiplayer ones.
+bool SinglePlayer()
+{
+    return Var<int>{kGameState}.ptr()[4] == 0;
 }
 
-// Label and description from options_text ("game", key).
-void Texts(co::Row &r, const char *key)
+const go::Difficulty kDifficultyRows(&Difficulty, &DifficultyLowest, &SetDifficultyLowest, &ButtonParam,
+                                     &SetButtonParam, &DifficultyStep, &LevelName,
+                                     2, // Normal: screen_select_initial_mode's default
+                                     &AutoCombat, &ToggleAutoCombat, &UnderAttack, &InCity, &SinglePlayer);
+
+core::diag::Feature g_newPlayer{"new player's speeds (games/emperor/options_original)"};
+bool g_langOk = false; // lang_get_string as expected (Attach)
+
+InitialMode_fn o_InitialMode;
+
+int __cdecl InitialMode_detour()
 {
-    const ot::Text *t = ot::Find("game", key);
-    if (t) {
-        r.label = t->label ? t->label : key;
-        r.help = t->summary ? t->summary : "";
-    }
+    const int r = Original(o_InitialMode, kInitialMode)();
+    AfterInfRead();
+    return r;
 }
 
 } // namespace
 
+void AfterInfRead()
+{
+    static bool done = false;
+    if (done || !core::diag::Enabled(g_newPlayer)) {
+        return;
+    }
+    done = true;
+    core::diag::Guarded(g_newPlayer, [](void *) { go::CheckNewPlayer(kNewPlayer); }, nullptr);
+}
+
 bool Attach()
 {
+    // A new player's speeds, once Emperor.inf has been read (whether or not the rows can be).
+    if (emperor::resolution::InitialModeHooked()) {
+        emperor::resolution::SetAfterInitialMode(&AfterInfRead);
+    }
+    else if (Matches(kInitialMode)) {
+        Install(kInitialMode, &InitialMode_detour, o_InitialMode);
+    }
+    else {
+        core_log("options window: %s at 0x%lx does not match: a new player starts at the game's own speeds",
+                 kInitialMode.name, kInitialMode.address);
+    }
+    // Checked before options_entry hooks it (its detour passes the game's texts on).
+    g_langOk = Matches(kLangString);
     const Site *sites[] = {&kChannelVolume, &kMusicVolume, &kSpeechVolume, &kAmbientVolume,
                            &kChannelStop,   &kAmbientStop, &kAutosaveToggle, &kLangString};
     for (const Site *s : sites) {
@@ -241,108 +340,35 @@ bool Attach()
             return false;
         }
     }
-    g_ok = true;
-    StartDefaults();
+    go::Attach(kGame);
+    if (Matches(kDifficultyStep)) {
+        go::AttachDifficulty(kDifficultyRows);
+        core_log("options window: the game's difficulty and auto combat found");
+    }
+    else {
+        core_log("options window: %s at 0x%lx does not match; no Difficulty and Auto defend", kDifficultyStep.name,
+                 kDifficultyStep.address);
+    }
     return true;
+}
+
+void AttachForTest()
+{
+    g_langOk = true; // the test's lang_get_string is a fake at the game's address
+    go::Attach(kGame);
+    go::AttachDifficulty(kDifficultyRows);
 }
 
 void ReapplyVolumes()
 {
-    if (!g_ok) {
-        return;
-    }
-    for (int i = 0; i < 4; ++i) {
-        if (kChannels[i].stream >= 0) {
-            SetSoundVolume(i, Int(kChannels[i].volume));
-        }
-    }
-}
-
-void SpeedRows(std::vector<co::Row> &rows)
-{
-    if (!g_ok) {
-        return;
-    }
-    const char *keys[] = {"game_speed", "scroll_speed"};
-    const int defaults[] = {kStartGameSpeed, kStartScrollSpeed}; // ours, also a new player's (StartDefaults)
-    for (int i = 0; i < 2; ++i) {
-        co::Row r;
-        r.kind = co::Kind::Slider;
-        r.id = keys[i];
-        Texts(r, keys[i]);
-        r.value = V(kSpeed, i);
-        r.min = 10;
-        r.max = 100;
-        r.step = 10;
-        r.unit = "%";
-        r.defaultValue = defaults[i];
-        rows.push_back(std::move(r));
-    }
-}
-
-void AutosaveRows(std::vector<co::Row> &rows)
-{
-    if (!g_ok) {
-        return;
-    }
-    co::Row r;
-    r.kind = co::Kind::Check;
-    r.id = "autosave";
-    Texts(r, "autosave");
-    r.value = V(kAutosave, 0);
-    r.defaultValue = 1; // 0x10de15c starts at 0 (on) when the game has no Emperor.inf
-    rows.push_back(std::move(r));
-}
-
-void MessageRows(std::vector<co::Row> &rows)
-{
-    if (!g_ok) {
-        return;
-    }
-    const int kinds = std::min(static_cast<int>(*kMessageKinds), 14) - 1; // as 0x5bb520(0)
-    // The names say enough (no tooltip on them); the values have one each. Shown Full, Condensed, Off (the game's
-    // order reversed, so the arrows go from the most to the least): choice k is the game's value 2 - k.
-    const ot::Text *t = ot::Find("game", "messages");
-    const char *spells[] = {"full", "condensed", "off"};
-    for (int i = 0; i < kinds; ++i) {
-        co::Row r;
-        r.kind = co::Kind::Choice;
-        r.label = Lang(kTextMessageKinds, i);
-        for (int k = 0; k < 3; ++k) {
-            r.choices.push_back(Lang(kTextMessageModes, 2 - k));
-            const ot::ChoiceText *c = t ? ot::Choice(*t, spells[k]) : nullptr;
-            r.choiceHelp.push_back(c ? c->help : "");
-        }
-        r.value = V(kMessage, i);
-        r.defaultValue = 2 - std::clamp<int>(Byte(kMessageDefaults + i), 0, 2);
-        rows.push_back(std::move(r));
-    }
-}
-
-void SoundRows(std::vector<co::Row> &rows)
-{
-    if (!g_ok) {
-        return;
-    }
-    for (int i = 0; i < 4; ++i) {
-        co::Row r;
-        r.kind = co::Kind::CheckSlider;
-        r.id = kChannels[i].key;
-        Texts(r, kChannels[i].key);
-        r.toggle = V(kSoundOn, i);
-        r.value = V(kSoundVolume, i);
-        r.min = 0;
-        r.max = 100;
-        r.step = 5; // the Sound options' arrows
-        r.unit = "%";
-        r.defaultValue = kChannels[i].defaultVolume;
-        r.defaultToggle = 1;
-        rows.push_back(std::move(r));
-    }
+    go::ReapplyVolumes();
 }
 
 std::string GameText(int group, int index)
 {
+    if (!g_langOk) {
+        return "";
+    }
     return Lang(group, index);
 }
 

@@ -1,8 +1,8 @@
-#include "games/emperor/ambient_rate.h"
+#include "core/sound/ambient_rate.h"
 
 #include <cmath>
 
-namespace emperor {
+namespace core::sound {
 
 void AmbientRate::SetRate(double perSecond)
 {
@@ -27,8 +27,16 @@ void AmbientRate::Pass(unsigned long now, bool city, int *n)
     }
     if (!city) {
         m_windowStart = 0; // other screens: a new measurement when the city comes back
+        m_lastPass = 0;
         return;
     }
+    // The game did not run for a while (switched away, our panel open, a long load): the time between is not the
+    // passes' time. A new measurement from now; N stays as it was until it is done (without this the window spanned
+    // the pause, the passes per second came out near 0 and N fell to kMinN: a burst of ambient sounds afterwards).
+    if (m_lastPass != 0 && now - m_lastPass > kGapMs) {
+        m_windowStart = 0;
+    }
+    m_lastPass = now;
     if (m_windowStart == 0) {
         m_windowStart = now;
         m_windowPasses = 0;
@@ -47,4 +55,4 @@ void AmbientRate::Pass(unsigned long now, bool city, int *n)
     }
 }
 
-} // namespace emperor
+} // namespace core::sound

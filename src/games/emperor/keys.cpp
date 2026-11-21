@@ -1,43 +1,26 @@
 // See keys.h. Every key was found in the game's code (game_wndproc 0x4766c0, its WM_CHAR table
-// 0x477c7c / 0x477bf4, city_alt_keys 0x43cfa0, the R poll 0x5db570; Ghidra and capstone).
+// 0x477c7c / 0x477bf4, city_alt_keys 0x43cfa0, the R poll 0x5db570; Ghidra and capstone). The bindings
+// themselves are the core's (core/input/keys, shared with Zeus); this file gives it Emperor's actions.
 #include "games/emperor/keys.h"
 
-#include "core/diag/guard.h"
-#include "core/display/virtual_display.h"
+#include "core/input/keys.h"
 #include "core/log.h"
-#include "core/settings/settings.h"
-#include "core/ui/hotkey.h"
+#include "core/ui/settings_view.h"
 #include "games/emperor/game_menu.h"
 #include "games/emperor/options_text.h"
 #include "games/emperor/options_window.h"
 #include "games/emperor/site.h"
 
-#include <cstdio>
 #include <cstring>
 
 namespace emperor::keys {
 namespace {
 
+using core::input::keys::Def;
+using core::input::keys::Send;
 using core::settings::Effect;
 using core::settings::Item;
 using core::settings::Type;
-
-// How the game gets an action: the message its own key makes (game_wndproc), or ours.
-enum class Send {
-    KeyDown, // WM_KEYDOWN code (with key_ctrl_down set as `ctrl`)
-    SysKey,  // WM_SYSKEYDOWN code (an Alt combination)
-    Char,    // WM_CHAR code (the game reads the character: overlays, categories, speed, pause, Space, M)
-    Rotate,  // R: WM_KEYDOWN 'R' (the picture variant, 0xc05810) and the poll GetAsyncKeyState('R') == 0x8001
-    Options, // ours: the options window
-};
-
-struct Def {
-    core::settings::Item item; // its setting in [keys]: name, default keys (the game's own)
-    Send send;
-    unsigned code;
-    bool ctrl;
-    ActionInfo info;
-};
 
 constexpr int kNoText = 0;
 // The overlays (overlay_hotkey 0x4765f0(group, overlay)): the overlay's number is EmperorText.eng's group 14
@@ -218,245 +201,47 @@ void __cdecl BmpShot_detour(const char *file)
 const Var<char> kGameScreen{0x10de045};
 const Var<int> kCtrlDown{0x1156e00}; // key_ctrl_down: game_wndproc's record of Ctrl (Ctrl+F1, Ctrl+1, fast scrolling)
 
-core::diag::Feature g_feature{"key bindings (games/emperor/keys)"};
-
-// The keys in effect (game thread; set by the settings' callbacks), and the defaults (the game's own keys).
-core::ui::Hotkey g_keys[kCount][core::ui::kMaxKeys];
-core::ui::Hotkey g_defaults[kCount][core::ui::kMaxKeys];
-int g_index[kCount]; // the setting of each action
-bool g_eatChar = false; // the character of a key press we handled
-bool g_rotate = false;  // the rotate key was pressed: the game's next R poll says so
-
 bool CityScreen()
 {
     const char s = *kGameScreen;
     return s == 1 || s == 7 || s == 0x20 || s == 0x48 || s == 0x49;
 }
 
-unsigned HeldMods()
+bool OpenOptions()
 {
-    auto held = [](int vk) { return (GetKeyState(vk) & 0x8000) != 0; };
-    return (held(VK_CONTROL) ? core::ui::kModCtrl : 0u) | (held(VK_SHIFT) ? core::ui::kModShift : 0u) |
-           (held(VK_MENU) ? core::ui::kModAlt : 0u);
+    return emperor::options_window::Open(emperor::options_window::kPageGeneral, 0);
 }
 
-int Bound(unsigned vk, unsigned mods)
+// Emperor's editor is another program (EmperorEdit.exe): never an editor screen here. No Send::Call actions (NoCall):
+// every action, the overlays too, is a key of the game's own.
+const core::input::keys::KeysGame &Game()
 {
-    for (int a = 0; a < kCount; ++a) {
-        for (const core::ui::Hotkey &k : g_keys[a]) {
-            if (k.vk == vk && k.mods == mods) {
-                return a;
-            }
-        }
-    }
-    return -1;
-}
-
-// One of the game's own keys (an action's default): kept from the game when it belongs to no action now. A
-// character key also with Shift (the game reads 'W' as 'w').
-bool GameKey(unsigned vk, unsigned mods)
-{
-    if (mods == core::ui::kModCtrl && (vk == VK_UP || vk == VK_DOWN || vk == VK_LEFT || vk == VK_RIGHT)) {
-        return true; // the game's fast scrolling (Ctrl with the arrows): kept from the game, the keys free for players
-    }
-    for (int a = 0; a < kCount; ++a) {
-        for (const core::ui::Hotkey &k : g_defaults[a]) {
-            if (k.vk == vk && (k.mods == mods || (kDefs[a].send == Send::Char && (mods & ~core::ui::kModShift) == 0))) {
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
-// F6, F7, F8 without modifiers: the game's own display mode keys (game_wndproc: F6 and F7 screen_change_mode, F8
-// centres the window).
-bool ModeKey(unsigned vk, unsigned mods)
-{
-    return mods == 0 && (vk == VK_F6 || vk == VK_F7 || vk == VK_F8);
-}
-
-long g_fireLogs = 0;
-
-void Fire(int a)
-{
-    const Def &d = kDefs[a];
-    if (++g_fireLogs <= 40) {
-        core_log("keys: %s", d.info.key);
-    }
-    switch (d.send) {
-    case Send::KeyDown: {
-        const int was = *kCtrlDown;
-        *kCtrlDown = d.ctrl ? 1 : 0;
-        core::display::SendToGame(WM_KEYDOWN, d.code, 1);
-        *kCtrlDown = was;
-        break;
-    }
-    case Send::SysKey: core::display::SendToGame(WM_SYSKEYDOWN, d.code, 1 | (1 << 29)); break;
-    case Send::Char: core::display::SendToGame(WM_CHAR, d.code, 1); break;
-    case Send::Rotate:
-        g_rotate = true;
-        core::display::SendToGame(WM_KEYDOWN, d.code, 1);
-        break;
-    case Send::Options:
-        if (!emperor::options_window::Open(emperor::options_window::kPageGeneral, 0)) {
-            core_log("keys: the options window is not available");
-        }
-        break;
-    }
-}
-
-struct Call {
-    UINT m;
-    WPARAM w;
-    LPARAM l;
-    bool handled;
-};
-
-void TranslateNow(void *p)
-{
-    Call &c = *static_cast<Call *>(p);
-    if (c.m == WM_CHAR || c.m == WM_SYSCHAR) {
-        c.handled = g_eatChar;
-        g_eatChar = false;
-        return;
-    }
-    g_eatChar = false;
-    const unsigned vk = static_cast<unsigned>(c.w);
-    if (vk == VK_SHIFT || vk == VK_CONTROL || vk == VK_MENU) {
-        return; // the game keeps track of the modifiers itself
-    }
-    if (vk == VK_ESCAPE && c.m == WM_KEYDOWN) { // closes a window, or opens the pause menu (games/emperor/game_menu)
-        c.handled = g_eatChar = emperor::game_menu::Escape(c.l);
-        return;
-    }
-    const unsigned mods = HeldMods();
-    int a = Bound(vk, mods);
-    const bool modeKey = ModeKey(vk, mods);
-    if (!CityScreen()) {
-        if (a >= 0 && kDefs[a].send == Send::Options) {
-            Fire(a); // ours works on every screen
-            c.handled = g_eatChar = true;
-        }
-        else if (modeKey) {
-            c.handled = g_eatChar = true; // the game's display mode keys never reach it
-        }
-        return;
-    }
-    if (a >= 0) {
-        Fire(a);
-        c.handled = g_eatChar = true;
-        return;
-    }
-    if (modeKey || GameKey(vk, mods)) {
-        c.handled = g_eatChar = true;
-    }
-}
-
-bool Translate(UINT m, WPARAM w, LPARAM l)
-{
-    if (!core::diag::Enabled(g_feature)) {
-        return false;
-    }
-    Call c{m, w, l, false};
-    if (!core::diag::Guarded(g_feature, &TranslateNow, &c)) {
-        core_log("keys: the key bindings are off for the rest of the run (an error); the keys are the game's own");
-        return false;
-    }
-    return c.handled;
-}
-
-SHORT KeyState(int vk, SHORT real)
-{
-    if (vk != 'R' || !core::diag::Enabled(g_feature)) {
-        return real;
-    }
-    const bool pressed = g_rotate;
-    g_rotate = false;
-    return pressed ? static_cast<SHORT>(0x8001) : 0; // the game rotates on "pressed since the last poll" (0x8001)
-}
-
-bool Apply(int index, const char *v, bool)
-{
-    for (int a = 0; a < kCount; ++a) {
-        if (g_index[a] == index) {
-            core::ui::Hotkey k[core::ui::kMaxKeys] = {};
-            core::ui::ParseHotkeyList(v, v + std::strlen(v), k);
-            g_keys[a][0] = k[0];
-            g_keys[a][1] = k[1];
-        }
-    }
-    return true;
+    static const core::input::keys::KeysGame game(kDefs, kCount, &CityScreen, &core::input::keys::Never, kCtrlDown.ptr(),
+                                                  &OpenOptions, &emperor::game_menu::Escape, &core::input::keys::NoCall,
+                                                  false);
+    return game;
 }
 
 } // namespace
 
 void RegisterSettings()
 {
-    for (int a = 0; a < kCount; ++a) {
-        const Def &d = kDefs[a];
-        core::ui::ParseHotkeyList(d.item.defaultValue, d.item.defaultValue + std::strlen(d.item.defaultValue), g_defaults[a]);
-        g_keys[a][0] = g_defaults[a][0];
-        g_keys[a][1] = g_defaults[a][1];
-        g_index[a] = core::settings::Register(d.item);
-        core::settings::OnChange(g_index[a], &Apply);
-    }
+    core::input::keys::RegisterSettings(&Game());
 }
 
 const char *PauseText()
 {
-    static char text[128];
-    for (int a = 0; a < kCount; ++a) {
-        if (std::strcmp(kDefs[a].info.key, "pause") != 0) {
-            continue;
-        }
-        char k1[40] = "", k2[40] = "";
-        if (g_keys[a][0].vk != 0) core::ui::FormatHotkeyShown(g_keys[a][0], k1, sizeof(k1));
-        if (g_keys[a][1].vk != 0) core::ui::FormatHotkeyShown(g_keys[a][1], k2, sizeof(k2));
-        if (!k1[0] && !k2[0]) {
-            return emperor::options_text::kPausedNoKey;
-        }
-        if (k1[0] && k2[0]) {
-            std::snprintf(text, sizeof(text), emperor::options_text::kPausedTwoKeys, k1, k2);
-        }
-        else {
-            std::snprintf(text, sizeof(text), emperor::options_text::kPausedOneKey, k1[0] ? k1 : k2);
-        }
-        return text;
-    }
-    return nullptr;
+    return core::input::keys::PauseText();
 }
 
 bool IsOptionsKey(unsigned vk, unsigned mods)
 {
-    for (int a = 0; a < kCount; ++a) {
-        if (kDefs[a].send == Send::Options) {
-            for (const core::ui::Hotkey &k : g_keys[a]) {
-                if (k.vk != 0 && k.vk == vk && k.mods == mods) {
-                    return true;
-                }
-            }
-        }
-    }
-    return false;
+    return core::input::keys::IsOptionsKey(vk, mods);
 }
 
 bool Held(unsigned vk)
 {
-    if (!core::diag::Enabled(g_feature)) {
-        return (GetAsyncKeyState(static_cast<int>(vk)) & 0x8000) != 0;
-    }
-    for (int a = 0; a < kCount; ++a) {
-        if (kDefs[a].send != Send::KeyDown || kDefs[a].code != vk || kDefs[a].ctrl) {
-            continue;
-        }
-        for (const core::ui::Hotkey &k : g_keys[a]) {
-            if (k.vk != 0 && (GetAsyncKeyState(static_cast<int>(k.vk)) & 0x8000)) {
-                return true;
-            }
-        }
-    }
-    return false;
+    return core::input::keys::Held(vk);
 }
 
 bool Attach()
@@ -468,31 +253,20 @@ bool Attach()
         core_log("keys: bmp_screenshot at 0x%lx does not match; the game's own Alt+1..5 screenshot stays",
                  kBmpShot.address);
     }
-    core::display::SetKeyTranslator(&Translate);
-    core::display::SetKeyStateFilter(&KeyState);
-    core_log("keys: %d actions; on the city screens their keys become the game's own (F6-F8 never reach the game)",
-             kCount);
+    core::input::keys::Install();
+    // The panel's note for a game key chosen for one of our keys (here, not with a feature that may not attach).
+    core::ui::SetGameKeyNote(&emperor::options_text::GameKeyNote);
     return true;
 }
 
 bool TranslateForTest(UINT message, WPARAM wparam, LPARAM lparam)
 {
-    return Translate(message, wparam, lparam);
+    return core::input::keys::Translate(message, wparam, lparam);
 }
 
 SHORT KeyStateForTest(int vk, SHORT real)
 {
-    return KeyState(vk, real);
-}
-
-int ActionCount()
-{
-    return kCount;
-}
-
-const ActionInfo &Action(int i)
-{
-    return kDefs[i].info;
+    return core::input::keys::KeyState(vk, real);
 }
 
 } // namespace emperor::keys

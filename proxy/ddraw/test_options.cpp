@@ -211,7 +211,10 @@ int main()
     Check(p.FindText("Speed") && p.FindText("Speed")->font == co::Font::Gold, "selected category in gold");
     Check(p.FindText("Apply") && p.FindText("Apply")->font == co::Font::Disabled, "Apply red while nothing changed");
     Check(p.FindText("80%") != nullptr, "slider number with unit");
-    Check(p.Count("line") == 2 && p.FindText("Scrolling")->font == co::Font::Gold, "section title between two lines");
+    Check(p.FindText("80%")->font == co::Font::Accent && p.FindText("Smooth scrolling")->font == co::Font::Label &&
+              p.FindText("Game speed")->font == co::Font::Label,
+          "on the list: names in Label, a slider's number in Accent");
+    Check(p.Count("line") == 2 && p.FindText("Scrolling")->font == co::Font::Accent, "section title between two lines");
     Check(p.Find("inset", 1) && p.Find("inset", 1)->x == co::Window::kListX, "content right of the category list");
     Check(AllInside(p), "everything inside the window (General)");
 
@@ -419,6 +422,16 @@ int main()
     Check(star && star->font == co::Font::Disabled && star->x > res->x + res->w && star->y == res->y,
           "red * after a restart row's label");
     const Op *value = p.FindText("Scaled");
+    Check(value && value->font == co::Font::Value, "a choice's value in Value");
+    {
+        const Op *strip = nullptr, *right = nullptr;
+        for (const Op &o : p.ops) {
+            if (o.op == "strip" && o.y == value->y - 3) strip = &o;
+            if (o.op == "arrow" && o.extra / 10 == 1 && o.y == value->y - 5) right = &o;
+        }
+        Check(strip && right && right->x - (strip->x + strip->w) == 2,
+              "a choice's strip ends 2 px before its right arrow (as a slider's track)");
+    }
     const int resX = res->x, resY = res->y; // kept as numbers: p is drawn again below
     const int valueX = Cx(value), valueY = Cy(value), valueTop = value->y;
     w.MouseMove(valueX, valueY);
@@ -644,7 +657,7 @@ int main()
         const Op *title = q.FindText("Global hotkeys"), *action = q.FindText("Action");
         int lines = 0;
         for (const Op &o : q.ops) lines += o.op == "line";
-        Check(title && action && title->x == action->x && title->font == co::Font::Gold && lines == 1,
+        Check(title && action && title->x == action->x && title->font == co::Font::Accent && lines == 1,
               "plain section title: at the left, gold, no lines (only the columns' line)");
         const Op *ctrlF11 = q.FindText("Ctrl+F11");
         kw.MouseMove(Cx(ctrlF11), Cy(ctrlF11));
@@ -674,10 +687,19 @@ int main()
         kw.Cancel();
     }
 
-    // Hover: the frame around the button under the mouse.
+    // Hover: the button under the mouse in the darker bar (style 1), no frame; the others raised.
     w.MouseMove(Cx(p.FindText("Cancel")), Cy(p.FindText("Cancel")));
     p = Draw(w);
-    Check(p.Count("frame") == 1, "frame around the button under the mouse");
+    {
+        const Op *cancel = p.FindText("Cancel");
+        int dark = 0, cancelStyle = -1;
+        for (const Op &o : p.ops) {
+            if (o.op != "bar" || o.y != co::Window::kButtonY) continue;
+            dark += o.extra == 1;
+            if (o.x <= cancel->x && cancel->x < o.x + o.w) cancelStyle = o.extra;
+        }
+        Check(p.Count("frame") == 0 && cancelStyle == 1 && dark == 1, "the button under the mouse: the darker bar, no frame");
+    }
 
     // One value that takes effect after a restart (the row itself does not): the red line only on that value's
     // tooltip, no "*" after the name; '\n' in a tooltip starts a new line.

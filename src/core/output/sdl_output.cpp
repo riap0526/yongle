@@ -615,7 +615,7 @@ void RecordInterval()
 
 // Sets the vsync interval: logs what was asked, whether SDL took it (an interval the device does not offer falls back
 // to 1), and then, once, the frames per second actually presented over the next seconds while frames keep coming:
-// Direct3D 9 in a window may accept 4 and still present every refresh, so cap60 would not cap).
+// Direct3D 9 in a window may accept 4 and still present every refresh, so cap60 would not cap.
 std::atomic<long> g_measureFrames{-1}; // frames presented since the measurement started; -1: not measuring
 DWORD g_measureStart = 0;                 // output thread only
 std::atomic<bool> g_measureArmed{false};  // MeasureFromNow was called: measurements are made

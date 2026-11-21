@@ -170,7 +170,7 @@ void Edges()
 }
 
 // The east and south edges (camera.h SetEdgeOffsets / KeepEdges / SnapEdges):
-// 5.6): each limit is the game's limit + the offset: negative stops before it (on the column / row pair before),
+// each limit is the game's limit + the offset: negative stops before it (on the column / row pair before),
 // positive goes past it (a remainder on the limit's column / row pair); a view at the game's limit is put on the line
 // after a jump (someone else moved it there), not after the camera's own movement.
 void EastEdge()

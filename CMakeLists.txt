@@ -121,10 +121,24 @@ set(CORE_SOURCES
     src/core/scroll/drag_system.cpp
     src/core/scroll/picture.cpp
     src/core/scroll/zoom.cpp
+    src/core/sound/master_volume.cpp
+    src/core/sound/sound.cpp
+    src/core/sound/ambient_rate.cpp
+    src/core/sound/layer1.cpp
     src/core/ui/panel.cpp
     src/core/ui/hotkey.cpp
+    src/core/input/keys.cpp
     src/core/options/window.cpp
     src/core/options/menu.cpp
+    src/core/options/pause_menu.cpp
+    src/core/options/menu_text.cpp
+    src/core/options/option_text.cpp
+    src/core/options/game_options.cpp
+    src/core/options/display_dialog.cpp
+    src/core/options/setting_rows.cpp
+    src/core/options/hotkeys_page.cpp
+    src/core/options/options_host.cpp
+    src/core/ui/scroll_repeat.cpp
     src/core/ui/settings_view.cpp
     src/core/ui/perf_view.cpp
     src/core/settings/settings.cpp
@@ -215,6 +229,41 @@ target_include_directories(test_camera PRIVATE src)
 target_link_options(test_camera PRIVATE -static)
 target_link_libraries(test_camera PRIVATE augustus_core winmm)
 
+# Offline test of core/sound/ambient_rate: the ambient sounds' N for a rate per second (written for Yongle; in the core
+# since Pericles uses it too).
+add_executable(test_ambient proxy/ddraw/test_ambient.cpp src/core/sound/ambient_rate.cpp)
+target_include_directories(test_ambient PRIVATE src)
+target_link_options(test_ambient PRIVATE -static)
+
+# Offline test of core/sound: the master volume and the pause while switched away on fake Miles functions and a fake
+# game.
+add_executable(test_sound proxy/ddraw/test_sound.cpp src/core/sound/sound.cpp src/core/sound/master_volume.cpp
+    src/core/sound/ambient_rate.cpp src/core/sound/layer1.cpp src/core/config.cpp src/core/log.cpp
+    src/core/diag/guard.cpp src/core/platform/files.cpp src/core/hook/hook.cpp
+    src/core/settings/settings.cpp src/core/settings/ini_text.cpp src/core/ui/hotkey.cpp src/core/game.cpp)
+target_include_directories(test_sound PRIVATE src)
+target_link_options(test_sound PRIVATE -static)
+target_link_libraries(test_sound PRIVATE minhook)
+
+# Offline test of core/input/keys: the key bindings on a fake game and a fake system (the game's own posted F6/F7, the
+# options and Esc callbacks, Alt characters, the editor's actions, a fault).
+add_executable(test_keys proxy/ddraw/test_keys.cpp src/core/input/keys.cpp src/core/config.cpp src/core/log.cpp
+    src/core/diag/guard.cpp src/core/platform/files.cpp src/core/hook/hook.cpp src/core/settings/settings.cpp
+    src/core/settings/ini_text.cpp src/core/ui/hotkey.cpp src/core/game.cpp)
+target_include_directories(test_keys PRIVATE src)
+target_link_options(test_keys PRIVATE -static)
+target_link_libraries(test_keys PRIVATE minhook)
+
+# Offline test of core/sound/layer1: the layer-1 ambient sounds (the file's lines, the flight, the mix, the player on
+# fake Miles functions and a fake game).
+add_executable(test_layer1 proxy/ddraw/test_layer1.cpp src/core/sound/layer1.cpp src/core/sound/sound.cpp
+    src/core/sound/master_volume.cpp src/core/sound/ambient_rate.cpp src/core/config.cpp src/core/log.cpp
+    src/core/diag/guard.cpp src/core/platform/files.cpp src/core/hook/hook.cpp src/core/settings/settings.cpp
+    src/core/settings/ini_text.cpp src/core/ui/hotkey.cpp src/core/game.cpp)
+target_include_directories(test_layer1 PRIVATE src)
+target_link_options(test_layer1 PRIVATE -static)
+target_link_libraries(test_layer1 PRIVATE minhook)
+
 # Offline test of core/scroll/drag: middle-button drag scrolling on a fake game and a fake system
 # (shared by both games).
 add_executable(test_drag proxy/ddraw/test_drag.cpp src/core/scroll/drag.cpp src/core/scroll/camera.cpp
@@ -263,6 +312,12 @@ target_link_options(test_common_sizes PRIVATE -static)
 add_executable(test_framing proxy/ddraw/test_framing.cpp src/core/display/framing.cpp)
 target_include_directories(test_framing PRIVATE src)
 target_link_options(test_framing PRIVATE -static)
+
+# Offline test of core/display/tile_layout: the shared tile walkers give the tiles, places and order of the copies they
+# replaced (Yongle's options window painter, core/display/framed_screens).
+add_executable(test_tile_layout proxy/ddraw/test_tile_layout.cpp src/core/display/framing.cpp)
+target_include_directories(test_tile_layout PRIVATE src)
+target_link_options(test_tile_layout PRIVATE -static)
 
 # Offline test of core/display/moved_rect (a rectangle shown elsewhere; guard pages around every buffer).
 add_executable(test_moved_rect proxy/ddraw/test_moved_rect.cpp src/core/display/moved_rect.cpp)
@@ -383,6 +438,37 @@ add_executable(test_notice proxy/ddraw/test_notice.cpp src/core/ui/notice.cpp sr
 target_include_directories(test_notice PRIVATE src)
 target_link_options(test_notice PRIVATE -static)
 
+# Offline test of core/options/pause_menu: the pause menu on a fake game layer (input, drawing, the pending item,
+# confirmations, a fault in the game layer's callback).
+add_executable(test_pause_menu proxy/ddraw/test_pause_menu.cpp src/core/options/pause_menu.cpp
+    src/core/options/menu.cpp src/core/diag/guard.cpp src/core/log.cpp)
+target_include_directories(test_pause_menu PRIVATE src)
+target_link_options(test_pause_menu PRIVATE -static)
+
+# Offline test of core/options/options_host: the options window in a game on a fake game layer (opening, drawing
+# where allowed, Hotkeys over the window, Apply after it, the options key, a right click, Options from the pause menu,
+# an error while drawing).
+add_executable(test_options_host proxy/ddraw/test_options_host.cpp src/core/options/options_host.cpp
+    src/core/options/window.cpp src/core/options/menu.cpp src/core/options/pause_menu.cpp src/core/options/menu_text.cpp
+    src/core/ui/hotkey.cpp src/core/diag/guard.cpp src/core/log.cpp)
+target_include_directories(test_options_host PRIVATE src)
+target_link_options(test_options_host PRIVATE -static)
+
+# Offline test of core/options/hotkeys_page: the Hotkeys window's page from a fake action table and the debug panel's
+# note on a key in use.
+add_executable(test_hotkeys_page proxy/ddraw/test_hotkeys_page.cpp src/core/options/hotkeys_page.cpp
+    src/core/options/setting_rows.cpp src/core/options/option_text.cpp src/core/options/menu_text.cpp
+    src/core/input/keys.cpp src/core/settings/settings.cpp src/core/settings/ini_text.cpp src/core/ui/hotkey.cpp
+    src/core/diag/guard.cpp src/core/log.cpp src/core/platform/files.cpp src/core/game.cpp)
+target_include_directories(test_hotkeys_page PRIVATE src)
+target_link_options(test_hotkeys_page PRIVATE -static)
+
+# Offline test of core/ui/scroll_repeat: held scroll arrows at 20 lines a second on a fake of the games' buttons
+# function (a click one line, two scroll bars in a pass, types put back).
+add_executable(test_scroll_repeat proxy/ddraw/test_scroll_repeat.cpp src/core/ui/scroll_repeat.cpp)
+target_include_directories(test_scroll_repeat PRIVATE src)
+target_link_options(test_scroll_repeat PRIVATE -static)
+
 # The chosen game's own offline tests (game_add_tests in its game.cmake).
 game_add_tests()
 
@@ -419,10 +505,23 @@ add_executable(test_options proxy/ddraw/test_options.cpp src/core/options/window
 target_include_directories(test_options PRIVATE src)
 target_link_options(test_options PRIVATE -static)
 
-# Timer probe: timeGetTime/Sleep granularity and an emulation of Emperor's 50 ms present gate.
-# A development tool, not in the public source export.
-if(FALSE) # the probe's source is a local development tool, not in this repository
-    add_executable(timer_probe timer_probe.cpp)
-    target_link_options(timer_probe PRIVATE -static)
-    target_link_libraries(timer_probe PRIVATE winmm)
-endif()
+# Offline test of core/options/game_options: the game's own options as rows on a fake game (ranges, defaults, the
+# message kinds, Apply writing only what changed, the volumes set again) and a new player's starting speeds.
+add_executable(test_game_options proxy/ddraw/test_game_options.cpp src/core/options/game_options.cpp
+    src/core/options/option_text.cpp src/core/options/menu_text.cpp src/core/options/window.cpp
+    src/core/options/menu.cpp src/core/ui/hotkey.cpp src/core/ui/notice.cpp src/core/ui/notice_text.cpp
+    src/core/diag/guard.cpp src/core/log.cpp src/core/platform/files.cpp src/core/game.cpp)
+target_include_directories(test_game_options PRIVATE src)
+target_link_options(test_game_options PRIVATE -static)
+
+# Offline test of core/options/display_dialog: the Display options dialog's scale steps and status lines, and on
+# a fake game layer what it draws, what its buttons set and what Cancel or closing it puts back.
+add_executable(test_display_dialog proxy/ddraw/test_display_dialog.cpp src/core/options/display_dialog.cpp
+    src/core/display/logical_size.cpp src/core/config.cpp src/core/log.cpp src/core/diag/guard.cpp
+    src/core/platform/files.cpp src/core/settings/settings.cpp src/core/settings/ini_text.cpp src/core/ui/hotkey.cpp
+    src/core/game.cpp)
+target_include_directories(test_display_dialog PRIVATE src)
+target_link_options(test_display_dialog PRIVATE -static)
+
+# Targets of local development tools, kept out of the public source: built only where the file exists.
+include(${CMAKE_CURRENT_SOURCE_DIR}/local_targets.cmake OPTIONAL)

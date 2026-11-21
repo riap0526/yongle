@@ -1,4 +1,4 @@
-// Offline test of core/capture/city_picture (not the game): the city and minimap pictures on a fake game
+// Offline test of core/capture/city_picture (not the game): the city and minimap pictures on a fake game.
 // The fake game keeps its variables in our memory, draws a strip by filling the
 // buffer with each row's picture row number, and records the order of its callbacks. Checked: the four refusals
 // (off, the panel open, not a city screen, still saving) and "not available" before Install; a request waits while the

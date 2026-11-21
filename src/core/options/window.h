@@ -16,12 +16,21 @@ namespace core::options {
 
 constexpr int kWidth = 640, kHeight = 480;
 
+// What a text is for and what it sits on: a game whose fonts are made for a light or a dark ground (Zeus's) gives
+// each its own font; a game with one set (Emperor's white and gold on brown) gives Label the Normal font and Accent
+// and Value the Gold one.
 enum class Font {
-    Normal,   // white
-    Gold,     // the selected tab and category, values, section titles
+    Normal,   // on a light ground: text buttons, the text of the "keep this setting?" box
+    Gold,     // emphasis on a light ground: the selected tab and category, the "keep this setting?" title
     Title,    // the window's title
     Small,    // tooltips
-    Disabled, // red, the same size as Normal (a button that does nothing now)
+    Disabled, // red, the same size as Normal: a button that does nothing now, the "*" of a restart row and the
+              // tooltip's restart line
+    MenuItem,      // a menu's button text (core/options/menu MenuLook; Yongle: Normal)
+    MenuItemHover, // ... of the button under the mouse
+    Label,    // on the dark ground of the list: the rows' names
+    Accent,   // emphasis on the dark ground: section titles, a slider's number, the line under Key rows
+    Value,    // in a strip: a choice's value, a key
 };
 
 enum class Arrow { Left, Right, Up, Down };

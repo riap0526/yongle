@@ -17,18 +17,25 @@
 #include "core/ddraw/surface_memory.h"
 #include "core/diag/autorun.h"
 #include "core/diag/guard.h"
+#include "core/game.h"
+#include "core/input/keys.h"
 #include "core/display/city_zoom.h"
 #include "core/display/logical_size.h"
 #include "core/display/map_screen.h"
 #include "core/ui/notice.h"
 #include "core/log.h"
+#include "core/options/game_options.h"
+#include "core/options/window.h"
 #include "core/settings/settings.h"
 #include "games/emperor/china_map.h"
 #include "games/emperor/keys.h"
-#include "games/emperor/display_options.h"
 #include "games/emperor/emperor.h"
 #include "games/emperor/fullscreen.h"
 #include "games/emperor/notice.h"
+#include "games/emperor/options_entry.h"
+#include "games/emperor/options_original.h"
+#include "games/emperor/options_text.h"
+#include "games/emperor/options_window.h"
 #include "games/emperor/resolution.h"
 #include "games/emperor/scroll.h"
 #include "games/emperor/site.h"
@@ -41,11 +48,13 @@
 #include <windows.h>
 #include <mmsystem.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <initializer_list>
+#include <string>
 #include <vector>
 
 // ---------------------------------------------------------------------------------------------
@@ -2049,32 +2058,6 @@ void FallingBehind()
           "fast again: no longer behind, the ticks dropped meanwhile logged");
 }
 
-void DisplayOptions()
-{
-    namespace o = emperor::display_options;
-    Check(o::MaxScale(2560, 1440, 1024, 768) == 185, "2560x1440: the largest scale is 185% (1383x778)");
-    Check(o::MaxScale(1920, 1080, 1024, 768) == 140, "1920x1080: the largest scale is 140% (1371x771)");
-    Check(o::MaxScale(1024, 768, 1024, 768) == 100, "1024x768: only 100%");
-    Check(o::MaxScale(3840, 2160, 1024, 768) == 250, "3840x2160: up to 250% (1536x864, offline)");
-    Check(o::StepScale(250, 1, 3840, 2160, 1024, 768) == 250, "+ at 250% on 4K stays");
-    Check(o::StepScale(0, 1, 2560, 1440, 1024, 768) == 135, "+ from auto (133% at 1440p) -> 135%");
-    Check(o::StepScale(0, -1, 2560, 1440, 1024, 768) == 130, "- from auto -> 130%");
-    Check(o::StepScale(0, 1, 3840, 2160, 1024, 768) == 205, "+ from auto (200% at 4K) -> 205%");
-    Check(o::StepScale(125, 1, 2560, 1440, 1024, 768) == 130, "+ from 125% -> 130%");
-    Check(o::StepScale(185, 1, 2560, 1440, 1024, 768) == 185, "+ at the largest scale stays");
-    Check(o::StepScale(100, -1, 2560, 1440, 1024, 768) == 100, "- at 100% stays");
-    Check(o::StepScale(250, -1, 2560, 1440, 1024, 768) == 180, "- from a scale too large: from the one in effect");
-    char a[48], b[48];
-    o::StatusLines(2048, 1152, true, 125, 125, a, sizeof(a), b, sizeof(b));
-    Check(std::strcmp(a, "Resolution: 2048 x 1152") == 0 && std::strcmp(b, "Display scale: 125%") == 0,
-          "status: scaled 125%");
-    o::StatusLines(1896, 1066, true, 0, 135, a, sizeof(a), b, sizeof(b));
-    Check(std::strcmp(b, "Display scale: Auto (135%)") == 0, "status: auto");
-    o::StatusLines(1024, 768, false, 125, 125, a, sizeof(a), b, sizeof(b));
-    Check(std::strcmp(a, "Resolution: 1024 x 768") == 0 && std::strcmp(b, "Display scale: off") == 0,
-          "status: a fixed size");
-}
-
 // The key bindings (games/emperor/keys): on a city screen a bound key becomes the game's own key (its character eaten);
 // a game key bound to nothing is kept from the game; a Ctrl action sends key_ctrl_down 1 and puts it back; R's poll
 // says "pressed" once; other screens get the keys as they are, F7 never reaches the game.
@@ -2252,6 +2235,194 @@ void NoticeBoxes()
           "afterwards: our caption line, the game not called");
 }
 
+// --- The difficulty and auto defend (games/emperor/options_original and options_entry on core/options/game_options).
+// difficulty_step 0x401f80 is __cdecl with no arguments, and so is the fake; lang_get_string 0x5278b0 is
+// __cdecl(group, index).
+constexpr DWORD aDifficultyE = 0x10de2e0, aDifficultyLowestE = 0x1312620, aButtonParamE = 0x10c6f60,
+                aAutoCombatE = 0x10de2e8, aInvasionAE = 0x1312564, aInvasionBE = 0x1312780, aGameScreenE = 0x10de045,
+                aEditorE = 0x88ec38, aMultiplayerE = 0x10bc348 + 0x10, aRedrawE = 0x10de036;
+std::vector<int> g_difficultyStepsE; // button_param at each call
+void __cdecl FakeDifficultyStepE() // as 0x401f80: button_param 0 up, else down, clamped to 0..4
+{
+    const int p = At<int>(aButtonParamE);
+    g_difficultyStepsE.push_back(p);
+    At<int>(aDifficultyE) = std::max(0, std::min(4, At<int>(aDifficultyE) + (p == 0 ? 1 : -1)));
+}
+const char *__cdecl FakeLangE(int group, int index)
+{
+    static char buf[32];
+    std::snprintf(buf, sizeof(buf), "%d,%d", group, index);
+    return buf;
+}
+
+void DifficultyOptions()
+{
+    namespace go = core::options::game_options;
+    Thunk(0x401f80, reinterpret_cast<void *>(&FakeDifficultyStepE));
+    Thunk(0x5278b0, reinterpret_cast<void *>(&FakeLangE));
+    At<int>(aDifficultyE) = 2;
+    At<int>(aDifficultyLowestE) = 2;
+    At<int>(aButtonParamE) = 9;
+    At<unsigned char>(aAutoCombatE) = 0;
+    At<int>(aInvasionAE) = 0;
+    At<int>(aInvasionBE) = 0;
+    At<char>(aGameScreenE) = 1;
+    At<int>(aEditorE) = 0;
+    At<int>(aMultiplayerE) = 0;
+    emperor::options_text::Register(); // Yongle's own texts (options_window's Attach does it in the DLL)
+    emperor::options_original::AttachForTest();
+
+    std::vector<core::options::Row> rows;
+    go::DifficultyRows(rows);
+    Check(rows.size() == 2 && rows[0].choices.size() == 5 && rows[0].choices[0] == "153,1" &&
+              rows[0].choices[4] == "153,5" && rows[0].defaultValue == 2 && rows[1].id == "auto_defend",
+          "difficulty: in the city, single player: the game's five levels (group 153), default Normal; auto defend");
+    Check(rows[1].help.find("Auto Combat On") != std::string::npos &&
+              rows[1].help.find("before you remove Yongle") != std::string::npos,
+          "difficulty: Yongle's auto defend text says the army panel's words and to switch it off first");
+    // Not shown: multiplayer, the editor, the other screens; shown with a company or a god selected.
+    struct Case {
+        int screen, editor, multi;
+        bool shown;
+        const char *what;
+    } cases[] = {
+        {1, 0, 1, false, "difficulty: multiplayer: none"},
+        {1, 1, 0, false, "difficulty: the map editor: none"},
+        {0x00, 0, 0, false, "difficulty: the main menu: none"},
+        {0x35, 0, 0, false, "difficulty: the briefing: none"},
+        {0x14, 0, 0, false, "difficulty: the China map: none"},
+        {0x48, 0, 0, true, "difficulty: a company selected: shown"},
+        {0x49, 0, 0, true, "difficulty: a god selected: shown"},
+    };
+    for (const Case &c : cases) {
+        At<char>(aGameScreenE) = static_cast<char>(c.screen);
+        At<int>(aEditorE) = c.editor;
+        At<int>(aMultiplayerE) = c.multi;
+        std::vector<core::options::Row> r;
+        go::DifficultyRows(r);
+        Check(r.empty() != c.shown, c.what);
+    }
+    At<char>(aGameScreenE) = 1;
+    At<int>(aEditorE) = 0;
+    At<int>(aMultiplayerE) = 0;
+
+    const core::options::Row &level = rows[0], &defend = rows[1];
+    level.value.set(level.value.ctx, 0);
+    Check(At<int>(aDifficultyE) == 0 && g_difficultyStepsE.size() == 2 && g_difficultyStepsE[1] == 1 &&
+              At<int>(aButtonParamE) == 9 && At<int>(aDifficultyLowestE) == 0,
+          "difficulty: Normal -> Very Easy: two steps down, button_param back, lowest Very Easy");
+    g_difficultyStepsE.clear();
+    level.value.set(level.value.ctx, 4);
+    Check(At<int>(aDifficultyE) == 4 && g_difficultyStepsE.size() == 4 && At<int>(aDifficultyLowestE) == 0,
+          "difficulty: up to Very Hard: four steps, the lowest stays Very Easy");
+
+    // Auto Combat: our own switch (0 / 1, the army panel drawn again); not while enemies attack.
+    At<char>(aRedrawE) = 0;
+    defend.value.set(defend.value.ctx, 1);
+    Check(At<unsigned char>(aAutoCombatE) == 1 && At<char>(aRedrawE) == 1, "auto combat: on (1), screen redrawn");
+    At<int>(aInvasionAE) = 2;
+    defend.value.set(defend.value.ctx, 0);
+    Check(At<unsigned char>(aAutoCombatE) == 1 && LogContains("enemies are attacking"),
+          "auto combat: while enemies attack: stays on (logged)");
+    At<int>(aInvasionAE) = 0;
+    defend.value.set(defend.value.ctx, 0);
+    Check(At<unsigned char>(aAutoCombatE) == 0, "auto combat: off (0) after the attack");
+
+    // The single-player Options menu: General, Video, Audio, Hotkeys, Difficulty, Autosave, Auto defend; Autosave and
+    // Auto defend keep the drop-down open (+8).
+    const core::ui::game_menu_layout::MenuItem *items = nullptr;
+    const int n = emperor::options_entry::SingleItemsForTest(&items);
+    const short want[] = {20, 21, 22, 23, 25, 24, 26};
+    bool order = n == 7;
+    for (int k = 0; order && k < 7; ++k) {
+        order = items[k].text == want[k] && items[k].y == 20 * k;
+    }
+    Check(order && items[5].flags == 1 && items[6].flags == 1 && items[4].flags == 0 &&
+              reinterpret_cast<DWORD>(items[5].handler) == 0x449460,
+          "menu: General, Video, Audio, Hotkeys, Difficulty, Autosave (the game's), Auto defend; 20 px apart");
+    Check(std::strcmp(emperor::options_entry::MenuTextForTest(25, &FakeLangE), "Difficulty") == 0 &&
+              std::strcmp(emperor::options_entry::MenuTextForTest(26, &FakeLangE), "Auto Defend - OFF") == 0,
+          "menu: the texts Difficulty and Auto Defend - OFF");
+    At<int>(0xa59a40) = 0; // dropdown_input clears it before the item
+    items[6].handler();
+    Check(At<unsigned char>(aAutoCombatE) == 1 && At<int>(0xa59a40) == 1 &&
+              std::strcmp(emperor::options_entry::MenuTextForTest(26, &FakeLangE), "Auto Defend - ON") == 0,
+          "menu: Auto Defend switches it on, keeps the drop-down open (0xa59a40), the item says ON");
+    At<int>(aInvasionBE) = 1;
+    At<int>(0xa59a40) = 0;
+    items[6].handler();
+    Check(At<unsigned char>(aAutoCombatE) == 1 && At<int>(0xa59a40) == 0,
+          "menu: ... not while enemies attack (the drop-down closes)");
+    At<int>(aInvasionBE) = 0;
+    items[4].handler(); // the window is not attached in this test: nothing, logged
+    Check(LogContains("the Options menu's Difficulty does nothing"),
+          "menu: Difficulty without the window: nothing, logged");
+}
+
+// --- The Hotkeys window's page (built by the core from Emperor's actions). The overlays' names are the game's texts
+// (FakeLangE: "group,index"); our five keys first in Global hotkeys. KEY_PAGE_DUMP=1 prints every row (to compare
+// the page before and after a change of how it is built).
+const char *__cdecl FakeLangKeysE(int group, int index) // "See ..." as the game's group 14; group 59 without it
+{
+    static char buf[32];
+    std::snprintf(buf, sizeof(buf), group == 14 ? "See name %d,%d" : "name %d,%d", group, index);
+    return buf;
+}
+
+void KeyPage()
+{
+    namespace cs = core::settings;
+    using cs::Effect;
+    using cs::Item;
+    using cs::Type;
+    static const core_game_info kYongle = {"emperor", "Yongle", "dev", L"Yongle", L"emperor_engine.ini",
+                                           "emperor_engine.ini", 1024, 768, nullptr, nullptr, nullptr, nullptr,
+                                           nullptr};
+    core_game_set(&kYongle);
+    const struct {
+        const char *section, *key, *label;
+    } ours[] = {{"ui", "panel_key", "Debug panel: key"},
+                {"debug", "screenshot_key", "Screenshot: key"},
+                {"debug", "report_key", "Report screenshot: key"},
+                {"ui", "city_picture_key", "Full city screenshot: key"},
+                {"ui", "minimap_picture_key", "Minimap screenshot: key"}};
+    for (const auto &o : ours) { // stand-ins for the core's (core/config) and city_picture's own
+        Item it{};
+        it.section = o.section;
+        it.key = o.key;
+        it.label = o.label;
+        it.help = "";
+        it.type = Type::Hotkey;
+        it.defaultValue = "";
+        it.effect = Effect::Live;
+        it.inPanel = it.editable = true;
+        cs::Register(it);
+    }
+    emperor::keys::RegisterSettings();
+    Thunk(0x5278b0, reinterpret_cast<void *>(&FakeLangKeysE));
+    emperor::options_text::Register();
+    emperor::options_original::AttachForTest();
+    const auto pages = emperor::options_window::KeyPagesForTest();
+    Check(pages.size() == 1 && pages[0].categories.size() == 1, "key page: one page, one category");
+    if (pages.size() != 1 || pages[0].categories.size() != 1) {
+        return;
+    }
+    const auto &rows = pages[0].categories[0].rows;
+    const bool dump = std::getenv("KEY_PAGE_DUMP") != nullptr;
+    int headers = 0, keys = 0;
+    for (const core::options::Row &r : rows) {
+        headers += r.kind == core::options::Kind::Header ? 1 : 0;
+        keys += r.kind == core::options::Kind::Key ? 1 : 0;
+        if (dump) {
+            std::printf("ROW %d|%s|%s|%s|%s|%s\n", static_cast<int>(r.kind), r.id.c_str(), r.label.c_str(),
+                        r.help.c_str(), r.rightLabel.c_str(), r.rightLabel2.c_str());
+        }
+    }
+    Check(headers == 7 && rows[0].kind == core::options::Kind::Columns && rows[1].label == "Arrow keys",
+          "key page: the column titles, then seven sections from Arrow keys");
+    Check(keys == core::input::keys::ActionCount() + 5, "key page: every action and our five keys");
+}
+
 struct Scenario {
     const char *name;
     void (*run)();
@@ -2269,10 +2440,12 @@ const Scenario kScenarios[] = {
     {"draw_only", &DrawOnly},       {"fixed_window", &FixedWindow},
     {"fixed_original", &FixedOriginal}, {"sidebar_edges", &SidebarEdges},
     {"unknown_class", &UnknownClass}, {"ui_fixes", &UiFixes},
-    {"china_map", &ChinaMap},   {"display_options", &DisplayOptions},
+    {"china_map", &ChinaMap},
     {"falling_behind", &FallingBehind}, {"zoom_conversions", &ZoomConversions},
     {"key_bindings", &KeyBindings},
     {"notice_boxes", &NoticeBoxes},
+    {"difficulty_options", &DifficultyOptions},
+    {"key_page", &KeyPage},
 };
 
 } // namespace

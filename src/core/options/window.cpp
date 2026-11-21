@@ -12,13 +12,14 @@ constexpr int kTile = 16;
 constexpr int kVkEscape = 0x1b, kVkReturn = 0x0d, kVkBackspace = 0x08;
 constexpr int kBottomW[] = {160, 96, 80, 96}; // Restore defaults, Cancel, OK, Apply
 constexpr int kBottomGap = 8, kHotkeysW = 112;
-constexpr int kChoiceW = 200, kArrow = 24;
+constexpr int kChoiceW = 196, kArrow = 24; // the value's strip (9 tiles) 2 px from each arrow, as a slider's track
 constexpr int kTipW = 230, kTipLine = 14;
 // The tooltip beside the cursor, where Emperor places the game's own tooltips (its tooltip_draw): 20 to the right
 // and 40 below the cursor (its picture is about 32 high); left of it, or above it, when it would leave the window.
 constexpr int kTipDx = 20, kTipDy = 40, kTipAbove = 8;
 constexpr int kLabelSlack = 16; // a name is hit this much past its end (its "*")
-constexpr int kTipRedLine = 16, kTipRedW = 320; // the restart line's height (the red font is the normal size)
+constexpr int kTipRedLine = 16, kTipRedW = 340; // the restart line's height (the red font is the normal size);
+                                                  // its width: one line in the widest font (Zeus's, 334 px)
 constexpr int kKeyW = 144, kKeyGap = 8; // a key's strip (9 tiles); the first key, then the alternative at the right
 constexpr int kNoteH = 22;   // the line under Key rows: the last wait's result
 constexpr unsigned kConfirmMs = 15000;
@@ -846,11 +847,8 @@ std::string Window::TipText()
 void Window::TextButton(Painter &p, const char *label, int x, int y, int w, int style, Font f, bool hover)
 {
     int bw = std::max(2, w / kTile) * kTile;
-    p.ButtonBar(x, y, bw, style);
+    p.ButtonBar(x, y, bw, hover ? 1 : style); // under the mouse: the game's darker bar (as the pause menu)
     p.Text(label, x + (bw - p.TextWidth(label, f)) / 2, y + 5, f);
-    if (hover) {
-        p.Frame(x, y, bw, 25);
-    }
 }
 
 void Window::Tabs(Painter &p)
@@ -904,7 +902,7 @@ void Window::Rows(Painter &p)
         const Row &r = Current().rows[pl.row];
         const DraftValue &d = DraftOf(pl.row);
         const char *label = r.label.c_str();
-        int tw = p.TextWidth(label, r.kind == Kind::Header ? Font::Gold : Font::Normal);
+        int tw = p.TextWidth(label, r.kind == Kind::Header ? Font::Accent : Font::Label);
         labelWidths_[pl.row] = tw;
         int y = pl.y;
         if (r.restart) { // the red "*" after the label (where each kind draws its label)
@@ -914,24 +912,24 @@ void Window::Rows(Painter &p)
         }
         switch (r.kind) {
         case Kind::Columns: {
-            p.Text(label, left, y, Font::Gold);
+            p.Text(label, left, y, Font::Accent);
             const char *titles[2] = {r.rightLabel.c_str(), r.rightLabel2.c_str()};
             for (int col = 0; col < 2; ++col) {
                 const int sx = right - (2 - col) * kKeyW - (col == 0 ? kKeyGap : 0);
-                p.Text(titles[col], sx + (kKeyW - p.TextWidth(titles[col], Font::Gold)) / 2, y, Font::Gold);
+                p.Text(titles[col], sx + (kKeyW - p.TextWidth(titles[col], Font::Accent)) / 2, y, Font::Accent);
             }
             p.Line(left, y + 18, right - left);
             break;
         }
         case Kind::Key: {
-            p.Text(label, left, y + 3, Font::Normal);
+            p.Text(label, left, y + 3, Font::Label);
             const int sw = kKeyW / kTile * kTile;
             for (int col = 0; col < 2; ++col) {
                 const int sx = right - (2 - col) * kKeyW - (col == 0 ? kKeyGap : 0);
                 p.Strip(sx, y, sw);
                 const bool waiting = capture_ == pl.row && captureCol_ == col;
                 const std::string v = waiting ? texts_.pressKey : KeyText(col == 0 ? d.value : d.toggle);
-                const Font f = waiting ? Font::Normal : Font::Gold;
+                const Font f = waiting ? Font::Normal : Font::Value;
                 p.Text(v.c_str(), sx + (sw - p.TextWidth(v.c_str(), f)) / 2, y + 3, f);
                 if (waiting || hover_ == Target{col == 0 ? Hit::KeyStrip : Hit::KeyStrip2, pl.row}) {
                     p.Frame(sx, y - 2, sw, 24);
@@ -941,21 +939,21 @@ void Window::Rows(Painter &p)
         }
         case Kind::Header: {
             if (look_.plainHeaders) { // no lines (a line between sections was too crowded in testing)
-                p.Text(label, left, y + 4, Font::Gold);
+                p.Text(label, left, y + 4, Font::Accent);
                 break;
             }
             int mid = (left + right) / 2, a = mid - tw / 2 - 10, b = mid + tw / 2 + 10;
             p.Line(left, y + 7, a - left);
-            p.Text(label, mid - tw / 2, y, Font::Gold);
+            p.Text(label, mid - tw / 2, y, Font::Accent);
             p.Line(b, y + 7, right - b);
             break;
         }
         case Kind::Check:
             p.Check(left, y, d.value != 0);
-            p.Text(label, left + 24, y + 1, Font::Normal);
+            p.Text(label, left + 24, y + 1, Font::Label);
             break;
         case Kind::Choice: {
-            p.Text(label, left, y + 3, Font::Normal);
+            p.Text(label, left, y + 3, Font::Label);
             int x = right - kChoiceW, sw = (kChoiceW - 2 * kArrow - 4) / kTile * kTile;
             auto state = [&](Hit h) {
                 return pressed_ == Target{h, pl.row}  ? ArrowState::Pressed
@@ -965,7 +963,7 @@ void Window::Rows(Painter &p)
             p.ArrowButton(x, y - 2, Arrow::Left, state(Hit::ArrowLess));
             p.Strip(x + kArrow + 2, y, sw);
             std::string v = d.value >= 0 && d.value < static_cast<int>(r.choices.size()) ? r.choices[d.value] : "?";
-            p.Text(v.c_str(), x + kArrow + 2 + (sw - p.TextWidth(v.c_str(), Font::Gold)) / 2, y + 3, Font::Gold);
+            p.Text(v.c_str(), x + kArrow + 2 + (sw - p.TextWidth(v.c_str(), Font::Value)) / 2, y + 3, Font::Value);
             p.ArrowButton(right - kArrow, y - 2, Arrow::Right, state(Hit::ArrowMore));
             break;
         }
@@ -973,12 +971,12 @@ void Window::Rows(Painter &p)
         case Kind::CheckSlider: {
             if (r.kind == Kind::CheckSlider) {
                 p.Check(left, y, d.toggle != 0);
-                p.Text(label, left + 24, y + 1, Font::Normal);
+                p.Text(label, left + 24, y + 1, Font::Label);
             } else {
-                p.Text(label, left, y, Font::Normal);
+                p.Text(label, left, y, Font::Label);
             }
             std::string v = ValueText(r, d.value);
-            p.Text(v.c_str(), left, y + 25, Font::Gold);
+            p.Text(v.c_str(), left, y + 25, Font::Accent);
             int al, tx, tw2, ar, sy;
             SliderGeometry(y, al, tx, tw2, ar, sy);
             auto state = [&](Hit h) {
@@ -1139,7 +1137,7 @@ void Window::Draw(Painter &p)
         }
     }
     if (!note_.empty() && HasKeyRows()) { // the last wait for a key: under the rows
-        p.Text(note_.c_str(), Left(), kContentY + kContentH - 16 - kNoteH + 4, noteError_ ? Font::Disabled : Font::Gold);
+        p.Text(note_.c_str(), Left(), kContentY + kContentH - 16 - kNoteH + 4, noteError_ ? Font::Disabled : Font::Accent);
     }
     Scrollbar(p);
     Bottom(p);

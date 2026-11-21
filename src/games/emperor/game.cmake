@@ -24,6 +24,7 @@ set(GAME_SOURCES
     src/games/emperor/fullscreen.cpp
     src/games/emperor/text.cpp
     src/games/emperor/ui_fixes.cpp
+    src/games/emperor/scroll_arrows.cpp
     src/games/emperor/china_map.cpp
     src/games/emperor/display_options.cpp
     src/games/emperor/options_window.cpp
@@ -31,40 +32,37 @@ set(GAME_SOURCES
     src/games/emperor/options_original.cpp
     src/games/emperor/options_entry.cpp
     src/games/emperor/sound.cpp
-    src/games/emperor/master_volume.cpp
     src/games/emperor/intro.cpp
     src/games/emperor/zoom.cpp
     src/games/emperor/city_picture.cpp
     src/games/emperor/notice.cpp
     src/games/emperor/keys.cpp
     src/games/emperor/game_menu.cpp
-    src/games/emperor/nature_sounds.cpp
-    src/games/emperor/ambient_rate.cpp
     src/games/emperor/smoke.cpp
 )
 
 # The offline tests of this game layer (run by src/games/emperor/tests.ps1 through proxy/ddraw/run_tests.ps1).
 # They are defined by game_add_tests() below, called from the root after the shared libraries exist.
 macro(game_add_tests)
-    # games/emperor/ambient_rate (no game, no DLL).
-    add_executable(test_ambient src/games/emperor/test_ambient.cpp src/games/emperor/ambient_rate.cpp)
-    target_include_directories(test_ambient PRIVATE src)
-    target_link_options(test_ambient PRIVATE -static)
-
     # The failure fallbacks of scrolling, resolution and panel pause: the real detours of games/emperor on a copy of the game's address
     # range with fake game functions. The parts of the DLL they call that are not under test (output, panel,
     # virtual display) are stubbed in the test.
     add_executable(test_restore src/games/emperor/test_restore.cpp
         src/games/emperor/scroll.cpp src/games/emperor/resolution.cpp src/games/emperor/emperor.cpp
         src/games/emperor/ui_fixes.cpp src/games/emperor/china_map.cpp src/games/emperor/display_options.cpp
+        src/games/emperor/scroll_arrows.cpp src/core/ui/scroll_repeat.cpp
         src/games/emperor/options_window.cpp src/games/emperor/options_text.cpp
         src/games/emperor/options_original.cpp src/games/emperor/options_entry.cpp src/core/options/window.cpp
-        src/core/options/menu.cpp src/games/emperor/game_menu.cpp src/games/emperor/nature_sounds.cpp
-        src/core/display/common_sizes.cpp
-        src/games/emperor/sound.cpp src/games/emperor/master_volume.cpp src/games/emperor/ambient_rate.cpp
+        src/core/options/menu.cpp src/core/options/pause_menu.cpp src/core/options/menu_text.cpp src/core/options/option_text.cpp
+        src/core/options/game_options.cpp src/core/options/display_dialog.cpp
+        src/core/options/setting_rows.cpp src/core/options/hotkeys_page.cpp src/core/options/options_host.cpp
+        src/games/emperor/game_menu.cpp
+        src/core/display/common_sizes.cpp src/core/display/framing.cpp
+        src/games/emperor/sound.cpp src/core/sound/sound.cpp src/core/sound/master_volume.cpp
+        src/core/sound/ambient_rate.cpp src/core/sound/layer1.cpp
         src/games/emperor/intro.cpp src/core/settings/intro_movie.cpp src/games/emperor/smoke.cpp
         src/games/emperor/zoom.cpp src/core/display/city_zoom.cpp
-        src/games/emperor/city_picture.cpp src/games/emperor/notice.cpp src/games/emperor/keys.cpp
+        src/games/emperor/city_picture.cpp src/games/emperor/notice.cpp src/games/emperor/keys.cpp src/core/input/keys.cpp
         src/core/ui/notice.cpp src/core/ui/notice_text.cpp src/core/diag/state_line.cpp
         src/core/display/city_strips.cpp
         src/core/capture/big_picture.cpp

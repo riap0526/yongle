@@ -1,6 +1,11 @@
+// Yongle's own texts for players in the options window (a text check scans every string literal here); the texts both
+// games share are in core/options/option_text and core/options/menu_text.
 #include "games/emperor/options_text.h"
 
-#include <cstring>
+#include "core/ui/hotkey.h"
+
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
 
 namespace emperor::options_text {
 namespace {
@@ -8,58 +13,9 @@ namespace {
 #define CHOICES(name, ...) const ChoiceText name[] = {__VA_ARGS__}
 #define N(a) static_cast<int>(sizeof(a) / sizeof((a)[0]))
 
-// Choice names that fit the options window's value box (144 px in the gold font, measured with
-// the font's own widths: "Scaled with black bars" is 151, so "Scaled + black bars", 130).
-
 CHOICES(kIntro,
         {"play", "The game's intro movie plays when the game starts."},
         {"skip", "The game starts at the main menu."});
-
-CHOICES(kInfoWindow,
-        {"original", "Above or below the building, moved with the middle of the city area, as the game does it."},
-        {"centered", "In the middle of the city area."},
-        {"cursor", "Beside the cursor, never past the edges of the screen.", "Beside the cursor"});
-
-CHOICES(kFullSpeed,
-        {"capped", "Always the same pace, a step above 90%: 90% runs 45 steps a second, 100% runs 62.", "Even"},
-        {"original", "The game's own 100%: as fast as your computer can draw. In a small city that is many times "
-                     "faster than 90%; in a large city on a big screen only a little faster."});
-
-CHOICES(kWindow,
-        {"fullscreen", "The game covers its monitor, without a border.", "Full screen"},
-        {"windowed", "A window you can move and size. The game is laid out again for its size when you let go.",
-         "Window"});
-
-CHOICES(kResolution,
-        {"scaled", "The screen's own resolution divided by the display scale."},
-        {"1024x768", "The game's own size, enlarged to the screen."},
-        {"*", "The game is drawn at this size and enlarged to the screen. In a window, this is the window's size."});
-
-CHOICES(kScaling,
-        {"nearest", "Plain pixels. Some are a screen pixel wider than others."},
-        {"linear", "Smooth, but softer."},
-        {"sharp_bilinear", "Sharp: only the edge of each pixel is blended."});
-
-CHOICES(kPresent,
-        {"display", "A frame at every refresh of the screen."},
-        {"cap60", "At most 60 frames a second.", "60 per second"},
-        {"original", "The game's own, about 20 frames a second. This window is not available then: the game's own "
-                     "options are used.",
-         nullptr, true});
-
-CHOICES(kRenderer,
-        {"auto", "Direct3D 11, or Direct3D 9 if Direct3D 11 cannot start."},
-        {"direct3d", "", "Direct3D 9"},
-        {"direct3d11", "", "Direct3D 11"});
-
-CHOICES(kShrink,
-        {"average", "Each pixel on the screen is the average of the city's pixels it covers: smooth."},
-        {"nearest", "Each pixel on the screen is one of the city's pixels: sharper, but it may shimmer while the view "
-                    "moves."});
-
-CHOICES(kLoading,
-        {"framed", "In a fret border, black around it."},
-        {"original", "The game's own picture, black around it, as the game shows it on a wide screen."});
 
 CHOICES(kMenus,
         {"city", "In a fret border, with your city blurred around it. A picture of your own named "
@@ -76,135 +32,27 @@ CHOICES(kEmpireMapBackground,
         {"map", "The same map, blurred and darkened.", "Blurred map"},
         {"city", "Your city as it was when you opened the map, standing still, as if the map were a window over it."});
 
-CHOICES(kBackgroundSound,
-        {"pause", "The music and the sounds wait, and go on where they were when you come back."},
-        {"original", "As the game itself does it: it stops them all, and another song starts when you come back.",
-         "Stop"});
-
-CHOICES(kAmbient,
-        {"original", "Once in about 300 passes of the game's main loop, as the game does it: so it depends on the "
-                     "resolution and the computer (about one a second at 1024 x 768 on a fast computer, far fewer at "
-                     "a large resolution)."},
-        {"0.25", "About one every 4 seconds."},
-        {"0.5", "About one every 2 seconds: what the game gave on the computers of its time."},
-        {"0.75", "About three every 4 seconds."},
-        {"1.0", "About one every second."});
-
-CHOICES(kMessageModes,
-        {"full", "The whole message, written out in full."},
-        {"condensed", "A shorter message, in fewer and plainer words."},
-        {"off", "No message of this kind."});
-
-CHOICES(kMinimapScale, {"1", "", "1x"}, {"2", "", "2x"}, {"4", "", "4x"});
-
+// Yongle's own: its game's files and folders, the empire map, auto defend.
 const Text kTexts[] = {
     {"ui", "intro_movie", "Whether the game plays its intro movie when it starts. If PlayIntroMovie=no is set in "
                           "the game's Emperor.ini, the movie is skipped either way.",
      kIntro, N(kIntro), true},
-    {"ui", "info_window", "Where the window opens when you right-click a building. Applies to the next window you open.",
-     kInfoWindow, N(kInfoWindow)},
-    {"ui", "minimap_picture_scale", "How large the minimap screenshot saved with its key is (see Hotkeys), in times "
-                                    "the minimap in the game. It does not change the minimap beside the city.",
-     kMinimapScale, N(kMinimapScale), false, "Minimap screenshot: size"},
-    {"gameplay", "keep_speed", "When a frame takes long (a large city, a high resolution), the game's steps it missed "
-                               "are made up in the next frame, so the game runs at its set speed. Off: the game's own "
-                               "pace, slower when frames are slow.",
-     nullptr, 0},
-    {"gameplay", "full_speed", "How fast the game runs at game speed 100%.", kFullSpeed, N(kFullSpeed)},
-    {"gameplay", "simulate_while_scrolling", "The city goes on while the view scrolls. Off: it stands still while "
-                                             "scrolling, as in the original.",
-     nullptr, 0},
-    {"gameplay", "smooth_scroll", "The city scrolls pixel by pixel, easing in and out, at a steady speed for each "
-                                  "scroll speed setting. Off: the game's steps of whole tiles.",
-     nullptr, 0},
-    {"gameplay", "drag_scroll", "Hold the middle mouse button over the city and move the mouse: the city follows "
-                                "it. A click without moving goes back to 100% zoom.",
-     nullptr, 0},
-    {"gameplay", "edge_scroll_width", "How close to the edge of the screen the cursor scrolls the city, in pixels. 1 "
-                                      "is the original; 0 turns edge scrolling off (the arrow keys and dragging "
-                                      "still scroll).",
-     nullptr, 0},
-    {"video", "window", "Full screen or a window. F5 switches between them.", kWindow, N(kWindow)},
-    {"video", "resolution", "The size the game is drawn at. Menus and loading screens are shown as large as the "
-                              "city.",
-     kResolution, N(kResolution)},
-    {"video", "scale", "How large everything is, menus and loading screens too. Larger is bigger but softer.\nAuto: "
-                       "1080 pixels high on a taller screen. Never less than 1024 x 768.",
-     nullptr, 0},
-    {"video", "scaling", "How the picture is enlarged when the game's pixels are not the screen's: a display scale "
-                           "above 100%, 1024 x 768, the menus, a window. In full screen at 100% all three look the "
-                           "same.",
-     kScaling, N(kScaling)},
-    {"video", "present", "How often frames reach the screen. The game's own timing is the same with all three.",
-     kPresent, N(kPresent)},
-    {"video", "window_lock_cursor", "In a window: the cursor cannot leave the window while you play in it. Switch "
-                                      "this off, or press F5, to move or size the window.",
-     nullptr, 0},
-    {"video", "renderer", "What puts the picture on the screen.", kRenderer, N(kRenderer)},
-    {"video", "city_zoom", "The city's zoom when the game starts. Above 100 you see more of the city, below 100 "
-                             "it is larger. While playing, zoom with the mouse wheel over the city; the middle mouse "
-                             "button goes back to 100.",
-     nullptr, 0},
-    {"video", "city_zoom_shrink", "Above 100% zoom: how the city is made smaller on the screen.", kShrink,
-     N(kShrink)},
-    {"video", "loading_screen", "How the pictures shown while a game loads look.", kLoading, N(kLoading)},
     {"video", "menu_screens", "What is around the main menu, the choice of emperor and campaign, briefings, high "
                                 "scores, victory and defeat.",
      kMenus, N(kMenus)},
-    {"video", "background_blur", "How much the picture of your city behind the menus is blurred. 0: not at all.",
-     nullptr, 0},
-    {"video", "background_brightness", "How bright the picture of your city behind the menus is. 100 with no "
-                                         "blur: the city as it is.",
-     nullptr, 0},
     {"video", "empire_map", "How the empire map is shown on a screen larger than the map.", kEmpireMap,
      N(kEmpireMap)},
     {"video", "empire_map_scale", "How large the map is, in percent of its own size. Auto: as large as fits.",
      nullptr, 0},
     {"video", "empire_map_background", "What is around the map.", kEmpireMapBackground, N(kEmpireMapBackground)},
-    {"audio", "background_sound", "What happens to the music and the sounds when you switch to another program.",
-     kBackgroundSound, N(kBackgroundSound)},
-    {"audio", "ambient_sounds", "How often the city plays a random sound of its life: birds, water, workshops.",
-     kAmbient, N(kAmbient), false, "Ambient sounds: how often"},
-    {"audio", "nature_sounds", "Birds, wind, crickets, frogs and wind chimes that come with the game but that it never "
-                               "played originally. In the city, now and then one of them circles around you, at the "
-                               "sound effects volume.",
-     nullptr, 0},
-    {"audio", "nature_sounds_gap", "About how many seconds pass between two of them.", nullptr, 0, false,
-     "Unused nature sounds: time between (s)"},
-
-    {"audio", "master_volume", "The volume of all the music and sounds together. The four volumes below are set "
-                               "within it. The checkbox switches them all off and on.",
-     nullptr, 0},
-
-    // The Hotkeys window.
-    {"ui", "panel_key", "Opens and closes Yongle's panel for testing and finding problems. Most settings are in "
-                        "Options.",
-     nullptr, 0, false, "Debug panel"},
-    {"debug", "screenshot_key", "Saves the game's picture as a PNG file in the shots folder in Yongle's folder.",
-     nullptr, 0, false, "Save screenshot"},
-    {"debug", "report_key", "When something odd is on the screen: marks the log and saves the picture shown, for a "
-                            "problem report.",
-     nullptr, 0, false, "Save report screenshot"},
-    {"ui", "city_picture_key", "Saves the whole city as one picture in the shots folder; the game stops for a moment "
-                               "while it is drawn.",
-     nullptr, 0, false, "Save full city screenshot"},
-    {"ui", "minimap_picture_key", "Saves the minimap of the whole map as a picture in the shots folder.", nullptr, 0,
-     false, "Save minimap screenshot"},
-
-    // The game's own options (kept in Emperor.inf, as the game's Options menu sets them).
-    {"game", "game_speed", "How fast the game runs.", nullptr, 0, false, "Game speed"},
-    {"game", "scroll_speed", "How fast the view moves when you scroll the city.", nullptr, 0, false, "Scroll speed"},
-    {"game", "autosave", "The game saves your city by itself from time to time, as its own Autosave option does.",
-     nullptr, 0, false, "Autosave"},
-    {"game", "messages", nullptr, kMessageModes, N(kMessageModes)}, // no tooltip on the kinds' names
-    {"game", "music", "The music. The slider sets its volume.", nullptr, 0, false, "Music"},
-    {"game", "speech", "The spoken voices. The slider sets their volume.", nullptr, 0, false, "Speech"},
-    {"game", "sound_effects", "The sounds of the buildings, the people and the buttons. The slider sets their "
-                              "volume.",
-     nullptr, 0, false, "General sounds"},
-    {"game", "ambient_volume", "The city's background sounds: birds, water, workshops. The slider sets their volume; "
-                               "how often they play is set below.",
-     nullptr, 0, false, "Ambient sounds"},
+    // The shared text, then what only Emperor has: the army panel's own words for it, and no switch in the game
+    // itself (the setting is kept in Emperor.inf and the saved games, and the game goes on using it).
+    {"game", "auto_defend", "When enemies come, your soldiers gather and march out to meet them by themselves. They "
+                            "stay out after the enemies have left: switch this off, then send them back yourself. It "
+                            "can't be changed while enemies are attacking. The "
+                            "army panel shows Auto Combat On while it is on. The game itself has no switch for it: "
+                            "switch it off before you remove Yongle, or it stays on.",
+     nullptr, 0, false, "Auto defend"},
 };
 
 #undef CHOICES
@@ -212,77 +60,41 @@ const Text kTexts[] = {
 
 } // namespace
 
-const char *const kRestartTip = "Takes effect after the game is restarted.";
-const char *const kMenuGeneral = "General Settings";
-const char *const kMenuVideo = "Video";
-const char *const kMenuAudio = "Audio";
-const char *const kMainMenuOptions = "Options";
-const char *const kMenuHotkeys = "Hotkeys";
-const char *const kCategoryMessages = "Messages";
-
 const char *const kOptionsTitle = "Yongle options";
-const char *const kHotkeysTitle = "Hotkeys";
-const char *const kColumnAction = "Action";
-const char *const kColumnKey = "Hotkey";
-const char *const kColumnAlternative = "Alternative";
-const char *const kSectionGlobal = "Global hotkeys";
-const char *const kPressKey = "Press a key";
-const char *const kKeyNotChanged = "Not changed.";
-const char *const kKeyNotUsable = "That key cannot be used here; try another one.";
-const char *const kKeyInUse = "%s is already the key for \"%s\"; try another one.";
-const char *const kKeyReserved = "The game keeps this key for itself; choose another one.";
-const char *const kKeyClearHint = "Backspace: no key.";
-const char *const kKeyTip = "Click to change; right-click to remove.";
-const char *const kKeepTitle = "Keep this setting?";
-const char *const kKeepCountdown = "The previous setting comes back in %d s.";
-const char *const kMenuCityScreenshot = "Save city screenshot";       // 136 in the menu font
-const char *const kMenuMinimapScreenshot = "Save minimap screenshot"; // 165
-const char *const kMenuReplayMap = "Replay map";               // the game's "Replay mission" (Open Play is no mission)
-const char *const kMenuExitToMainMenu = "Exit to main menu";   // the game's "New game" (it goes back to the menus)
-const char *const kPauseTitle = "Pause";
-const char *const kPauseContinue = "Continue";
-const char *const kPauseOptions = "Options";
 
-// The Hotkeys window's sections (games/emperor/keys::Section); the actions' names are their settings' labels.
-const char *const kKeySections[] = {"Arrow keys",   "Global hotkeys", "City hotkeys", "Building menus",
-                                    "Overlays",     "Bookmarks",      "Army groups"};
-const char *const kOverlayName = "%s overlay";
-// The game's pause banner with the player's keys (the game's own words: "Game paused ('P' key continues)").
-const char *const kPausedOneKey = "Game paused ('%s' key continues)";
-const char *const kPausedTwoKeys = "Game paused ('%s' or '%s' key continues)";
-const char *const kPausedNoKey = "Game paused"; // the overlay's name from the game's texts
-
-const char *const kKeep = "Keep";
-const char *const kRevert = "Revert";
-
-const char *KeySection(int section)
+void Register()
 {
-    return section >= 0 && section < static_cast<int>(sizeof(kKeySections) / sizeof(kKeySections[0])) ? kKeySections[section]
-                                                                                                    : "";
+    core::options::option_text::SetGameTexts(kTexts, static_cast<int>(sizeof(kTexts) / sizeof(kTexts[0])));
 }
 
-const Text *Find(const char *section, const char *key)
+// Our own fixed keys (F5, Alt+Enter, Shift+F7) are answered by the core (core/options/hotkeys_page) first.
+const char *GameKeyNote(unsigned vk, unsigned mods)
 {
-    for (const Text &t : kTexts) {
-        if (std::strcmp(t.section, section) == 0 && std::strcmp(t.key, key) == 0) {
-            return &t;
+    using core::ui::kModAlt;
+    using core::ui::kModCtrl;
+    if (mods == kModAlt && ((vk >= '1' && vk <= '5') || vk == 'T')) {
+        return "The game also uses this key; it no longer reaches the game.";
+    }
+    if (mods == (kModCtrl | kModAlt) && vk == 'C') {
+        return "The game also uses this key; it no longer reaches the game.";
+    }
+    if ((vk == VK_INSERT || vk == VK_DELETE) && mods == 0) {
+        // Only for typing in the game (Insert: insert / overwrite; Delete: deleting, and closing the
+        // editor's number pad, screen 0x0e, game_wndproc -> 0x5eec50): hardly ever used, so nothing to tell.
+        return nullptr;
+    }
+    if (vk == VK_F2 || vk == VK_F5 || vk == VK_F6 || vk == 'R') {
+        return "The game also reacts to this key itself.";
+    }
+    if ((mods & (kModCtrl | kModAlt)) == 0) {
+        const bool used = (vk >= 'A' && vk <= 'Z') || (vk >= '0' && vk <= '9') || (vk >= VK_F1 && vk <= VK_F9) ||
+                          vk == VK_SPACE || vk == VK_TAB || vk == VK_HOME || vk == VK_END || vk == VK_PRIOR ||
+                          vk == VK_NEXT || vk == VK_NUMPAD2;
+        if (used) {
+            return "The game also uses this key; it no longer reaches the game.";
         }
     }
     return nullptr;
-}
-
-const ChoiceText *Choice(const Text &t, const char *spell)
-{
-    const ChoiceText *other = nullptr;
-    for (int k = 0; k < t.choiceCount; ++k) {
-        if (std::strcmp(t.choices[k].spell, spell) == 0) {
-            return &t.choices[k];
-        }
-        if (std::strcmp(t.choices[k].spell, "*") == 0) {
-            other = &t.choices[k];
-        }
-    }
-    return other;
 }
 
 } // namespace emperor::options_text

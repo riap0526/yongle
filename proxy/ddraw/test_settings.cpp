@@ -415,6 +415,47 @@ int main()
                   GetFileAttributesW(bakPath.c_str()) == INVALID_FILE_ATTRIBUTES,
               "template: no file, no .bak: the template, at the defaults");
         if (ReadAll() != tmpl) std::printf("  file:\n%s\n", ReadAll().c_str());
+
+        // Saving back to the default: a setting the template does not list (newsec.width) loses its
+        // line, so the file keeps only what was changed; one the template lists (test.look) is written with the
+        // default; a line that already has the default goes at the next save and at Load.
+        const int width = cs::Find("newsec", "width");
+        cs::Request(width, "20", true);
+        cs::RunPending();
+        Check(ReadAll().find("width = 20") != std::string::npos, "not in the template: a changed value is written");
+        cs::Request(width, "10", true);
+        cs::RunPending();
+        const std::string afterRemove = ReadAll();
+        Check(afterRemove.find("width") == std::string::npos && afterRemove.find("look = scaled\n") != std::string::npos,
+              "not in the template: back to the default, the line removed");
+        cs::LastSaveResult(result, sizeof(result));
+        Check(std::strstr(result, "saved 1 change(s)") != nullptr, "... reported as a change");
+        const int look = cs::Find("test", "look");
+        cs::Request(look, "scaled_black", true);
+        cs::RunPending();
+        cs::Request(look, "scaled", true);
+        cs::RunPending();
+        Check(ReadAll().find("look = scaled\n") != std::string::npos, "in the template: back to the default, written");
+        if (ReadAll().find("look = scaled\n") == std::string::npos) std::printf("  file:\n%s\n", ReadAll().c_str());
+        WriteAll(ReadAll() + "[newsec]\r\nheight = 10\r\n");
+        cs::Request(look, "scaled_black", true);
+        cs::RunPending();
+        cs::Request(look, "scaled", true);
+        cs::RunPending();
+        Check(ReadAll().find("height") == std::string::npos && ReadAll().find("look = scaled\n") != std::string::npos,
+              "a line that already has the default (not in the template): removed at the next save");
+        // At Load: such lines go (the old file in .bak), a changed one and an invalid one stay.
+        const std::wstring bakPath2 = std::wstring(g_path) + L".bak";
+        DeleteFileW(bakPath2.c_str());
+        WriteAll(std::string(tmpl) + "\n[newsec]\nwidth = 10\nheight = 20\nmap = nonsense\n");
+        cs::Load(g_path);
+        const std::string loaded = ReadAll();
+        Check(loaded.find("width") == std::string::npos && loaded.find("height = 20") != std::string::npos &&
+                  loaded.find("map = nonsense") != std::string::npos && Value("newsec", "height") == "20" &&
+                  GetFileAttributesW(bakPath2.c_str()) != INVALID_FILE_ATTRIBUTES,
+              "Load: a line at its default (not in the template) removed, the others kept, the old file in .bak");
+        if (loaded.find("width") != std::string::npos) std::printf("  file:\n%s\n", loaded.c_str());
+        DeleteFileW(bakPath2.c_str());
         DeleteFileW(g_path);
         cs::SetTemplate(nullptr);
     }

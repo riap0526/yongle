@@ -2,6 +2,10 @@
 // game's own drawing functions and art, over the game's last frame, while the game is paused.
 #pragma once
 
+#include "core/options/window.h"
+
+#include <vector>
+
 namespace emperor::options_window {
 
 bool Attach();   // after resolution's hooks (image_draw); false: not available (the game's own options stay)
@@ -20,5 +24,8 @@ constexpr int kPageGeneral = 0, kPageVideo = 1, kPageAudio = 2;
 // Game thread, before the game's frame is presented: draws the window over it. caller: the game address screen_present
 // returns to (nothing is drawn on the WM_PAINT frames of a display change).
 void OnPresent(unsigned long caller);
+
+// For the offline test (src/games/emperor/test_restore.cpp): the Hotkeys window's page as it would be built now.
+std::vector<core::options::Page> KeyPagesForTest();
 
 } // namespace emperor::options_window

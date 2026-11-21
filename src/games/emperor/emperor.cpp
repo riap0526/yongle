@@ -55,8 +55,9 @@
 #include "games/emperor/display_options.h"
 #include "games/emperor/fullscreen.h"
 #include "games/emperor/game_menu.h"
-#include "games/emperor/nature_sounds.h"
-#include "games/emperor/master_volume.h"
+#include "core/sound/layer1.h"
+#include "core/sound/master_volume.h"
+#include "core/sound/sound.h"
 #include "games/emperor/keys.h"
 #include "games/emperor/notice.h"
 #include "games/emperor/options_entry.h"
@@ -71,6 +72,7 @@
 #include "games/emperor/zoom.h"
 #include "games/emperor/site.h"
 #include "games/emperor/smoke.h"
+#include "games/emperor/scroll_arrows.h"
 #include "games/emperor/ui_fixes.h"
 #include "ini_template.h" // generated from src/games/emperor/emperor_engine.ini (CMakeLists.txt)
 
@@ -217,13 +219,13 @@ DWORD g_lastLoop = 0;
 void Paused(bool options)
 {
     core::scroll::drag::End(options ? "the options window opened" : "our panel opened"); // the cursor shown again
-    emperor::sound::SetQuiet(true); // no new ambient sound meanwhile, as under the game's own dialogs
+    core::sound::SetQuiet(true); // no new ambient sound meanwhile, as under the game's own dialogs
     LogRates(options ? " (options window opened: game paused)" : " (panel opened: game paused)");
 }
 
 void Resumed()
 {
-    emperor::sound::SetQuiet(false);
+    core::sound::SetQuiet(false);
     core_log("emperor: panel or options window closed: game resumed");
     g_since = GetTickCount();
     g_loops = g_ticks = 0;
@@ -249,6 +251,7 @@ int __cdecl LoopStep_detour()
 {
     int paused = 0;
     if (core::sim::panel_pause::Loop(kPause, &paused)) {
+        core::sound::layer1::Refresh(); // the game's volumes changed in the options window: heard at once
         return paused;
     }
     if (emperor::game_menu::OnLoop() && emperor::options_window::IsOpen()) {
@@ -505,9 +508,11 @@ extern "C" void emperor_register_settings(void)
     core::sim::RegisterSettings(); // [gameplay] keep_speed, full_speed, simulate_while_scrolling
     emperor::china_map::RegisterSettings();
     emperor::fullscreen::RegisterSettings();
-    emperor::master_volume::RegisterSettings(); // first in [sound]: the volume over all
-    emperor::sound::RegisterSettings();
-    emperor::nature_sounds::RegisterSettings(); // 0.2.0 item 10
+    core::sound::master_volume::RegisterSettings(); // first in [audio]: the volume over all
+    core::sound::RegisterSettings(); // [audio] background_sound, ambient_sounds; [debug] sound_probe
+    // [audio] nature_sounds, nature_sounds_gap (0.2.0; the player is the core's, shared with Zeus);
+    // [debug] nature_sounds_only.
+    core::sound::layer1::RegisterSettings("The original game comes with these recordings but never played them.");
     emperor::intro::RegisterSettings();
     emperor::zoom::RegisterSettings();
     emperor::city_picture::RegisterSettings();
@@ -590,10 +595,12 @@ extern "C" void emperor_attach(void)
         emperor::scroll::AttachDrag(); // middle-button drag scrolling; after the zoom (its filter passes on to it)
     }
     emperor::ui_fixes::Attach();
-    emperor::notice::Attach(); // 0.2.0 item 6: our messages in the game's notice boxes
+    emperor::scroll_arrows::Attach(); // held scroll arrows at the original pace (as in Pericles)
+    emperor::notice::Attach(); // our messages in the game's notice boxes (0.2.0)
     emperor::sound::Attach(); // [sound] background_sound, ambient_sounds; pan within 0..127
     emperor::options_original::Attach(); // the game's own options; a new player's starting speeds
-    emperor::master_volume::Attach();    // [sound] master_volume
+    static const core::sound::master_volume::VolumeGame kVolume(&emperor::options_original::ReapplyVolumes);
+    core::sound::master_volume::Attach(kVolume); // [audio] master_volume: the game sets its stream volumes again
     emperor::game_menu::Attach();        // Esc and the pause menu (after the window; before the File menu)
     emperor::options_entry::Attach();    // after the window and options_original: the menus open the window
     emperor::keys::Attach();             // 0.2.0 item 7: the key bindings (F6 opens the options window)

@@ -560,7 +560,7 @@ void DrawFiller(bool city)
             DrawBackdrop(x, x + kEdgeCols, 0, kLowerPanelCorner, 768); // the lower panel's corner: the edge goes on
             DrawBackdrop(x, x + kSidebarWidth, 0, 768, h);
         }
-        // Right of the sidebar: plain leather, without the backdrop's edge columns (dark, light, highlight). Since
+        // Right of the sidebar: plain leather, without the backdrop's edge columns (dark, light, highlight). Now
         // the sidebar is against the right edge, so nothing is left here at our sizes.
         DrawBackdrop(x + kSidebarWidth, w, kEdgeCols, 0, h);
         // Left of the sidebar, between the city's clip and the sidebar: drawn by our city render; leather only when
@@ -1071,6 +1071,7 @@ bool g_installed = false;
 // Videos still switch modes for themselves (FUN_00420ae0) and switch back.
 using InitialMode_fn = int(__cdecl *)();
 InitialMode_fn o_InitialMode;
+void (*g_afterInitialMode)() = nullptr;
 
 int __cdecl InitialMode_detour()
 {
@@ -1080,6 +1081,9 @@ int __cdecl InitialMode_detour()
                  "instead",
                  *kScreenMode, *kScreenMode == 1 ? "640x480" : *kScreenMode == 2 ? "800x600" : "unknown");
         *kScreenMode = 3;
+    }
+    if (g_afterInitialMode) {
+        g_afterInitialMode();
     }
     return r;
 }
@@ -1106,6 +1110,16 @@ bool KeyFilter(UINT message, WPARAM key, LPARAM l)
         return false;
     }
     return ModeKey(message, key, l) || switching::CycleKey(message, key, l);
+}
+
+bool InitialModeHooked()
+{
+    return o_InitialMode != nullptr;
+}
+
+void SetAfterInitialMode(void (*after)())
+{
+    g_afterInitialMode = after;
 }
 
 void OnLoop()

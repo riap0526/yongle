@@ -30,8 +30,9 @@ void PanelClosed();
 bool CapturingKey();
 // Output thread (the panel's input): a key went down while CapturingKey(), with the modifiers held then.
 void CaptureKey(unsigned vk, bool ctrl, bool shift, bool alt);
-// From the game layer at start-up: a sentence for a key (and modifiers, core/ui/hotkey.h kMod*) the game itself uses,
-// shown when such a key is chosen; nullptr when the game does not use it.
+// From the game layer at start-up (its key bindings' attach): a sentence for a key (and modifiers, core/ui/hotkey.h
+// kMod*) the game itself uses, shown when such a key is chosen; nullptr when the game does not use it. Our own fixed
+// keys are answered before it (core/options/hotkeys_page::KeyNote).
 using GameKeyNote = const char *(*)(unsigned vk, unsigned mods);
 void SetGameKeyNote(GameKeyNote fn);
 GameKeyNote GetGameKeyNote(); // nullptr when none was set

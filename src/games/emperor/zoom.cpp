@@ -7,7 +7,7 @@
 
 // Evidence (Emperor.exe 1.0.1.0, SHA256 6373328b...53c0e): view_clamp and the viewports read from the disassembly; names and
 // calling conventions checked by disassembly. The zoom itself is the core's (core/scroll/zoom.h, moved
-// there): this file gives Emperor's addresses and hooks view_clamp.
+// there for Zeus): this file gives Emperor's addresses and hooks view_clamp.
 namespace emperor::zoom {
 namespace {
 

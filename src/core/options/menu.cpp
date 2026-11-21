@@ -18,19 +18,19 @@ void Menu::Open()
 
 int Menu::PanelH() const
 {
-    // The title, the buttons, a bottom margin as wide as the side ones; whole 16 px tiles.
+    // The title, the buttons, the bottom margin; whole 16 px tiles.
     const int n = static_cast<int>(items_.size());
-    const int h = kFirstY + (n > 0 ? (n - 1) * kStep + kButtonH : 0) + (kPanelW - kButtonW) / 2 - 9;
+    const int h = look_.firstY + (n > 0 ? (n - 1) * look_.step + look_.buttonH : 0) + look_.bottom;
     return (h + 15) / 16 * 16;
 }
 
 int Menu::ItemAt(int x, int y) const
 {
-    if (x < ButtonX() || x >= ButtonX() + kButtonW) {
+    if (x < ButtonX() || x >= ButtonX() + look_.buttonW) {
         return kNone;
     }
     for (int i = 0; i < static_cast<int>(items_.size()); ++i) {
-        if (y >= ButtonY(i) && y < ButtonY(i) + kButtonH) {
+        if (y >= ButtonY(i) && y < ButtonY(i) + look_.buttonH) {
             return i;
         }
     }
@@ -63,16 +63,19 @@ int Menu::Key(int vk)
 
 void Menu::Draw(Painter &p)
 {
+    const MenuLook &l = look_;
     const int px = PanelX(), py = PanelY();
-    p.Panel(px, py, kPanelW, PanelH());
-    p.Text(title_.c_str(), px + (kPanelW - p.TextWidth(title_.c_str(), Font::Title)) / 2, py + kTitleY, Font::Title);
+    p.Panel(px, py, l.panelW, PanelH());
+    p.Text(title_.c_str(), px + (l.panelW - p.TextWidth(title_.c_str(), Font::Title)) / 2, py + l.titleY, Font::Title);
     for (int i = 0; i < static_cast<int>(items_.size()); ++i) {
         const int x = ButtonX(), y = ButtonY(i);
-        p.ButtonBar(x, y, kButtonW, 0);
+        const bool hover = i == hover_;
+        p.ButtonBar(x, y, l.buttonW, hover ? l.hoverBarStyle : l.barStyle);
         const char *label = items_[i].c_str();
-        p.Text(label, x + (kButtonW - p.TextWidth(label, Font::Normal)) / 2, y + 5, Font::Normal);
-        if (i == hover_) {
-            p.Frame(x, y, kButtonW, kButtonH);
+        const Font f = hover ? l.hoverLabel : l.label;
+        p.Text(label, x + (l.buttonW - p.TextWidth(label, f)) / 2, y + l.labelDown, f);
+        if (hover && l.hoverFrame) {
+            p.Frame(x, y, l.buttonW, l.buttonH);
         }
     }
 }

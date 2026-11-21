@@ -12,6 +12,7 @@
 #include "core/display/framing.h"
 #include "core/display/resolution_switch.h"
 #include "core/display/scaled_rect.h"
+#include "core/display/tile_layout.h"
 #include "core/display/virtual_display.h"
 #include "core/game.h"
 #include "core/log.h"
@@ -151,69 +152,17 @@ void Frame(Canvas &im, bool labels, bool fill = true, int w = 0, int h = 0)
     if (!labels && fill) {
         Pattern(im);
     }
-    int xs[512], ys[512];
-    const int nx = core::display::FrameTilePositions(w, xs, 512), ny = core::display::FrameTilePositions(h, ys, 512);
-    int midRow = 0;
-    for (int r = 0; r < ny; ++r) {
-        int k = 0;
-        for (int c = 0; c < nx; ++c) {
-            const bool lastC = c == nx - 1, lastR = r == ny - 1;
-            int i = -1;
-            if (r == 0) {
-                i = c == 0 ? 0 : lastC ? 0xb : 1 + k;
-            }
-            else if (lastR) {
-                i = c == 0 ? 0x84 : lastC ? 0x8f : 0x85 + k;
-            }
-            else if (c == 0) {
-                i = 0xc + midRow;
-            }
-            else if (lastC) {
-                i = 0x17 + midRow;
-            }
-            if (i >= 0) {
-                PasteTile(im, i, xs[c], ys[r], labels);
-            }
-            if (c > 0 && !lastC) {
-                k = (k + 1) % 10;
-            }
-        }
-        if (r > 0 && r < ny - 1) {
-            midRow = (midRow + 12) % 120;
-        }
-    }
+    core::display::tiles::WalkNine(core::display::tiles::kPanel, 0, 0, w, h, false,
+                                   [&](int i, int x, int y) { PasteTile(im, i, x, y, labels); });
 }
 
 // The inset panel (7 tiles per row: corner, 5 cycling, corner; middle rows cycling over 5), whole tiles with the last
 // row and column flush with the far edges.
 void Inset(Canvas &im, int x0, int y0, int w, int h)
 {
-    int xs[512], ys[64];
-    const int nx = core::display::FrameTilePositions(w, xs, 512), ny = core::display::FrameTilePositions(h, ys, 64);
-    int mid = 0;
-    for (int r = 0; r < ny; ++r) {
-        int k = 0;
-        for (int c = 0; c < nx; ++c) {
-            const bool lastC = c == nx - 1, lastR = r == ny - 1;
-            int i;
-            if (r == 0) {
-                i = c == 0 ? 0 : lastC ? 6 : 1 + k;
-            }
-            else if (lastR) {
-                i = c == 0 ? 0x2a : lastC ? 0x30 : 0x2b + k;
-            }
-            else {
-                i = c == 0 ? 7 + mid : lastC ? 0xd + mid : 8 + mid + k;
-            }
-            im.Paste(g_tiles.inset[i], kTile, kTile, x0 + xs[c], y0 + ys[r], false);
-            if (c > 0 && !lastC) {
-                k = (k + 1) % 5;
-            }
-        }
-        if (r > 0 && r < ny - 1) {
-            mid = (mid + 7) % 35;
-        }
-    }
+    core::display::tiles::WalkNine(core::display::tiles::kInset, x0, y0, w, h, true, [&](int i, int x, int y) {
+        im.Paste(g_tiles.inset[i], kTile, kTile, x, y, false);
+    });
 }
 
 // ---------------------------------------------------------------------------------------------

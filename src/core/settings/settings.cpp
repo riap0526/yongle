@@ -36,6 +36,7 @@ struct Slot {
 
 Slot g_items[kMaxItems];
 int g_count = 0;
+const char *g_template = nullptr; // SetTemplate
 SRWLOCK g_lock = SRWLOCK_INIT; // values and the request queue
 wchar_t g_path[MAX_PATH] = L"";
 
@@ -131,6 +132,30 @@ bool WriteFileAtomic(const wchar_t *path, const std::string &text, DWORD *error)
     return ok;
 }
 
+// The settings this version's template lists, and whether one of them is item (without a template: every setting
+// counts as listed, so no line is removed for being at its default).
+std::vector<IniLine> TemplateLines()
+{
+    std::vector<IniLine> listed;
+    if (g_template) {
+        ReadIni(g_template, &listed, nullptr);
+    }
+    return listed;
+}
+
+bool Listed(const std::vector<IniLine> &listed, const Item &item)
+{
+    if (!g_template) {
+        return true;
+    }
+    for (const IniLine &l : listed) {
+        if (_stricmp(l.section.c_str(), item.section) == 0 && _stricmp(l.key.c_str(), item.key) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void Save()
 {
     if (!g_path[0]) {
@@ -142,7 +167,9 @@ void Save()
     // What the file says now (the user may have edited it since start-up): the last valid line of each key.
     std::vector<IniLine> lines;
     ReadIni(text, &lines, nullptr);
+    const std::vector<IniLine> listed = TemplateLines();
     std::vector<IniChange> changes;
+    std::vector<IniKey> removed; // back to the default, not in the template: the line goes (only changed ones stay)
     AcquireSRWLockShared(&g_lock);
     for (int i = 0; i < g_count; ++i) {
         const Slot &s = g_items[i];
@@ -155,22 +182,31 @@ void Save()
             }
         }
         bool same = inFile ? std::strcmp(inFile, s.saved) == 0 : std::strcmp(s.saved, s.item.defaultValue) == 0;
-        if (!same) {
+        // A setting the template does not list, at its default: its line goes, also one that already had the
+        // default (an older version wrote it, or the player did), so the file keeps only what was
+        // changed.
+        if (inFile && std::strcmp(s.saved, s.item.defaultValue) == 0 && !Listed(listed, s.item)) {
+            removed.push_back(IniKey{s.item.section, s.item.key});
+        }
+        else if (!same) {
             changes.push_back(IniChange{s.item.section, s.item.key, s.saved});
         }
     }
     ReleaseSRWLockShared(&g_lock);
-    if (changes.empty()) {
+    if (changes.empty() && removed.empty()) {
         Copy(g_saveResult, sizeof(g_saveResult), "saved (the file already had these values)");
         return;
     }
-    std::string out = UpdateIni(text, changes);
+    std::string out = UpdateIni(removed.empty() ? text : RemoveIniKeys(text, removed), changes);
     DWORD error = 0;
     if (WriteFileAtomic(g_path, out, &error)) {
         std::snprintf(g_saveResult, sizeof(g_saveResult), "saved %d change(s) to %s",
-                      static_cast<int>(changes.size()), core_game()->ini_file_utf8);
+                      static_cast<int>(changes.size() + removed.size()), core_game()->ini_file_utf8);
         for (const IniChange &c : changes) {
             core_log("settings: saved [%s] %s = %s", c.section.c_str(), c.key.c_str(), c.value.c_str());
+        }
+        for (const IniKey &k : removed) {
+            core_log("settings: removed [%s] %s (back to its default)", k.section.c_str(), k.key.c_str());
         }
     }
     else {
@@ -205,8 +241,6 @@ struct Renamed {
 };
 Renamed g_renamed[16];
 int g_renamedCount = 0;
-const char *g_template = nullptr;
-
 void SetTemplate(const char *text)
 {
     g_template = text;
@@ -325,6 +359,11 @@ std::string GameText(const char *text)
 }
 
 } // namespace
+
+std::string GameNames(const char *text)
+{
+    return GameText(text);
+}
 
 int Register(const Item &item)
 {
@@ -558,11 +597,36 @@ void Load(const wchar_t *path)
         core_log("config: [%s] %s = %s (carried over from a removed or moved setting)", c.section.c_str(),
                  c.key.c_str(), c.value.c_str());
     }
+    // Settings the template does not list whose lines leave them at their default (e.g. [keys] lines an older version
+    // wrote when a key went back to its default): the lines go, as Save does.
+    std::vector<IniKey> atDefault;
+    if (g_template) {
+        const std::vector<IniLine> listed = TemplateLines();
+        for (int i = 0; i < g_count; ++i) {
+            const Item &item = g_items[i].item;
+            if (std::strcmp(g_items[i].value, item.defaultValue) != 0 || Listed(listed, item)) {
+                continue;
+            }
+            for (const IniLine &l : lines) {
+                char norm[kValueSize];
+                if (_stricmp(l.section.c_str(), item.section) == 0 && _stricmp(l.key.c_str(), item.key) == 0 &&
+                    Normalize(i, l.value.c_str(), norm, sizeof(norm)) && std::strcmp(norm, item.defaultValue) == 0) {
+                    atDefault.push_back(IniKey{item.section, item.key});
+                    core_log("config: line %d: [%s] %s = %s is the default and not in the file's template: removed "
+                             "(only changed ones are kept)",
+                             l.line, l.section.c_str(), l.key.c_str(), l.value.c_str());
+                    break;
+                }
+            }
+        }
+    }
     std::string updated = text;
-    if (!retired.empty() || !renamed.empty()) {
+    if (!retired.empty() || !renamed.empty() || !atDefault.empty()) {
         std::vector<IniChange> changes = carried;
         changes.insert(changes.end(), renamed.begin(), renamed.end());
-        updated = UpdateIni(RemoveIniKeys(text, retired), changes);
+        std::vector<IniKey> gone = retired;
+        gone.insert(gone.end(), atDefault.begin(), atDefault.end());
+        updated = UpdateIni(RemoveIniKeys(text, gone), changes);
     }
     FilledIni filled;
     const bool fill = (exists || remake) && g_template;
@@ -600,6 +664,10 @@ void Load(const wchar_t *path)
             if (!retired.empty() || !renamed.empty()) {
                 core_log("config: removed %d line(s) of settings that no longer exist, moved %d, renamed %d value(s)",
                          static_cast<int>(retired.size()) - movedLines, movedLines, static_cast<int>(renamed.size()));
+            }
+            if (!atDefault.empty()) {
+                core_log("config: removed %d setting(s) at their default that the template does not list",
+                         static_cast<int>(atDefault.size()));
             }
             if (fill) {
                 core_log("config: %s rewritten from this version's template: %d value(s) kept, %d "

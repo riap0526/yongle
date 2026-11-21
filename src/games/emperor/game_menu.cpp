@@ -7,6 +7,7 @@
 #include "core/diag/guard.h"
 #include "core/hook/hook.h"
 #include "core/log.h"
+#include "core/options/pause_menu.h"
 #include "games/emperor/options_text.h"
 #include "games/emperor/options_window.h"
 #include "games/emperor/site.h"
@@ -16,6 +17,7 @@ namespace emperor::game_menu {
 namespace {
 
 namespace ot = emperor::options_text;
+namespace pm = core::options::pause_menu;
 
 // modal_dialog_run 0x5bfe60: __cdecl(title, text, buttons), returns 6 for Yes with buttons 4 (Yes / No); runs its own
 // message loop (game_screen 0x54 meanwhile).
@@ -70,8 +72,6 @@ const Var<int> kEditor{0x88ec38};           // 1: the map editor
 core::diag::Feature g_feature{"Esc and the pause menu (games/emperor/game_menu)"};
 bool g_attached = false;
 bool g_rightClick = false; // a right click for the next input pass
-Item g_pending{};
-bool g_hasPending = false;
 
 const char *Lang(int group, int index)
 {
@@ -98,7 +98,7 @@ bool RightClickScreen(int s)
 // (0x5165e0 -> screen_enter_registry), the mission intro 0x35, mission choice and briefing 0x3d (0x4472d0), high
 // scores 0x53 (0x50b150 -> the main menu) [confirmed: Ghidra, screen_handle_input 0x538160 and those functions;
 // 0x1f and 0x35 go through objects' virtual functions, not followed]. Not the victory and defeat screens (0x43, 0x33:
-// a right click there moves on to the next mission): Esc keeps the game's own question there.
+// a right click there moves on to the next mission): Esc does nothing there (NoEscScreen).
 bool MenuBackScreen(int s)
 {
     switch (s) {
@@ -109,33 +109,59 @@ bool MenuBackScreen(int s)
     }
 }
 
-bool Confirm(const char *title, const char *text)
+// The screens where Esc does nothing (as in Pericles: not the game's question, not back either,
+// as the mission intro): the timed full-screen picture 0x04, the mission summary 0x17, defeat 0x33, the score 0x42,
+// victory 0x43. Their right click moves on (the next mission), so no right click is added either. The videos (0x4a)
+// are the game's: Esc skips them.
+bool NoEscScreen(int s)
 {
-    const int r = Function<ModalDialog_fn>(kModalDialog)(title, text, kYesNo);
+    return s == 0x04 || s == 0x17 || s == 0x33 || s == 0x42 || s == 0x43;
+}
+
+int TextWidth(const char *text, int fontGroup);
+int TitleWidth(const char *text);
+int TextFontWidth(const char *text);
+
+// modal_dialog_draw 0x5bfa00: the title centred in the box's width from x + 16, the text in the width - 10 from x + 10
+// (core/options/pause_menu LayOutConfirm puts both in the panel's middle, as Pericles does; with the game's own rule the
+// title "Quit" stood right of the middle).
+const pm::ConfirmBox &Box()
+{
+    static const pm::ConfirmBox box(16, 10, &TitleWidth, &TitleWidth, &TextFontWidth);
+    return box;
+}
+
+// minWidth: the box at least this wide (the text's measure; 0: as its texts make it).
+bool Confirm(const char *title0, const char *text0, int minWidth = 0)
+{
+    std::string title = title0, text = text0;
+    pm::LayOutConfirm(Box(), &title, &text, minWidth);
+    const int r = Function<ModalDialog_fn>(kModalDialog)(title.c_str(), text.c_str(), kYesNo);
     *kModalSeen = 0;
     return r == kYes;
 }
 
+void ReplayNow()
+{
+    Function<Void_fn>(kReplay)();
+}
+
+void LeaveNow()
+{
+    Function<Void_fn>(kLeaveToMenu)();
+}
+
+// Answered No from the pause menu: the pause menu again (core/options/pause_menu).
 void Replay(bool fromPause)
 {
-    if (Confirm(ot::kMenuReplayMap, Lang(5, 129))) { // "Do you wish to leave the current game?"
-        core_log("game menu: replay");
-        Function<Void_fn>(kReplay)();
-    }
-    else if (fromPause) {
-        emperor::options_window::OpenPause();
-    }
+    // "Do you wish to leave the current game?"
+    pm::AfterConfirm(Confirm(ot::kMenuReplayMap, Lang(5, 129)), fromPause, &ReplayNow, "game menu", "replay");
 }
 
 void MainMenu(bool fromPause)
 {
-    if (Confirm(ot::kMenuExitToMainMenu, Lang(5, 129))) {
-        core_log("game menu: back to the main menu");
-        Function<Void_fn>(kLeaveToMenu)();
-    }
-    else if (fromPause) {
-        emperor::options_window::OpenPause();
-    }
+    pm::AfterConfirm(Confirm(ot::kMenuExitToMainMenu, Lang(5, 129)), fromPause, &LeaveNow, "game menu",
+                     "back to the main menu");
 }
 
 int TextWidth(const char *text, int fontGroup)
@@ -145,30 +171,34 @@ int TextWidth(const char *text, int fontGroup)
     return Function<TextWidth_fn>(kTextWidth)(text, font);
 }
 
+int TitleWidth(const char *text)
+{
+    return TextWidth(text, kTitleFont);
+}
+
+int TextFontWidth(const char *text)
+{
+    return TextWidth(text, kTextFont);
+}
+
+void QuitNow()
+{
+    *kQuit = 1;
+    *kRedrawAll = 1;
+}
+
 void Exit(bool fromPause)
 {
     // Title "Quit", text "Leave Emperor?" (as Augustus has them; the game's own box at 0x4770bb has them the other way
-    // round). The short title would make the box and its buttons small, so the text gets spaces on both sides (it is
-    // drawn centred) until it is as wide as the game's own box: "Leave Emperor?" in the title font.
-    const char *title = Lang(5, 0);
-    std::string text = Lang(5, 1);
-    const int wide = TextWidth(text.c_str(), kTitleFont);
-    for (int i = 0; i < 40 && TextWidth(text.c_str(), kTextFont) < wide; ++i) {
-        text = " " + text + " ";
-    }
-    if (Confirm(title, text.c_str())) {
-        core_log("game menu: exit");
-        *kQuit = 1;
-        *kRedrawAll = 1;
-    }
-    else if (fromPause) {
-        emperor::options_window::OpenPause();
-    }
+    // round). The short title would make the box and its buttons small, so the box is at least as wide as the game's
+    // own box: "Leave Emperor?" in the title font.
+    const bool yes = Confirm(Lang(5, 0), Lang(5, 1), TextWidth(Lang(5, 1), kTitleFont));
+    pm::AfterConfirm(yes, fromPause, &QuitNow, "game menu", "exit");
 }
 
-void RunPending(void *)
+void RunPending(void *p)
 {
-    const Item item = g_pending;
+    const Item item = *static_cast<const Item *>(p);
     switch (item) {
     case Item::Replay: Replay(true); break;
     case Item::MainMenu: MainMenu(true); break;
@@ -202,7 +232,11 @@ void EscapeNow(void *p)
     }
     if ((c.lparam & (1 << 30)) != 0) { // held: repeats do nothing more
         c.handled = s == 0 || s == 1 || s == 0x48 || s == 0x49 || s == 0x14 || RightClickScreen(s) ||
-                    MenuBackScreen(s);
+                    MenuBackScreen(s) || NoEscScreen(s);
+        return;
+    }
+    if (NoEscScreen(s)) {
+        c.handled = true; // nothing at all
         return;
     }
     if (s == 0) { // the main menu: the game quits at once; ours asks first (as Augustus does), the same box as Exit game
@@ -292,6 +326,7 @@ bool Escape(LPARAM lparam)
     EscCall c{lparam, false};
     if (!core::diag::Guarded(g_feature, &EscapeNow, &c)) {
         g_rightClick = false;
+        pm::Close("an error in Esc"); // as Pericles': nothing of ours left open without its Esc
         core_log("game menu: off after an error; Esc is the game's own again");
         return false;
     }
@@ -300,11 +335,12 @@ bool Escape(LPARAM lparam)
 
 bool OnLoop()
 {
-    if (!g_hasPending) {
+    int pending = 0;
+    if (!pm::TakePending(&pending)) {
         return false;
     }
-    g_hasPending = false;
-    if (!Available() || !core::diag::Guarded(g_feature, &RunPending, nullptr)) {
+    Item item = static_cast<Item>(pending);
+    if (!Available() || !core::diag::Guarded(g_feature, &RunPending, &item)) {
         core_log("game menu: the pause menu's item was not carried out (an error)");
     }
     return true;
@@ -312,8 +348,7 @@ bool OnLoop()
 
 void Request(Item item)
 {
-    g_pending = item;
-    g_hasPending = true;
+    pm::Request(static_cast<int>(item));
 }
 
 void __cdecl MenuReplay()

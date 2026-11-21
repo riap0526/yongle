@@ -57,6 +57,11 @@ int SidebarBackdropRow(int y, int top);
 // installed. True when the key is ours (the game does not see it).
 bool KeyFilter(UINT message, WPARAM key, LPARAM l);
 
+// screen_select_initial_mode (it reads Emperor.inf) is hooked here; then after calls the given function after the
+// original returns (options_original: a new player's speeds). Start-up.
+bool InitialModeHooked();
+void SetAfterInitialMode(void (*after)());
+
 // For the offline tests (src/games/emperor/test_restore.cpp): the detours by site; the state Attach would set (without
 // hooks or patches); China_Interface.sg3 from another place than DATA next to the exe.
 const Detour *Detours(int *count);

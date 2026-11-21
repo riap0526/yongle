@@ -93,6 +93,16 @@ inline bool PatchCode(DWORD address, const BYTE *bytes, size_t size)
     return true;
 }
 
+// A call of ours in place of the game's `call dword ptr [import]` at site (6 bytes: call rel32; nop; the caller has
+// checked what is there).
+inline bool CallTo(DWORD site, const void *target)
+{
+    BYTE code[6] = {0xe8, 0, 0, 0, 0, 0x90};
+    const DWORD rel = reinterpret_cast<DWORD>(target) - (site + 5);
+    std::memcpy(code + 1, &rel, 4);
+    return PatchCode(site, code, sizeof(code));
+}
+
 // A detour by the name of its site, for the offline tests (each module lists its detours).
 struct Detour {
     const Site *site;

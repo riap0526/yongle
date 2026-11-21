@@ -1,6 +1,8 @@
 #include "games/emperor/options_entry.h"
 
 #include "core/log.h"
+#include "core/options/game_options.h"
+#include "core/ui/game_menu_layout.h"
 #include "games/emperor/city_picture.h"
 #include "games/emperor/game_menu.h"
 #include "games/emperor/keys.h"
@@ -33,7 +35,7 @@ const Site kWebsiteOpen{"main_menu_website_open", 0x4ec35b, {0xff, 0x15, 0x5c, 0
 
 using Lang_fn = const char *(__cdecl *)(int group, int index);
 using Width_fn = int(__cdecl *)(int group);
-using Handler_fn = void(__cdecl *)();
+using core::ui::game_menu_layout::Handler_fn;
 using ImageGetId_fn = int(__thiscall *)(void *, int);
 using TextWidth_fn = int(__cdecl *)(const char *text, int font);
 Lang_fn o_Lang = nullptr;
@@ -45,7 +47,7 @@ constexpr int kFontNormal = 0x1e14; // the drop-down's font (0x449840)
 
 // The Options menu: group 2 of EmperorText.eng. Ours use text numbers the group does not have (it has 7).
 constexpr int kOptionsGroup = 2, kTextGeneral = 20, kTextVideo = 21, kTextAudio = 22, kTextHotkeys = 23,
-              kTextAutosave = 24;
+              kTextAutosave = 24, kTextDifficulty = 25, kTextAutoDefend = 26;
 constexpr int kAutosaveOn = 4, kAutosaveOff = 5; // the game's "Autosave - ON" / "- OFF" (0x449460)
 const Var<int> kAutosaveDisabled{0x10de15c};      // not 0: no autosave (shown as "Autosave - OFF")
 constexpr int kMainMenuGroup = 30, kTextWebsite = 4; // the main menu's "Visit Website" (0x84fa50)
@@ -105,38 +107,70 @@ void __cdecl MenuHotkeys()
     }
 }
 
-// A drop-down's item (16 bytes, as 0x81e2a0): y, text number, handler; +8 is 1 for Autosave (the game keeps the menu
-// open after it, 0x44a3c0), +12 goes to button_param.
-#pragma pack(push, 1)
-struct MenuItem {
-    short y, text;
-    Handler_fn handler;
-    int flags, param;
-};
-// A menu bar's menu (16 bytes, as 0x81e490): x0, x1, y, text group, items, count.
-struct Menu {
-    short x0, x1, y, group;
-    MenuItem *items;
-    int count;
-};
-#pragma pack(pop)
-static_assert(sizeof(MenuItem) == 16 && sizeof(Menu) == 16, "the game's layouts");
+// Difficulty: our window's General > Difficulty (the game's own dialog was never reachable). The window not available
+// or the rows switched off after a fault: nothing (logged).
+void __cdecl MenuDifficulty()
+{
+    if (!core::options::game_options::DifficultyShown() || !ow::OpenCategory(ow::kPageGeneral, ot::kCategoryDifficulty)) {
+        core_log("options window: the difficulty is not available now; the Options menu's Difficulty does nothing");
+    }
+}
 
-// Single player (0x81e2a0 had Display, Sound, Speed, Autosave, Messages) and the modes without Autosave (0x81e2f0).
-MenuItem g_items[] = {
-    {0, kTextGeneral, &MenuGeneral, 0, 0},
-    {20, kTextVideo, &MenuVideo, 0, 0},
-    {40, kTextAudio, &MenuAudio, 0, 0},
-    {60, kTextHotkeys, &MenuHotkeys, 0, 0},
-    {80, kTextAutosave, reinterpret_cast<Handler_fn>(kAutosaveToggle), 1, 0},
-};
+// The drop-down stays open after its item when the item sets this (dropdown_input 0x44a3c0 clears it before calling
+// the item, 0x44a4f9 reads it after; autosave_toggle 0x449460 sets it).
+const Var<int> kDropdownKeepOpen{0xa59a40};
+
+// Auto defend (the game's Auto Combat, which has no switch of its own): not while enemies are attacking. Switched, it
+// keeps the drop-down open as Autosave does, so its ON / OFF text changes in front of the player; refused, the
+// drop-down closes and the notice says why.
+void __cdecl MenuAutoDefend()
+{
+    if (core::options::game_options::ToggleAutoDefend()) { // logs when it is off or refused
+        *kDropdownKeepOpen = 1;
+    }
+}
+
+const Var<BYTE> kAutoCombat{0x10de2e8}; // the game's Auto Combat (0 / 1): the item's ON / OFF
+
+// A drop-down's item and a bar's menu (core/ui/game_menu_layout; Emperor's at 0x81e2a0 and 0x81e490): +8 is 1 for
+// Autosave in the game's table (copied for our items that switch something; the drop-down stays open by
+// kDropdownKeepOpen, not by it), +12 goes to button_param.
+using core::ui::game_menu_layout::Menu;
+using core::ui::game_menu_layout::MenuItem;
+
+// Single player (0x81e2a0 had Display, Sound, Speed, Autosave, Messages): General Settings, Video, Audio, Hotkeys,
+// Difficulty, Autosave, Auto defend (as Pericles's order; the two only when the game's difficulty functions matched,
+// MakeItems); the modes without Autosave (0x81e2f0, multiplayer: no difficulty or auto defend either).
+MenuItem g_items[7];
+int g_itemCount = 0;
+
+void MakeItems()
+{
+    const bool difficulty = core::options::game_options::DifficultyAttached();
+    int n = 0;
+    g_items[n++] = {0, kTextGeneral, &MenuGeneral, 0, 0};
+    g_items[n++] = {0, kTextVideo, &MenuVideo, 0, 0};
+    g_items[n++] = {0, kTextAudio, &MenuAudio, 0, 0};
+    g_items[n++] = {0, kTextHotkeys, &MenuHotkeys, 0, 0};
+    if (difficulty) {
+        g_items[n++] = {0, kTextDifficulty, &MenuDifficulty, 0, 0};
+    }
+    g_items[n++] = {0, kTextAutosave, reinterpret_cast<Handler_fn>(kAutosaveToggle), 1, 0};
+    if (difficulty) {
+        g_items[n++] = {0, kTextAutoDefend, &MenuAutoDefend, 1, 0};
+    }
+    for (int k = 0; k < n; ++k) {
+        g_items[k].y = static_cast<short>(20 * k);
+    }
+    g_itemCount = n;
+}
 MenuItem g_itemsNoAutosave[] = {
     {0, kTextGeneral, &MenuGeneral, 0, 0},
     {20, kTextVideo, &MenuVideo, 0, 0},
     {40, kTextAudio, &MenuAudio, 0, 0},
     {60, kTextHotkeys, &MenuHotkeys, 0, 0},
 };
-// The File menu: the game's items (0x81e0b0: 6; 0x81e110: 7, with Proverbs) copied at Attach. Item 6 adds our two
+// The File menu: the game's items (0x81e0b0: 6; 0x81e110: 7, with Proverbs) copied at Attach. We add our two
 // screenshots after Save game. It is ordered as Augustus's: Replay map, Load, Save,
 // (screenshots), Delete, (Proverbs), Exit to main menu (the game's New game), Exit game; Replay map, Exit to main
 // menu and Exit game are ours (games/emperor/game_menu: our confirmations, Esc answers No). Every item 20 pixels below
@@ -210,6 +244,8 @@ const char *__cdecl Lang_detour(int group, int index)
         case kTextAudio: return ot::kMenuAudio;
         case kTextHotkeys: return ot::kMenuHotkeys;
         case kTextAutosave: return o_Lang(group, *kAutosaveDisabled != 0 ? kAutosaveOff : kAutosaveOn);
+        case kTextDifficulty: return ot::kMenuDifficulty;
+        case kTextAutoDefend: return *kAutoCombat != 0 ? ot::kMenuAutoDefendOn : ot::kMenuAutoDefendOff;
         default: break;
         }
     }
@@ -237,8 +273,11 @@ int __cdecl Width_detour(int group)
     int w = o_Width(group);
     if (g_optionsOn && group == kOptionsGroup) {
         if (g_ourWidth == 0) {
+            const bool difficulty = core::options::game_options::DifficultyAttached();
             g_ourWidth = Tiles({ot::kMenuGeneral, ot::kMenuVideo, ot::kMenuAudio, ot::kMenuHotkeys,
-                                o_Lang(kOptionsGroup, kAutosaveOn), o_Lang(kOptionsGroup, kAutosaveOff)});
+                                o_Lang(kOptionsGroup, kAutosaveOn), o_Lang(kOptionsGroup, kAutosaveOff),
+                                difficulty ? ot::kMenuDifficulty : "", difficulty ? ot::kMenuAutoDefendOn : "",
+                                difficulty ? ot::kMenuAutoDefendOff : ""});
         }
         return std::max(w, g_ourWidth);
     }
@@ -263,14 +302,6 @@ HINSTANCE WINAPI OpenOptions(HWND, LPCSTR, LPCSTR, LPCSTR, LPCSTR, INT)
         core_log("options window: not available; the main menu's Options does nothing");
     }
     return reinterpret_cast<HINSTANCE>(33); // ShellExecute's success
-}
-
-bool CallTo(DWORD site, const void *target)
-{
-    BYTE code[6] = {0xe8, 0, 0, 0, 0, 0x90}; // call rel32; nop (in place of call dword ptr [import], 6 bytes)
-    const DWORD rel = reinterpret_cast<DWORD>(target) - (site + 5);
-    std::memcpy(code + 1, &rel, 4);
-    return PatchCode(site, code, sizeof(code));
 }
 
 // The Options menu, the main menu and the message list's button (the options window).
@@ -300,11 +331,12 @@ bool OptionsWanted()
 
 void OptionsIn()
 {
+    MakeItems();
     for (DWORD bar : kBars) {
         Menu &m = *reinterpret_cast<Menu *>(bar + sizeof(Menu));
         const bool single = reinterpret_cast<DWORD>(m.items) == kItemsSingle;
         m.items = single ? g_items : g_itemsNoAutosave; // .data: writable as it is
-        m.count = single ? 5 : 4;
+        m.count = single ? g_itemCount : 4;
     }
     const bool mainMenu = CallTo(kWebsiteMinimize.address, reinterpret_cast<const void *>(&KeepWindow)) &&
                           CallTo(kWebsiteOpen.address, reinterpret_cast<const void *>(&OpenOptions));
@@ -318,8 +350,11 @@ void OptionsIn()
     else {
         core_log("options window: the message list's button is not as expected; it opens the game's Messages");
     }
-    core_log("options window: the game's Options menu opens it (General Settings, Video, Audio, Hotkeys; Autosave as the "
-             "game's); the main menu's Visit Website is Options%s",
+    core_log("options window: the game's Options menu opens it (General Settings, Video, Audio, Hotkeys; %s); the main "
+             "menu's Visit Website is Options%s",
+             g_itemCount == 7 ? "in single player Difficulty opens General > Difficulty, Autosave as the game's, Auto "
+                                "defend not while enemies attack"
+                              : "Autosave as the game's",
              mainMenu ? "" : " (not changed: the code could not be written)");
     if (messages) {
         core_log("options window: the message list's button opens it at General > Messages");
@@ -382,6 +417,25 @@ void FileIn()
 }
 
 } // namespace
+
+int SingleItemsForTest(const core::ui::game_menu_layout::MenuItem **items)
+{
+    MakeItems();
+    *items = g_items;
+    return g_itemCount;
+}
+
+const char *MenuTextForTest(int index, const char *(__cdecl *original)(int group, int index))
+{
+    Lang_fn saved = o_Lang;
+    const bool on = g_optionsOn;
+    o_Lang = original;
+    g_optionsOn = true;
+    const char *t = Lang_detour(kOptionsGroup, index);
+    o_Lang = saved;
+    g_optionsOn = on;
+    return t;
+}
 
 bool Attach()
 {

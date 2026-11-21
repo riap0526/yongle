@@ -1,4 +1,4 @@
-// Hotkeys written as text in emperor_engine.ini, e.g. "Insert", "Ctrl+F12", "Shift+Alt+P"; an action may have two,
+// Hotkeys written as text in the game's settings file, e.g. "Insert", "Ctrl+F12", "Shift+Alt+P"; an action may have two,
 // "Insert, Ctrl+F12" (ParseHotkeyList).
 //
 // Syntax: zero or more modifiers (Ctrl or Control, Shift, Alt), each followed by '+', then one key; case does not

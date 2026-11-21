@@ -8,6 +8,7 @@
 
 namespace emperor {
 
+using core::site::CallTo;
 using core::site::Detour;
 using core::site::Function;
 using core::site::g_imageShift;

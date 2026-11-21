@@ -1,5 +1,5 @@
 // See city_picture.h. Every address was checked in the disassembly. The pictures themselves (keys, requests, the
-// strips, the minimap's crop, file names, settings) are the core's (core/capture/city_picture, shared with Pericles
+// strips, the minimap's crop, file names, settings) are the core's (core/capture/city_picture, shared with Pericles);
 // this file gives it Emperor's variables, the drawing and the player's city.
 #include "games/emperor/city_picture.h"
 
@@ -8,8 +8,6 @@
 #include "core/display/city_strips.h"
 #include "core/log.h"
 #include "core/settings/settings.h"
-#include "core/ui/hotkey.h"
-#include "core/ui/settings_view.h"
 #include "games/emperor/scroll.h"
 #include "games/emperor/site.h"
 #include "games/emperor/zoom.h"
@@ -261,44 +259,6 @@ const cp::CityPictureGame kGame{
     &CityName,
 };
 
-// Keys the game itself uses and Yongle's own (F5, Alt+Enter,
-// Shift+F7): shown in the panel when one of them is chosen as one of our keys.
-const char *GameKeyNote(unsigned vk, unsigned mods)
-{
-    using core::ui::kModAlt;
-    using core::ui::kModCtrl;
-    using core::ui::kModShift;
-    if ((vk == 0x74 && mods == 0) || (vk == VK_RETURN && mods == kModAlt)) {
-        return "Yongle also uses this key to switch between window and full screen; that no longer works with it.";
-    }
-    if (vk == 0x76 && mods == kModShift) {
-        return "Yongle also uses this key to change the resolution; that no longer works with it.";
-    }
-    if (mods == kModAlt && ((vk >= '1' && vk <= '5') || vk == 'T')) {
-        return "The game also uses this key; it no longer reaches the game.";
-    }
-    if (mods == (kModCtrl | kModAlt) && vk == 'C') {
-        return "The game also uses this key; it no longer reaches the game.";
-    }
-    if ((vk == VK_INSERT || vk == VK_DELETE) && mods == 0) {
-        // Only for typing in the game (Insert: insert / overwrite; Delete: deleting, and closing the
-        // editor's number pad, screen 0x0e, game_wndproc -> 0x5eec50): hardly ever used, so nothing to tell.
-        return nullptr;
-    }
-    if (vk == 0x71 || vk == 0x74 || vk == 0x75 || vk == 'R') {
-        return "The game also reacts to this key itself.";
-    }
-    if ((mods & (kModCtrl | kModAlt)) == 0) {
-        const bool used = (vk >= 'A' && vk <= 'Z') || (vk >= '0' && vk <= '9') || (vk >= 0x70 && vk <= 0x78) ||
-                          vk == VK_SPACE || vk == VK_TAB || vk == VK_HOME ||
-                          vk == VK_END || vk == VK_PRIOR || vk == VK_NEXT || vk == VK_NUMPAD2;
-        if (used) {
-            return "The game also uses this key; it no longer reaches the game.";
-        }
-    }
-    return nullptr;
-}
-
 } // namespace
 
 void RegisterSettings()
@@ -325,7 +285,6 @@ bool Attach(bool scrollAttached)
         core_log("picture: %s at 0x%lx does not match; picture file names start with \"city\"", kCityNameGet.name,
                  kCityNameGet.address);
     }
-    core::ui::SetGameKeyNote(&GameKeyNote);
     cp::Install(kGame);
     g_attached = true;
     return true;

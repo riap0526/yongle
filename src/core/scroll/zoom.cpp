@@ -489,7 +489,7 @@ void CameraStep()
     camera::NoteView(cam); // also when only the layout's clamp moved it: not "someone else"
     // viewport_init (the relayout) set the drawn view's copy to the map's middle; mouse_to_grid looks tiles up from it
     // until city_render writes it again, so the cursor tile (the building preview) jumped meanwhile (found in
-    // test). The view as city_render will draw it.
+    // testing). The view as city_render will draw it.
     SyncDrawnView();
 }
 

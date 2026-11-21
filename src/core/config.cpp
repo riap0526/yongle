@@ -169,7 +169,7 @@ void RegisterCoreItems()
                          "window are not available with it.)",
                          Type::Choice, "display", Effect::Live, true, true, 0, 0, 0, nullptr, kPresent, kPresentLabels,
                          3, nullptr, nullptr, nullptr, nullptr, 1u << 0}); // original: no longer offered
-    // A file of an older version with original (it could be chosen in the panel and the options window until
+    // A file of an older version with original (older versions offered it in the panel and the options window)
     // gets display, so the options window can be used; original set in [video] later stays.
     core::settings::RenameMovedValue("video", "present", "original", "display");
     g_resolution = Add(Item{"video", "resolution", "Resolution",

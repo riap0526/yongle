@@ -44,7 +44,7 @@ struct Framing {
                          // in the background): the layout is for the picture's width x (its height + below)
     bool labels = false; // debug: the block is drawn plain white (for the layout check)
     double scale = 0;    // > 0: the block at most at this scale (its own size times the display scale);
-                         // item 8); 0: as large as fits (ComputeFrameLayout's maxScale)
+                         // 0: as large as fits (ComputeFrameLayout's maxScale)
     bool gameCaption = false; // the status line (SetCaption) where the game's GDI line went inside the picture,
                               // white on black, instead of on a dark strip over the picture's bottom
 };

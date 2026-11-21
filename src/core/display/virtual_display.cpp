@@ -1128,8 +1128,20 @@ LRESULT CALLBACK SubclassProc(HWND hwnd, UINT m, WPARAM w, LPARAM l)
     if (hwnd == g_hwnd && ModalMessage(hwnd, m, w, l)) {
         return 0;
     }
+    if (hwnd == g_hwnd && m == WM_SYSCOMMAND && (w & 0xFFF0) == SC_KEYMENU && l == 0) {
+        // Alt pressed and let go alone (or F10): Windows would enter the menu bar's mode, which the game window does
+        // not have; the next key (P, say) would then only beep. Alt+Space (lParam ' ') still opens the window menu.
+        static long logs = 0;
+        if (++logs <= 3) {
+            core_log("display: Alt alone: no menu mode (the next key goes to the game)");
+        }
+        return 0;
+    }
     if ((m == WM_KEYDOWN || m == WM_SYSKEYDOWN || m == WM_CHAR || m == WM_SYSCHAR) && hwnd == g_hwnd && g_keyTranslator &&
         g_keyTranslator(m, w, l)) {
+        if (m == WM_SYSCHAR) {
+            g_filteredSysChar = false; // the bindings took the character the filter would have taken (Alt+Enter)
+        }
         return 0; // the bindings first (F6 is theirs; with them off, the key filter below still keeps F6 from the game)
     }
     if ((m == WM_KEYDOWN || m == WM_SYSKEYDOWN) && hwnd == g_hwnd && g_keyFilter && g_keyFilter(m, w, l)) {

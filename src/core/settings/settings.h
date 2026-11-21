@@ -15,6 +15,7 @@
 #pragma once
 
 #include <cstddef>
+#include <string>
 
 namespace core::settings {
 
@@ -106,7 +107,10 @@ void RenameMovedValue(const char *newSection, const char *newKey, const char *ol
 // it does not know kept as written; the file as it was is kept in emperor_engine.ini.bak. A missing file is made
 // again from the template, with the values of emperor_engine.ini.bak when there is one (the .bak is left as it is),
 // else at the defaults. Without a template (e.g. offline tests) the descriptions in the file are never changed and a
-// missing file is not made.
+// missing file is not made. A setting the template does not list (e.g. Yongle's [keys]) keeps a line only while it
+// differs from its default: saving it back to the default removes its line instead of writing the default, and a
+// line that has the default (an older version wrote it, or the player did) is removed at Load and at every save, so
+// the file keeps only what the player changed.
 void SetTemplate(const char *text);
 
 // Called when the item's value changed (game thread; also once per item after Load, with initial = true). Returns
@@ -145,6 +149,11 @@ void SetWakeup(void (*wake)());
 
 // The result of the last save, for the panel ("" before the first one).
 void LastSaveResult(char *out, size_t size);
+
+// A label or help text with the game's names filled in: {product} (e.g. Yongle), {ini} (e.g. emperor_engine.ini) and
+// {native} (the game's own size, e.g. 1024x768); the registrations' labels and help get it already. For other texts for
+// players that both games share (core/options/option_text, core/options/menu_text).
+std::string GameNames(const char *text);
 
 // One line for the log: "display.backend=emulated display.scaling=sharp_bilinear ..."
 void Describe(char *out, size_t size);

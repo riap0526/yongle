@@ -7,16 +7,26 @@ All notable changes to Yongle. Downloads, with the SHA256 of each zip, are on th
 ### Added
 
 - **Drag scrolling.** Hold the middle mouse button over the city and move the mouse: the city follows it. The cursor is hidden while you drag and comes back where you pressed. A click without moving still goes back to 100 % zoom. It can be turned off in Options.
+- **Difficulty and auto defend.** The game has both, but never let you change them. While you play a city alone, they are now in Options > General > Difficulty and in the Options menu. Auto defend sends your soldiers out by themselves when enemies come. The game has no switch for it: turn it off before removing Yongle.
 - **Edge scrolling width.** How close to the edge of the screen the cursor has to be to scroll the city, from 1 pixel (as before) to 20, or 0 for none. In Options.
 
 ### Changed
 
 - **New scroll speeds with smooth scrolling.** Each scroll speed setting now has its own steady speed, the same on every computer. Every setting is slower than before, and 100 % is no longer too fast. New players start at 50 % scroll speed, about as fast as the old 30 %. If you used 30 %, try 50 %.
+- **Nature sounds play the way the game designed them.** The game's files describe them as 3D sounds: each comes down from above, moves around you for a while and rises away. Yongle now recreates this in stereo and loops each sound for the time the files give. They use the ambient sounds volume. The setting is called Nature sounds.
+- **Esc on the end-of-mission screens.** On the victory, defeat and score screens and the timed pictures between missions, Esc now does nothing. Before, it asked whether to quit the game. Videos still skip with Esc.
+- **Options window buttons.** In the Options window, the button, tab or category under the mouse now turns darker like the game's own buttons, as in the Pause menu, instead of getting a thick frame. The box that shows a setting's value now reaches the arrows on both sides, like the sliders.
 - **Screenshots from the city view only.** The city and minimap screenshot keys now work only when no window, dialog or message is open, also not the sidebar's dialogs. With one open, the message says so once you close it.
 
 ### Fixed
 
 - Yongle's messages (for example "City screenshot saved") were lost when a window or message was open at that moment. They now appear when you are back in the city.
+- Loading a saved game kept the zoom you had before. It now goes back to the starting zoom (Options > Video > City).
+- At every zoom level, the view now stops at the map's east and south edges in the same place as the original game.
+- Holding a list's scroll arrow scrolled far too fast on modern computers. It now scrolls one line every 50 ms, as on computers of the time.
+- In the Exit game, Replay map and Exit to main menu boxes, the title and text now sit in the middle of the box.
+- In the Pause menu, the button under the mouse now turns darker like the game's own buttons, instead of getting a thick frame.
+- New players on the GOG and Steam versions started at the install's speeds instead of 80 % game speed and 50 % scroll speed. They now get these.
 
 ## 0.2.0 (2026-11-09)
 
@@ -39,7 +49,7 @@ All notable changes to Yongle. Downloads, with the SHA256 of each zip, are on th
 - **Yongle's files go to Documents when needed.** If the game folder needs administrator rights to write to (for example under `C:\Program Files (x86)`), Yongle's settings, log and screenshots now go to `Documents\My Games\Yongle` instead of Windows' VirtualStore. Your settings are copied there at the first start.
 - **`emperor_engine.ini` is updated when you upgrade.** It gets the new version's descriptions and keeps your values. The old file is saved as `emperor_engine.ini.bak`. If the file is missing, it is created again.
 - **The settings panel is now a debug panel** (Insert), for testing and for fixing the display if something goes wrong. All other settings are in Options.
-- **Ctrl+arrow keys no longer scroll faster**; you can bind Ctrl+arrows to other actions instead. F6, F7 and F8 are no longer passed to the game.
+- **Ctrl+arrow keys are free for your own bindings.** In the original game they scroll like the arrow keys alone; now they do nothing until you bind them in Options > Hotkeys. F6, F7 and F8 are no longer passed to the game.
 - **No new ambient sounds while Yongle's windows are open**, the same as with the game's own dialogs.
 
 ### Fixed
