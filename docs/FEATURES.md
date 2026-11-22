@@ -10,7 +10,7 @@ Back to the [README](../README.md). Most settings are in the Options window (F6,
 
 - **Any resolution.** The game runs at your screen's resolution divided by the display scale (100–250 % in 5 % steps, or *Auto*, which makes it 1080 pixels high on bigger screens, e.g. 1920×1080 on a 2560×1440 monitor). The sidebar and top bar reach the edges of the screen, the city fills the rest, and dialogs are centered.
 
-- **Every screen uses the display scale.** Menus, briefings and loading screens get bigger along with the city. They are shown in a frame instead of stretched, and only made smaller if they don't fit. Around the menus you can have a blurred, darkened picture of the last city you played (or a picture of your own, see [MENU_BACKGROUND.md](MENU_BACKGROUND.md)), parchment, or black like the original (*Menu screens*).
+- **Every screen uses the display scale.** Menus, briefings and loading screens get bigger along with the city. They are shown in a frame instead of stretched, and only made smaller if they don't fit. Around the menus you can have a blurred, darkened picture of the last city you played (or a picture of your own, see [MENU_BACKGROUND.md](MENU_BACKGROUND.md)), the game's own panel pattern, a fret border with black around, or black like the original (*Menu screens*).
 
   ![The main menu over a blurred picture of the last city](../screenshots/main-menu.webp)
 
@@ -50,6 +50,8 @@ Back to the [README](../README.md). Most settings are in the Options window (F6,
 ## Gameplay feel
 
 - **Smooth scrolling.** The city scrolls pixel by pixel and eases in and out. Each scroll speed setting has its own steady speed, the same on every computer, from slow at 10 % to fast at 100 %.
+- **Drag scrolling.** Hold the middle mouse button over the city and move the mouse: the city follows it. The cursor is hidden while you drag and comes back where you pressed. A click without moving still goes back to 100 % zoom. You can turn it off in Options (*Drag scrolling*).
+- **Edge scrolling width.** How close to the edge of the screen the cursor has to be to scroll the city: 1 pixel as in the original, up to 20, or 0 to scroll only with the keys and the mouse (Options, *Edge scrolling: width*).
 - **City zoom.** Turn the mouse wheel over the city to zoom out and see more, or zoom in to see it bigger, in steps of 25 % from 50 % to 150 % (less on small maps, so the view stays inside the map). A "Zoom" message at the top shows the current level. The spot under the cursor stays in place, and the zoom is animated when smooth scrolling is on. The middle mouse button goes back to 100 %. Over the sidebar, the wheel still changes the building category. Clicking, building, selecting and sounds all work at any zoom, and the sidebar and menus keep their size. You can set the zoom the game starts with (*Starting city zoom* in Options > Video); zooming with the wheel is not saved, and saved games are not affected. Zooming out is slower, because the game has more of the city to draw.
 
   ![The city zoomed out to 50 %, with the zoom message](../screenshots/city-zoom.webp)
@@ -76,6 +78,7 @@ Back to the [README](../README.md). Most settings are in the Options window (F6,
   ![A minimap saved with Shift+F10](../screenshots/minimap.webp)
 
 - **F11** saves a screenshot of the game to `shots\`. Messages like "screenshot saved" or the zoom level appear in the game's own message boxes.
+- The game's own **Alt+1 to Alt+5** BMP screenshots are not saved, because the game can't make them above 1024×768 (calling back your companies works as usual). With `backend = system`, where the game runs at its own sizes, they are saved as before.
 
 - **F12** writes a problem report (a mark in the log, screenshots, statistics, recent display changes) to attach to bug reports.
 

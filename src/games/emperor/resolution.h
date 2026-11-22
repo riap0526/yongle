@@ -63,9 +63,11 @@ bool InitialModeHooked();
 void SetAfterInitialMode(void (*after)());
 
 // For the offline tests (src/games/emperor/test_restore.cpp): the detours by site; the state Attach would set (without
-// hooks or patches); China_Interface.sg3 from another place than DATA next to the exe.
+// hooks or patches); China_Interface.sg3 from another place than DATA next to the exe; whether a site is one that
+// must match for our resolutions to be installed.
 const Detour *Detours(int *count);
 void InstalledForTest(const core_config *cfg);
+bool RequiresSiteForTest(const char *name);
 void SetInterfacePackForTest(const wchar_t *path);
 
 } // namespace emperor::resolution

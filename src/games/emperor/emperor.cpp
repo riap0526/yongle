@@ -200,6 +200,16 @@ void LogRates(const char *why)
     g_since = now;
 }
 
+// A new rate window. The output's counts of the time before (e.g. the panel open: the output thread went on showing
+// frames) belong to no window: dropped, so the next line is not inflated (as in Pericles's layer).
+void ResetWindow()
+{
+    g_since = GetTickCount();
+    g_loops = g_ticks = 0;
+    long presented = 0, shown = 0;
+    core::output::TakeCounts(&presented, &shown);
+}
+
 int WINAPI GameMain_detour(HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int show)
 {
     int r = o_GameMain(inst, prev, cmd, show);
@@ -227,8 +237,7 @@ void Resumed()
 {
     core::sound::SetQuiet(false);
     core_log("emperor: panel or options window closed: game resumed");
-    g_since = GetTickCount();
-    g_loops = g_ticks = 0;
+    ResetWindow();
     g_lastLoop = 0; // the pause is not a frame time
     emperor::scroll::Resume();
 }
@@ -306,8 +315,7 @@ int __cdecl LoopStep_detour()
         }
         core_log("emperor: game speed %d%% (was %d%%)", speed, g_lastSpeed);
         g_lastSpeed = speed;
-        g_since = GetTickCount();
-        g_loops = g_ticks = 0;
+        ResetWindow();
     }
     if (GetTickCount() - g_since >= kRateLogMs) {
         LogRates("");

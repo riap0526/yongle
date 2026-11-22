@@ -81,6 +81,25 @@ const Site kImageSize{"image_get_size", 0x5cd800, {0x53, 0x55, 0x56, 0x8b, 0x74,
 // screen_select_initial_mode: the start-up settings, then Emperor.inf over them (screen_mode among them).
 const Site kInitialMode{"screen_select_initial_mode", 0x4761a0, {0x53, 0x56, 0xbb, 0x01, 0x00, 0x00, 0x00, 0xbe}};
 
+// The game's own screenshot (Alt+1..5 in the city, city_alt_keys 0x43d03c: shot1.bmp..shot5.bmp) writes past its
+// buffer at our resolutions (0x52ad1a: it assumes the game's own sizes), so it is not run while ours are used; F11
+// takes our screenshots. It is one of the required sites: without the hook our resolutions are not installed, and
+// with the real DirectDraw (the game's own modes only) the game keeps its screenshot. __cdecl(file name), the caller
+// pops (0x43d041 add esp, 4).
+const Site kBmpShot{"bmp_screenshot", 0x52abc0, {0x83, 0xec, 0x38, 0x53, 0x33, 0xdb, 0x68, 0x60}};
+using BmpShot_fn = void(__cdecl *)(const char *file);
+BmpShot_fn o_BmpShot = nullptr;
+
+void __cdecl BmpShot_detour(const char *file)
+{
+    static long logs = 0;
+    if (++logs <= 5) {
+        core_log("resolution: the game's own screenshot (%s) is not taken: it does not work at our resolutions (F11 "
+                 "takes ours)",
+                 file ? file : "?");
+    }
+}
+
 // `cmp width, 1024` ... `jnz`: the bytes from the compare to the jump opcode, and where the jump is.
 // Left alone on purpose (the other width's path is the right one for a wider screen, as in the widescreen patch for
 // 2560x1440 that was tested): 0x430714 (China map frame at fixed 1024 coordinates), 0x5b5a56/0x5b5bb6/0x5b5bd9
@@ -180,7 +199,9 @@ const Site kHelpClose{"help_close", 0x50e090, {0xa1, 0x68, 0xf5, 0x0b, 0x01, 0x8
 const Site kScreenBackground{"screen_draw_background", 0x5371f0, {0x8b, 0x44, 0x24, 0x04, 0xb1, 0x01, 0x85, 0xc0}};
 const Site kScreenDraw{"screen_draw", 0x537690, {0x33, 0xc0, 0x53, 0xa0, 0x45, 0xe0, 0x0d, 0x01}};
 const Var<int> kHelpChoices{0x10bf574};
-const Var<int> kHover{0xa599fc}, kHover2{0xa599f8}; // screen_draw keeps both around its drawing
+// The two hover variables: screen_draw_background reads both, clears them for a drawing call and puts them back;
+// screen_draw does the same with the first one.
+const Var<int> kHover{0xa599fc}, kHover2{0xa599f8};
 constexpr char kScreenHelp = 0x05, kScreenGoals = 0x3b, kScreenCity = 0x01;
 core::diag::Feature g_modeScreens{"help and mission goals at a mode change (games/emperor/resolution)"};
 bool g_modeScreensOk = false; // its sites matched
@@ -1228,15 +1249,38 @@ const Detour *Detours(int *count)
         {&kButtonsDraw, reinterpret_cast<void *>(&ButtonsDraw_detour)},
         {&kMessagePanel, reinterpret_cast<void *>(&MessagePanel_detour)},
         {&kFillRect, reinterpret_cast<void *>(&FillRect_detour)},
+        {&kBmpShot, reinterpret_cast<void *>(&BmpShot_detour)},
     };
     *count = static_cast<int>(sizeof(kDetours) / sizeof(kDetours[0]));
     return kDetours;
+}
+
+namespace {
+
+// Every one of these must be as expected, or our resolutions are not installed at all.
+const Site *const kRequired[] = {&kModeGetSize, &kSidebarPos, &kViewportSmall, &kViewportLarge, &kChangeMode,
+                                 &kViewportInit, &kInfoPlace, &kFrameBars, &kSidebarDraw, &kArtLoad,
+                                 &kImageGetId, &kImageDraw, &kImageSize, &kSpecialPlace, &kStorageDraw,
+                                 &kTradeDraw, &kMillDraw, &kMillForeground, &kTradePopup, &kInfoInput,
+                                 &kButtonsDraw, &kBuildingGet, &kMessagePanel, &kFillRect, &kBmpShot};
+
+} // namespace
+
+bool RequiresSiteForTest(const char *name)
+{
+    for (const Site *s : kRequired) {
+        if (std::strcmp(s->name, name) == 0) {
+            return true;
+        }
+    }
+    return false;
 }
 
 void InstalledForTest(const core_config *cfg)
 {
     switching::InstalledForTest(Game(), cfg);
     g_installed = true;
+    g_modeScreensOk = true; // the help and the goals at a mode change: the test's fakes at their sites
 }
 
 void SetInterfacePackForTest(const wchar_t *path)
@@ -1251,12 +1295,7 @@ bool Attach(const core_config *cfg)
         core_log("resolution: real DirectDraw (display.backend=system): the game's own modes only");
         return false;
     }
-    const Site *sites[] = {&kModeGetSize, &kSidebarPos, &kViewportSmall, &kViewportLarge, &kChangeMode,
-                           &kViewportInit, &kInfoPlace, &kFrameBars, &kSidebarDraw, &kArtLoad,
-                           &kImageGetId, &kImageDraw, &kImageSize, &kSpecialPlace, &kStorageDraw,
-                           &kTradeDraw, &kMillDraw, &kMillForeground, &kTradePopup, &kInfoInput, &kButtonsDraw,
-                           &kBuildingGet, &kMessagePanel, &kFillRect};
-    for (const Site *s : sites) {
+    for (const Site *s : kRequired) {
         if (!Matches(*s)) {
             core_log("resolution: %s at 0x%lx does not match; custom resolutions not installed", s->name, s->address);
             return false;
@@ -1278,6 +1317,11 @@ bool Attach(const core_config *cfg)
                      j.address);
             return false;
         }
+    }
+    // First, before any byte of the layout is changed: without it Alt+1..5 would crash above 1024x768.
+    if (!Install(kBmpShot, &BmpShot_detour, o_BmpShot)) {
+        core_log("resolution: %s could not be hooked; custom resolutions not installed", kBmpShot.name);
+        return false;
     }
     int patched = 0;
     for (const JumpSite &j : kJumps) {

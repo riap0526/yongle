@@ -9,6 +9,7 @@ All notable changes to Yongle. Downloads, with the SHA256 of each zip, are on th
 - **Drag scrolling.** Hold the middle mouse button over the city and move the mouse: the city follows it. The cursor is hidden while you drag and comes back where you pressed. A click without moving still goes back to 100 % zoom. It can be turned off in Options.
 - **Difficulty and auto defend.** The game has both, but never let you change them. While you play a city alone, they are now in Options > General > Difficulty and in the Options menu. Auto defend sends your soldiers out by themselves when enemies come. The game has no switch for it: turn it off before removing Yongle.
 - **Edge scrolling width.** How close to the edge of the screen the cursor has to be to scroll the city, from 1 pixel (as before) to 20, or 0 for none. In Options.
+- **A black frame for the menus.** Options > Video > Menu screens has a new choice, *Framed*: the menus, briefings and other full-screen pictures in a fret border with black around them.
 
 ### Changed
 
@@ -17,6 +18,8 @@ All notable changes to Yongle. Downloads, with the SHA256 of each zip, are on th
 - **Esc on the end-of-mission screens.** On the victory, defeat and score screens and the timed pictures between missions, Esc now does nothing. Before, it asked whether to quit the game. Videos still skip with Esc.
 - **Options window buttons.** In the Options window, the button, tab or category under the mouse now turns darker like the game's own buttons, as in the Pause menu, instead of getting a thick frame. The box that shows a setting's value now reaches the arrows on both sides, like the sliders.
 - **Screenshots from the city view only.** The city and minimap screenshot keys now work only when no window, dialog or message is open, also not the sidebar's dialogs. With one open, the message says so once you close it.
+- **A notice for other versions of the game.** Yongle is made for the English GOG release of Emperor (1.0.1.0). With any other `Emperor.exe`, "Untested Emperor.exe" shows at the top of the screen for 20 seconds at the start. Other languages may work, but with problems or missing features.
+- **No error sound for Alt with a letter.** Alt with a letter that has no action no longer makes the Windows error sound.
 
 ### Fixed
 
@@ -27,6 +30,24 @@ All notable changes to Yongle. Downloads, with the SHA256 of each zip, are on th
 - In the Exit game, Replay map and Exit to main menu boxes, the title and text now sit in the middle of the box.
 - In the Pause menu, the button under the mouse now turns darker like the game's own buttons, instead of getting a thick frame.
 - New players on the GOG and Steam versions started at the install's speeds instead of 80 % game speed and 50 % scroll speed. They now get these.
+- A new resolution chosen on a menu screen (for example with Shift+F7) now applies at once, not only after you go to another screen.
+- A fixed resolution with an odd width (for example 1365x768) drew the picture slanted. The width is now made one pixel smaller.
+- Below 786 pixels high (for example 1366×768), the empire map sat in the top left corner next to the city. It is now centered, framed and shrunk to fit.
+- Esc with a sidebar window open sometimes opened the help for a sidebar button.
+- The Options window could stay on the screen after closing the mission goals or a similar screen.
+- Changing the resolution or window mode made the back of the mission goals black. The help and About screens now close first.
+- After a pause, the city sometimes played many ambient sounds at once.
+- With `backend = system`, Alt+1 to Alt+5 save the game's own BMP screenshot again (the game runs at its own sizes there).
+
+### For bug reports
+
+- At every start, the log records which `Emperor.exe` runs: its size, time stamp and SHA-256.
+
+### Upgrade notes
+
+- `menu_screens = parchment` is now called `panel` (the look is the same). Your file is changed at the first start; the file as it was is kept as `emperor_engine.ini.bak`.
+- `framed` in `menu_screens` is now the new black frame. A file from 0.1.2 or earlier that still has `framed` there gets the new look, not `panel`.
+- New settings: `drag_scroll` and `edge_scroll_width` in `[gameplay]`. They take their defaults when they are missing.
 
 ## 0.2.0 (2026-11-09)
 

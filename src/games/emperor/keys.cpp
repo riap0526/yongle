@@ -182,21 +182,8 @@ const Def kDefs[] = {
 
 constexpr int kCount = static_cast<int>(sizeof(kDefs) / sizeof(kDefs[0]));
 
-// The game's own screenshot (Alt+1..5 in the city, city_alt_keys 0x43d03c: shot1.bmp..shot5.bmp) writes past its
-// buffer at our resolutions (0x52ad1a, a crash in testing; it assumes the game's own sizes): not run. __cdecl(file
-// name), the caller pops (0x43d041 add esp, 4).
-const Site kBmpShot{"bmp_screenshot", 0x52abc0, {0x83, 0xec, 0x38, 0x53, 0x33, 0xdb, 0x68, 0x60}};
-using BmpShot_fn = void(__cdecl *)(const char *file);
-BmpShot_fn o_BmpShot = nullptr;
-
-void __cdecl BmpShot_detour(const char *file)
-{
-    static long logs = 0;
-    if (++logs <= 5) {
-        core_log("keys: the game's own screenshot (%s) is not taken: it does not work at our resolutions",
-                 file ? file : "?");
-    }
-}
+// Alt+1..5's BMP screenshot (bmp_screenshot 0x52abc0) is the resolution's part (games/emperor/resolution): not run
+// only while our resolutions are used.
 
 const Var<char> kGameScreen{0x10de045};
 const Var<int> kCtrlDown{0x1156e00}; // key_ctrl_down: game_wndproc's record of Ctrl (Ctrl+F1, Ctrl+1, fast scrolling)
@@ -246,13 +233,6 @@ bool Held(unsigned vk)
 
 bool Attach()
 {
-    if (Matches(kBmpShot)) {
-        Install(kBmpShot, &BmpShot_detour, o_BmpShot);
-    }
-    else {
-        core_log("keys: bmp_screenshot at 0x%lx does not match; the game's own Alt+1..5 screenshot stays",
-                 kBmpShot.address);
-    }
     core::input::keys::Install();
     // The panel's note for a game key chosen for one of our keys (here, not with a feature that may not attach).
     core::ui::SetGameKeyNote(&emperor::options_text::GameKeyNote);

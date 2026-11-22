@@ -37,6 +37,7 @@ See **[CHANGELOG.md](CHANGELOG.md)** for what changed in each release.
 - **Windowed mode** (F5 or Alt+Enter). You can resize the window, and its size and position are remembered.
 - **Smooth scrolling** of the city, with a steady speed for each scroll speed setting.
 - **City zoom** with the mouse wheel (50–150 %, less on small maps), toward the cursor. The middle mouse button goes back to 100 %.
+- **Drag scrolling** with the middle mouse button.
 - **Options window** (F6) with the game's settings and Yongle's together.
 - **Key rebinding** for almost every key, with two keys per action.
 - **Esc closes windows** and opens a **Pause menu** in the city.

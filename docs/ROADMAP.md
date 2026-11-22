@@ -11,11 +11,12 @@ Back to the [README](../README.md). Plans change with what players report; ideas
 
 - **v0.2.0**: Options in the game's own style (the game's options and Yongle's in one window, F6); key rebinding with two keys per action; Esc closes windows and opens a Pause menu; city zoom with the mouse wheel; full city and minimap screenshots; the display scale for every screen; master volume; the game's unused nature sounds; Yongle's files where it can always write them; skipping the intro movie; full screen no longer pushed up by the compatibility setting of GOG installs.
 
+- **v0.2.1**: drag scrolling with the middle mouse button; the edge scrolling width; difficulty and auto defend in Options; a black frame for the menus; nature sounds played the way the game designed them; steady scroll speeds; a notice for other versions of the game; fixes for the empire map at 768 pixels high, odd resolutions, Esc and changing the resolution.
+
 ## Planned
 
 The order is not decided yet.
 
-- **Drag scrolling** with the middle mouse button.
 - **Feng shui preview colors** that are easier to tell apart for color-blind players.
 - **Load and save windows of Yongle's own**, larger, with a preview of the saved city.
 - **Raising the original's limits.**

@@ -529,8 +529,11 @@ void __cdecl FakeModeGetSize(int mode)
     }
 }
 
+int g_changeModes = 0; // screen_change_mode calls
+
 void __cdecl FakeChangeMode(int mode)
 {
+    ++g_changeModes;
     using Fn = void(__cdecl *)(int);
     Res<Fn>("screen_mode_get_size")(mode); // the game calls the (hooked) mode size
     if (Fires("change_mode")) {
@@ -1125,6 +1128,157 @@ void ModeFault()
           "log: the guard reports what it put back");
     Res<Fn>("screen_mode_get_size")(3);
     Check(At<int>(aScreenW) == 1024, "from then on mode 3 is the game's own 1024x768");
+}
+
+// The game's own BMP screenshot (Alt+1..5): not run while our resolutions are used; a required site, so without it
+// our resolutions are not installed; with the real DirectDraw nothing is hooked and the game keeps it.
+int g_bmpShots = 0;
+
+void __cdecl FakeBmpShot(const char *)
+{
+    ++g_bmpShots;
+}
+
+void BmpScreenshot()
+{
+    Thunk(0x52abc0, reinterpret_cast<void *>(&FakeBmpShot));
+    core_config c = Config1920();
+    emperor::resolution::InstalledForTest(&c);
+    using Shot_fn = void(__cdecl *)(const char *);
+    Res<Shot_fn>("bmp_screenshot")("shot1.bmp");
+    Check(g_bmpShots == 0 && LogContains("the game's own screenshot (shot1.bmp) is not taken"),
+          "our resolutions: Alt+1's BMP screenshot is not run (it writes past its buffer above 1024x768)");
+    Check(emperor::resolution::RequiresSiteForTest("bmp_screenshot"),
+          "bmp_screenshot is a required site: if it does not match, our resolutions are not installed");
+    Check(!emperor::resolution::RequiresSiteForTest("no_such_site"), "... (the check itself tells sites apart)");
+    core_config sys = Config1920();
+    sys.backend = CORE_BACKEND_SYSTEM;
+    Check(!emperor::resolution::Attach(&sys) && LogContains("the game's own modes only"),
+          "backend = system: not installed (nothing hooked: the game's own Alt+1..5 screenshot stays)");
+}
+
+// The help and the mission goals at a mode change (games/emperor/resolution): the help is closed first when its
+// right click would close it (no choice buttons), else left (the game's mode change does nothing there); on the
+// mission goals the city is drawn behind once, as screen 1, and the goals drawn again.
+constexpr DWORD aHelpChoices = 0x10bf574, aHover = 0xa599fc, aHover2 = 0xa599f8, aRedraw = 0x10de036;
+constexpr char kModeScreensOff[] =
+    "feature \"help and mission goals at a mode change (games/emperor/resolution)\" switched off";
+int g_helpCloses = 0, g_goalsBackgrounds = 0, g_goalsDraws = 0, g_goalsDrawScreen = -1;
+
+void __cdecl FakeHelpClose()
+{
+    ++g_helpCloses;
+    if (Fires("help_close")) {
+        Fault();
+    }
+    At<char>(aGameScreen) = 0x01; // back to the screen it was opened from
+}
+
+void __cdecl FakeGoalsBackground(int)
+{
+    ++g_goalsBackgrounds;
+    At<char>(aRedraw) = 0; // drawn
+}
+
+void __cdecl FakeGoalsScreenDraw()
+{
+    ++g_goalsDraws;
+    g_goalsDrawScreen = At<unsigned char>(aGameScreen);
+    if (Fires("goals_draw")) {
+        Fault();
+    }
+}
+
+void SetupModeScreens()
+{
+    Thunk(0x50e090, reinterpret_cast<void *>(&FakeHelpClose));
+    Thunk(0x5371f0, reinterpret_cast<void *>(&FakeGoalsBackground));
+    Thunk(0x537690, reinterpret_cast<void *>(&FakeGoalsScreenDraw));
+    core_config c = Config1920();
+    emperor::resolution::InstalledForTest(&c);
+    emperor::resolution::OnLoop(); // the city at 1920x1080
+}
+
+// A new fixed resolution from the settings, and the loop that changes the mode.
+void ModeChangeTo(int w, int h)
+{
+    core_config c = Config1920();
+    c.resolution_w = w;
+    c.resolution_h = h;
+    emperor::resolution::SettingsChanged(&c);
+    Sleep(520); // the mode change is tried at most every 500 ms
+    emperor::resolution::OnLoop();
+}
+
+void ModeScreens()
+{
+    SetupModeScreens();
+    // The help without choice buttons: closed first, then the game's mode change.
+    At<char>(aGameScreen) = 0x05;
+    At<int>(aHelpChoices) = 0;
+    int changes = g_changeModes;
+    ModeChangeTo(1280, 1024);
+    Check(g_helpCloses == 1 && g_changeModes == changes + 1 && At<char>(aGameScreen) == 0x01 &&
+              LogContains("the help closed for the mode change"),
+          "help: closed first (as its right click), then the mode change");
+    // With choice buttons: left as it is (its right click does not close it either).
+    At<char>(aGameScreen) = 0x05;
+    At<int>(aHelpChoices) = 1;
+    ModeChangeTo(1600, 900);
+    Check(g_helpCloses == 1 && At<char>(aGameScreen) == 0x05, "help with choice buttons: left open");
+    At<int>(aHelpChoices) = 0;
+    // The mission goals: the city drawn behind once as the city screen, then the goals' screen and a redraw.
+    At<char>(aGameScreen) = 0x3b;
+    At<int>(aHover) = 7;
+    At<int>(aHover2) = 9;
+    changes = g_changeModes;
+    ModeChangeTo(1440, 900);
+    Check(g_changeModes == changes + 1 && g_goalsBackgrounds == 1 && g_goalsDraws == 1 && g_goalsDrawScreen == 0x01,
+          "mission goals: the city drawn behind once, as screen 1");
+    Check(At<char>(aGameScreen) == 0x3b && At<int>(aHover) == 7 && At<int>(aHover2) == 9 && At<char>(aRedraw) == 1,
+          "... the goals' screen and both hovers back, drawn again over it");
+    // Other screens: neither.
+    At<char>(aGameScreen) = 0x07;
+    ModeChangeTo(1920, 1080);
+    Check(g_helpCloses == 1 && g_goalsDraws == 1, "another screen: nothing more");
+}
+
+// A fault in the help's close: the feature off (logged), the game's own mode change still made; from then on neither
+// the help nor the goals are touched (the game's own behavior).
+void ModeScreensHelpFault()
+{
+    SetupModeScreens();
+    At<char>(aGameScreen) = 0x05;
+    At<int>(aHelpChoices) = 0;
+    const int changes = g_changeModes;
+    g_fault = "help_close";
+    ModeChangeTo(1280, 1024);
+    Check(g_helpCloses == 1 && LogContains(kModeScreensOff), "a fault in help_close: the feature off (logged)");
+    Check(g_changeModes == changes + 1, "... the game's own mode change still made");
+    At<char>(aGameScreen) = 0x05;
+    ModeChangeTo(1600, 900);
+    Check(g_helpCloses == 1 && At<char>(aGameScreen) == 0x05, "then the help is left as the game leaves it");
+    At<char>(aGameScreen) = 0x3b;
+    ModeChangeTo(1440, 900);
+    Check(g_goalsDraws == 0, "... and no city behind the goals");
+}
+
+// A fault while the city is drawn behind the goals: the goals' screen and hovers put back, the feature off (logged).
+void ModeScreensDrawFault()
+{
+    SetupModeScreens();
+    At<char>(aGameScreen) = 0x3b;
+    At<int>(aHover) = 7;
+    At<int>(aHover2) = 9;
+    const int changes = g_changeModes;
+    g_fault = "goals_draw";
+    ModeChangeTo(1440, 900);
+    Check(g_changeModes == changes + 1 && g_goalsDraws == 1 && LogContains(kModeScreensOff),
+          "a fault in screen_draw behind the goals: the feature off (logged)");
+    Check(At<char>(aGameScreen) == 0x3b && At<int>(aHover) == 7 && At<int>(aHover2) == 9 && At<char>(aRedraw) == 1,
+          "... the goals' screen and both hovers put back, the goals drawn again");
+    ModeChangeTo(1920, 1080);
+    Check(g_goalsDraws == 1, "then no city behind the goals");
 }
 
 // City message panel (0x50bf10) and fill_rect, as the tests see them: the clip the panel is laid out in, the clip
@@ -2432,7 +2586,9 @@ const Scenario kScenarios[] = {
     {"render_ok", &RenderOk},       {"render_fault", &RenderFault},
     {"convert_fault", &ConvertFault}, {"direction_fault", &DirectionFault},
     {"drag_fault", &DragFault},     {"switch_fault", &SwitchFault},
-    {"mode_fault", &ModeFault},     {"layout_fault", &LayoutFault},
+    {"mode_fault", &ModeFault},     {"layout_fault", &LayoutFault}, {"bmp_screenshot", &BmpScreenshot},
+    {"mode_screens", &ModeScreens}, {"mode_screens_help_fault", &ModeScreensHelpFault},
+    {"mode_screens_draw_fault", &ModeScreensDrawFault},
     {"city_extent", &CityExtent},       {"message_panel", &MessagePanel},
     {"rc2_city_input", &Rc2CityInput},  {"rc2_city_around", &Rc2CityAround},
     {"info_window", &InfoWindow},                {"info_window_positions", &InfoWindowPositions},
