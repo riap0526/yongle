@@ -1,7 +1,8 @@
 // Offline test of core/options/options_host: the options window in a game on a fake game layer (no DLL, no game):
 // opening, drawing where the game allows it, the Hotkeys window over the options window (the options window's rows
 // keep their settings), Apply after it, the options key and a right click closing it, Options from the pause menu
-// and back, and an error while drawing (the window and the pause menu close, the window stays unavailable).
+// and back, the picture under the window put back when it closes (only into the same picture), and an error while
+// drawing (the window and the pause menu close, the window stays unavailable).
 #include "core/diag/guard.h"
 #include "core/display/virtual_display.h"
 #include "core/input/keys.h"
@@ -134,8 +135,34 @@ bool Reserved(unsigned, unsigned) { return false; }
 
 const pm::PauseGame kPause("test", g_painter, co::MenuLook(), &Origin, &BeginDraw, &Redraw, &Click, &CanDraw, &Act,
                            &oh::PauseOptionsKey);
+// The game's picture: 8 x 4 pixels in rows of 20 bytes (a pitch wider than the picture), screen 0x3b.
+constexpr int kW = 8, kH = 4, kPitch = 20;
+unsigned char g_pixels[kPitch * kH];
+oh::GameFrame g_frame{g_pixels, kPitch, kW, kH, 0x3b};
+bool g_hasFrame = true;
+bool Frame(oh::GameFrame *out)
+{
+    *out = g_frame;
+    return g_hasFrame;
+}
+void Fill(unsigned char v)
+{
+    for (int y = 0; y < kH; ++y) {
+        std::memset(g_pixels + y * kPitch, v, kW * 2);
+    }
+}
+bool Filled(unsigned char v)
+{
+    for (int y = 0; y < kH; ++y) {
+        for (int x = 0; x < kW * 2; ++x) {
+            if (g_pixels[y * kPitch + x] != v) return false;
+        }
+    }
+    return true;
+}
+
 const char *const kEmergency[][2] = {{"video", "resolution"}};
-const oh::OptionsGame kGame(kPause, "Test options", &Pages, &KeyPages, &Reserved, kEmergency, 1, false);
+const oh::OptionsGame kGame(kPause, "Test options", &Pages, &KeyPages, &Reserved, kEmergency, 1, false, &Frame);
 
 void Send(UINT m, WPARAM w = 0, int x = 0, int y = 0) { g_modal->message(m, w, 0, x, y); }
 void ClickAt(int x, int y)
@@ -197,6 +224,44 @@ int main()
     Check(oh::WindowOpen() && pm::IsOpen(), "pause menu: the options key opens the window over it");
     Send(WM_KEYDOWN, VK_ESCAPE);
     Check(!oh::WindowOpen() && pm::IsOpen(), "... Esc closes the window: the pause menu again");
+
+    // The picture under the window: kept at its first drawing, put back when it closes (the game draws only its
+    // dialog again on some screens), only into the same picture; the bytes beyond a row's pixels are not touched.
+    pm::Close("test");
+    std::memset(g_pixels, 0xEE, sizeof g_pixels);
+    Fill(0x11);
+    oh::Open(0, 0);
+    Present();
+    Fill(0x77); // the window drawn over the picture
+    Send(WM_RBUTTONUP, 0, 100, 100);
+    Check(!oh::IsOpen() && Filled(0x11) && g_pixels[kW * 2] == 0xEE,
+          "closed: the picture under the window put back (the rows' pixels only)");
+    oh::Open(0, 0);
+    Fill(0x22);
+    Send(WM_KEYDOWN, VK_F6); // closed before its first drawing: nothing kept, nothing put back
+    Check(!oh::IsOpen() && Filled(0x22), "closed before it was drawn: the picture left as it is");
+    oh::Open(0, 0);
+    Present();
+    Fill(0x77);
+    g_frame.width = kW - 2; // the resolution changed while the window was open
+    Send(WM_RBUTTONUP, 0, 100, 100);
+    g_frame.width = kW;
+    Check(!oh::IsOpen() && Filled(0x77),
+          "a changed picture: not put back");
+    oh::Open(0, 0);
+    Present();
+    Fill(0x77);
+    g_frame.screen = 0x01;
+    Send(WM_RBUTTONUP, 0, 100, 100);
+    g_frame.screen = 0x3b;
+    Check(Filled(0x77), "another screen: not put back");
+    g_hasFrame = false;
+    oh::Open(0, 0);
+    Present();
+    g_hasFrame = true;
+    Send(WM_RBUTTONUP, 0, 100, 100);
+    Check(!oh::IsOpen() && Filled(0x77),
+          "no picture at the first drawing: nothing kept, nothing put back");
 
     // An error while drawing: the window and the pause menu close, the window stays unavailable.
     oh::Open(0, 0);

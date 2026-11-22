@@ -171,9 +171,9 @@ const Text kShared[] = {
                            "lowest difficulty you played it at: once you lower it, raising it again later does not "
                            "change that.",
      nullptr, 0, false, "Difficulty"},
-    {"game", "auto_defend", "When enemies come, your soldiers gather and march out to meet them by themselves. They "
-                            "stay out after the enemies have left: switch this off, then send them back yourself. It "
-                            "can't be changed while enemies are attacking.",
+    {"game", "auto_defend", "When enemies come, your soldiers gather and march out to meet them by themselves. Some "
+                            "time after the enemies have left, they go back to their forts. It can't be changed while "
+                            "enemies are attacking.",
      nullptr, 0, false, "Auto defend"},
     {"game", "music", "The music. The slider sets its volume.", nullptr, 0, false, "Music"},
     {"game", "speech", "The spoken voices. The slider sets their volume.", nullptr, 0, false, "Speech"},

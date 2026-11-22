@@ -12,6 +12,7 @@
 
 #include <windows.h>
 
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -31,6 +32,75 @@ bool g_keysOpen = false; // the Hotkeys window is the one shown
 bool g_keysOnly = false; // ... opened alone: closing it closes everything
 bool g_waiting = false;  // a Key row waits for a key (core/ui SetOtherCapture)
 core::diag::Feature g_feature{"options window (core/options/options_host)"};
+
+// The picture under the window, kept at its first drawing (the header says why).
+struct Under {
+    GameFrame frame;                 // the picture it was taken from
+    std::vector<unsigned char> rows; // width * 2 bytes per row, top to bottom
+    bool kept = false;
+};
+Under g_under;
+bool g_takeUnder = false; // the next drawing keeps the picture first
+
+void DropUnder()
+{
+    g_under.kept = false;
+    std::vector<unsigned char>().swap(g_under.rows); // a whole screen: not held while the window is closed
+}
+
+bool UsableFrame(const GameFrame &f)
+{
+    return f.pixels != nullptr && f.width > 0 && f.height > 0 && f.pitch >= f.width * 2;
+}
+
+bool SameFrame(const GameFrame &a, const GameFrame &b)
+{
+    return a.pixels == b.pixels && a.pitch == b.pitch && a.width == b.width && a.height == b.height &&
+           a.screen == b.screen;
+}
+
+void TakeUnder()
+{
+    g_takeUnder = false;
+    DropUnder();
+    GameFrame f;
+    if (!g_game->frame(&f) || !UsableFrame(f)) {
+        core_log("options window: the picture under it is not kept (no usable picture)");
+        return;
+    }
+    const size_t row = static_cast<size_t>(f.width) * 2;
+    g_under.rows.resize(row * static_cast<size_t>(f.height));
+    for (int y = 0; y < f.height; ++y) {
+        std::memcpy(&g_under.rows[row * y], f.pixels + static_cast<size_t>(f.pitch) * y, row);
+    }
+    g_under.frame = f;
+    g_under.kept = true;
+    core_log("options window: the picture under it kept (%d x %d, screen 0x%02x)", f.width, f.height, f.screen);
+}
+
+// Before the game draws its screen again: what it does not draw again (the city behind a dialog) is as it was.
+void PutUnderBack()
+{
+    if (!g_under.kept) {
+        return;
+    }
+    GameFrame f;
+    const bool same = g_game->frame(&f) && UsableFrame(f) && SameFrame(f, g_under.frame);
+    if (same) {
+        const size_t row = static_cast<size_t>(f.width) * 2;
+        for (int y = 0; y < f.height; ++y) {
+            std::memcpy(f.pixels + static_cast<size_t>(f.pitch) * y, &g_under.rows[row * y], row);
+        }
+        core_log("options window: the picture under it put back (screen 0x%02x)", f.screen);
+    }
+    else {
+        const GameFrame &k = g_under.frame;
+        core_log("options window: the picture under it is not put back: the game's picture changed (%d x %d, screen "
+                 "0x%02x before; %d x %d, screen 0x%02x now)",
+                 k.width, k.height, k.screen, f.width, f.height, f.screen);
+    }
+    DropUnder();
+}
 
 Window &Front()
 {
@@ -56,6 +126,8 @@ void Reset()
 {
     g_open = g_keysOpen = g_keysOnly = false;
     SetWaiting(false, 0);
+    g_takeUnder = false;
+    DropUnder(); // after an error nothing is put back: the game draws its screen again as it does
 }
 
 void Close(const char *why)
@@ -65,6 +137,8 @@ void Close(const char *why)
     }
     g_open = g_keysOpen = g_keysOnly = false;
     SetWaiting(false, 0);
+    g_takeUnder = false;
+    PutUnderBack();
     g_game->pause.redraw(); // the screen under the window is drawn again
     core_log("options window: closed (%s)", why);
 }
@@ -140,6 +214,8 @@ struct Where {
 void OpenNow(void *p)
 {
     const Where &w = *static_cast<const Where *>(p);
+    DropUnder();
+    g_takeUnder = true; // the picture as it is before the window's first drawing
     if (w.keys) {
         OpenKeys(true);
         g_open = true;
@@ -255,6 +331,9 @@ const core::display::ModalInput kInput{&Active, &OnMessage};
 
 void DrawNow(void *)
 {
+    if (g_takeUnder) {
+        TakeUnder();
+    }
     g_game->pause.beginDraw(); // the game's clip reset and the painter's origin
     Window &w = Front();
     w.Tick(GetTickCount());

@@ -165,13 +165,67 @@ bool CityScreen(unsigned char s) // the screens screen_draw draws the city for
 }
 
 using ChangeMode_fn = void(__cdecl *)(int);
+using Void_fn = void(__cdecl *)();
+using ScreenBackground_fn = void(__cdecl *)(int force);
+
+// Around the game's mode change, each with the guard g_modeScreens:
+//   help 0x05 (also About): screen_change_mode does nothing there (0x476650: 0x0f, 0x0e, 0x21, 0x05), so the old
+//   picture stayed until the help was left. The help is closed first as its right click closes it (help_close
+//   0x50e090: __cdecl, no arguments, ret; back to the screen it was opened from), when its right click would (no
+//   choice buttons: 0x10bf574 is 0, 0x50da50).
+//   mission goals 0x3b: its drawing is the dialog only (screen_draw_background 0x5371f0, screen_draw 0x537690), so the
+//   new picture was black around it. Its right click goes back to the city (0x55d610: game_screen 1), so the city is
+//   drawn behind it once, as the city screen draws it (as the Display options dialog draws the city behind it).
+const Site kHelpClose{"help_close", 0x50e090, {0xa1, 0x68, 0xf5, 0x0b, 0x01, 0x83, 0xf8, 0x05}};
+const Site kScreenBackground{"screen_draw_background", 0x5371f0, {0x8b, 0x44, 0x24, 0x04, 0xb1, 0x01, 0x85, 0xc0}};
+const Site kScreenDraw{"screen_draw", 0x537690, {0x33, 0xc0, 0x53, 0xa0, 0x45, 0xe0, 0x0d, 0x01}};
+const Var<int> kHelpChoices{0x10bf574};
+const Var<int> kHover{0xa599fc}, kHover2{0xa599f8}; // screen_draw keeps both around its drawing
+constexpr char kScreenHelp = 0x05, kScreenGoals = 0x3b, kScreenCity = 0x01;
+core::diag::Feature g_modeScreens{"help and mission goals at a mode change (games/emperor/resolution)"};
+bool g_modeScreensOk = false; // its sites matched
+
+void CloseHelpNow(void *)
+{
+    if (*kGameScreen == kScreenHelp && *kHelpChoices == 0) {
+        Function<Void_fn>(kHelpClose)();
+        core_log("resolution: the help closed for the mode change (back to screen 0x%02x)",
+                 static_cast<unsigned char>(*kGameScreen));
+    }
+}
+
+void GameDrawsCity(void *)
+{
+    Function<ScreenBackground_fn>(kScreenBackground)(1);
+    Function<Void_fn>(kScreenDraw)();
+}
+
+void DrawCityBehindGoals()
+{
+    core::diag::Restore undo;
+    undo.Save(kGameScreen.ptr());
+    undo.Save(kHover.ptr());
+    undo.Save(kHover2.ptr());
+    *kGameScreen = kScreenCity;
+    if (core::diag::Guarded(g_modeScreens, &GameDrawsCity, nullptr, &undo)) {
+        undo.Undo(); // the goals' screen and hover back
+    }
+    *kRedraw = 1; // the goals over it in the next frame
+}
 
 // The mode change (the game's own, as its F7 does it). Under the core's switching guard: if it is abandoned, the
 // game's own size comes back on the next loop (screen_change_mode builds everything again then).
 void ChangeMode()
 {
+    const bool screens = g_modeScreensOk && core::diag::Enabled(g_modeScreens);
+    if (screens) {
+        core::diag::Guarded(g_modeScreens, &CloseHelpNow, nullptr);
+    }
     Function<ChangeMode_fn>(kChangeMode)(3);
     *kRedraw = 1;
+    if (screens && core::diag::Enabled(g_modeScreens) && *kGameScreen == kScreenGoals) {
+        DrawCityBehindGoals();
+    }
 }
 
 switching::SwitchGame Game()
@@ -1206,6 +1260,15 @@ bool Attach(const core_config *cfg)
         if (!Matches(*s)) {
             core_log("resolution: %s at 0x%lx does not match; custom resolutions not installed", s->name, s->address);
             return false;
+        }
+    }
+    g_modeScreensOk = true;
+    for (const Site *s : {&kHelpClose, &kScreenBackground, &kScreenDraw}) {
+        if (!Matches(*s)) {
+            core_log("resolution: %s at 0x%lx does not match; the help and the mission goals stay as the game leaves "
+                     "them at a mode change",
+                     s->name, s->address);
+            g_modeScreensOk = false;
         }
     }
     for (const JumpSite &j : kJumps) {

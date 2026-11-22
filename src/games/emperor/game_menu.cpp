@@ -72,6 +72,17 @@ const Var<int> kEditor{0x88ec38};           // 1: the map editor
 core::diag::Feature g_feature{"Esc and the pause menu (games/emperor/game_menu)"};
 bool g_attached = false;
 bool g_rightClick = false; // a right click for the next input pass
+// ButtonsFirstScreen: the input passes left with the mouse off the screen; the right click comes in the last of them,
+// if the screen is still the one Esc was pressed on.
+int g_awayPasses = 0;
+int g_awayScreen = -1;
+// The game's mouse (mouse_x / mouse_y in game pixels): only input_update_mouse writes them, at every pass (0x52b10d,
+// 0x52b12f), so a position set after it lasts for that pass only. Far outside every button, without overflowing the
+// hit tests' sums.
+const Var<int> kMouseX{0x10de0a0}, kMouseY{0x10de09c};
+constexpr int kMouseAway = -10000;
+// Two passes for the button's count (2) to run out, the right click in the third.
+constexpr int kAwayPasses = 3;
 
 const char *Lang(int group, int index)
 {
@@ -91,6 +102,18 @@ bool RightClickScreen(int s)
     default:
         return false;
     }
+}
+
+// The dialogs whose input lets the buttons under the mouse take a right click before the dialog closes with it
+// (screen_handle_input 0x538160): the sidebar's dialogs 0x07 (the sidebar's buttons first, 0x449e70: a right click on
+// one opens its help), the message list 0x11 (messages_input 0x549ad0) and the message box 0x3f (0x44a930). Each closes
+// with a right click wherever the mouse is when no button takes it, so Esc's right click comes with the mouse off the
+// screen: it closes the dialog and opens no help. The buttons' function 0x449e70 keeps a button under the mouse for one
+// more call after the mouse leaves it (+0x1a: set to 2 while the mouse is on it, one less at each call, the button's
+// actions while it is not 0), so the mouse is off the screen for kAwayPasses passes before the right click.
+bool ButtonsFirstScreen(int s)
+{
+    return s == 0x07 || s == 0x11 || s == 0x3f;
 }
 
 // The menu screens that go back a step with a right click (released, 0x10de064), as Augustus' menus do with Esc:
@@ -271,7 +294,13 @@ void EscapeNow(void *p)
         return;
     }
     if (RightClickScreen(s)) {
-        g_rightClick = true;
+        if (ButtonsFirstScreen(s)) {
+            g_awayPasses = kAwayPasses;
+            g_awayScreen = s;
+        }
+        else {
+            g_rightClick = true;
+        }
         c.handled = true;
     }
 }
@@ -279,6 +308,18 @@ void EscapeNow(void *p)
 void __cdecl InputMouse_detour()
 {
     Original(o_InputMouse, kInputMouse)();
+    if (g_awayPasses > 0) {
+        if (static_cast<unsigned char>(*kGameScreen) != g_awayScreen) { // the dialog went away meanwhile
+            g_awayPasses = 0;
+            return;
+        }
+        *kMouseX = kMouseAway;
+        *kMouseY = kMouseAway;
+        if (--g_awayPasses == 0) {
+            *kRightUp = 1;
+        }
+        return;
+    }
     if (g_rightClick) {
         g_rightClick = false;
         *kRightUp = 1;
@@ -326,6 +367,7 @@ bool Escape(LPARAM lparam)
     EscCall c{lparam, false};
     if (!core::diag::Guarded(g_feature, &EscapeNow, &c)) {
         g_rightClick = false;
+        g_awayPasses = 0;
         pm::Close("an error in Esc"); // as Pericles': nothing of ours left open without its Esc
         core_log("game menu: off after an error; Esc is the game's own again");
         return false;

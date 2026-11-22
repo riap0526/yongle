@@ -40,7 +40,7 @@ Back to the [README](../README.md). Most settings are in the Options window (F6,
 
 - **Difficulty and auto defend.** The game has both, but its own menus never let you change them. While you play a city alone, they are in Options > General > Difficulty, and the Options menu has Difficulty and Auto defend too.
   - *Difficulty* changes at once, one level at a time, as the game itself does it. The mission's result counts the lowest difficulty you played it at: once you lower it, raising it again later does not change that.
-  - *Auto defend* is the game's own Auto Combat: when enemies come, your soldiers gather and march out by themselves. They stay out after the enemies have left: switch it off, then send them back yourself. The army panel shows "Auto Combat On" while it is on. It can't be changed while enemies are attacking.
+  - *Auto defend* is the game's own Auto Combat: when enemies come, your soldiers gather and march out by themselves, and some time after the enemies have left they go back to their forts. The army panel shows "Auto Combat On" while it is on. It can't be changed while enemies are attacking.
   - Both are saved in the game's own files and saved games, as the game keeps them. The game without Yongle has no switch for auto defend: **turn it off before you remove Yongle**, or it stays on.
 
 - **New players start at 80 % game speed and 50 % scroll speed** (the original defaults are 90 % and 60 %), which work better with smooth scrolling. If you have played before, your settings stay the same.

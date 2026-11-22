@@ -12,7 +12,7 @@
 #   test_hotkey core/ui/hotkey: the hotkey syntax (no DLL)
 #   test_options core/options: the options window with a fake painter (no DLL)
 #   test_options_host core/options/options_host: the window in a game on a fake game layer (Hotkeys over it, the
-#               pause menu, an error while drawing) (no DLL)
+#               pause menu, the picture under it put back, an error while drawing) (no DLL)
 #   test_game_options core/options/game_options: the game's own options as rows on a fake game, a new player's
 #               speeds (no DLL; makes and removes test_game_options_tmp\)
 #   test_display_dialog core/options/display_dialog: the Display options dialog on a fake game layer (scale steps,

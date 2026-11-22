@@ -77,6 +77,20 @@ const Var<int> kDialogY{0x10de010};
 const Var<char> kRedraw{0x10de036};     // screen_redraw
 const Var<int> kColourMode{0x1156ddc};  // 2: RGB565 (tooltip_draw 0x50f9f5 picks its colours by it)
 const DWORD kImages = 0x1c42130;        // image_manager
+// The game's picture (the options window keeps the one under it): screen_pitch, dd_width / dd_height, game_screen.
+const Var<int> kPitch{0x10de000};
+const Var<int> kWidth{0x10de008}, kHeight{0x10de004};
+const Var<unsigned char> kGameScreen{0x10de045};
+
+bool GameFrame(oh::GameFrame *out)
+{
+    out->pixels = static_cast<unsigned char *>(*kDrawBuffer);
+    out->pitch = *kPitch;
+    out->width = *kWidth;
+    out->height = *kHeight;
+    out->screen = *kGameScreen;
+    return out->pixels != nullptr;
+}
 
 // Art (image_get_id groups; pak index << 9 | group). China_Interface is pak 1; China_Unloaded pak 0 [inferred:
 // group 9 of pak 0 is drawn at dialog_offset + 0x50 by 0x501e04, and the mood orbs are groups 7 / 9 of
@@ -368,7 +382,7 @@ const pm::PauseGame kPauseGame("emperor", g_painter, PauseLook(), &PauseOrigin, 
 const char *const kEmergency[][2] = {{"video", "resolution"}, {"video", "scale"},   {"video", "window"},
                                      {"video", "renderer"},   {"video", "scaling"}, {"ui", "panel_key"}};
 const oh::OptionsGame kOptionsGame(kPauseGame, ot::kOptionsTitle, &BuildPages, &BuildKeyPages, &ReservedKey, kEmergency,
-                                   static_cast<int>(sizeof(kEmergency) / sizeof(kEmergency[0])), true);
+                                   static_cast<int>(sizeof(kEmergency) / sizeof(kEmergency[0])), true, &GameFrame);
 
 } // namespace
 

@@ -11,6 +11,11 @@
 // trips the window and the pause menu close, a wait for a key ends, the screen is drawn again and the window stays
 // unavailable (the game layer's menus fall back to the game's own dialogs).
 //
+// The picture under the window: many of the games' screens draw only their own dialog when the screen is drawn again
+// (the city behind it is left as it was), so the picture the window was first drawn over is kept and put back when the
+// window closes, before the game draws the screen again. It is put back only when the game's picture is still the
+// same buffer, size and screen (not after a change of the resolution while the window was open).
+//
 // Threads: the game thread only (the window procedure, the game loop, screen_present).
 #pragma once
 
@@ -21,14 +26,23 @@
 
 namespace core::options::options_host {
 
+// The game's picture as it draws it: the pixels (16 bits each), the bytes of a row, the size in pixels and the screen
+// it shows (the game's screen number).
+struct GameFrame {
+    unsigned char *pixels = nullptr;
+    int pitch = 0, width = 0, height = 0, screen = 0;
+};
+
 struct OptionsGame {
     using Pages_fn = std::vector<Page> (*)();
     using Key_fn = bool (*)(unsigned vk, unsigned mods);
+    using Frame_fn = bool (*)(GameFrame *out); // false: no picture now (the game makes its surfaces again)
 
     OptionsGame(const pause_menu::PauseGame &pause, const char *title, Pages_fn pages, Pages_fn keyPages,
-                Key_fn reservedKey, const char *const (*emergency)[2], int emergencyCount, bool hideListed)
+                Key_fn reservedKey, const char *const (*emergency)[2], int emergencyCount, bool hideListed,
+                Frame_fn frame)
         : pause(pause), title(title), pages(pages), keyPages(keyPages), reservedKey(reservedKey), emergency(emergency),
-          emergencyCount(emergencyCount), hideListed(hideListed)
+          emergencyCount(emergencyCount), hideListed(hideListed), frame(frame)
     {
     }
 
@@ -40,6 +54,7 @@ struct OptionsGame {
     const char *const (*emergency)[2];  // hideListed: the settings ({section, key}) the debug panel keeps all the
     int emergencyCount;                 // same (to change when something goes wrong)
     bool hideListed;                    // the debug panel leaves out what the windows list ("Show all settings")
+    Frame_fn frame;                     // the game's picture (the one under the window is kept and put back)
 };
 
 // A game with no Hotkeys page yet.

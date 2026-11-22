@@ -47,9 +47,9 @@ const Text kTexts[] = {
     {"video", "empire_map_background", "What is around the map.", kEmpireMapBackground, N(kEmpireMapBackground)},
     // The shared text, then what only Emperor has: the army panel's own words for it, and no switch in the game
     // itself (the setting is kept in Emperor.inf and the saved games, and the game goes on using it).
-    {"game", "auto_defend", "When enemies come, your soldiers gather and march out to meet them by themselves. They "
-                            "stay out after the enemies have left: switch this off, then send them back yourself. It "
-                            "can't be changed while enemies are attacking. The "
+    {"game", "auto_defend", "When enemies come, your soldiers gather and march out to meet them by themselves. Some "
+                            "time after the enemies have left, they go back to their forts. It can't be changed while "
+                            "enemies are attacking. The "
                             "army panel shows Auto Combat On while it is on. The game itself has no switch for it: "
                             "switch it off before you remove Yongle, or it stays on.",
      nullptr, 0, false, "Auto defend"},
