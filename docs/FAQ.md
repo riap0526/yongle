@@ -11,6 +11,7 @@ Back to the [README](../README.md).
 - [Does Yongle change how the game plays?](#does-yongle-change-how-the-game-plays)
 - [Do multiplayer and the Campaign Creator work?](#do-multiplayer-and-the-campaign-creator-work)
 - [Can I use Yongle together with cnc-ddraw, dgVoodoo or another ddraw.dll?](#can-i-use-yongle-together-with-cnc-ddraw-dgvoodoo-or-another-ddrawdll)
+- [Is there a version for the other Impressions city builders?](#is-there-a-version-for-the-other-impressions-city-builders)
 
 **[Display and settings](#display-and-settings)**
 
@@ -61,7 +62,7 @@ This may change in the future: options that change the game's rules or limits ma
 
 ### Does Yongle change how the game plays?
 
-Not so far: everything Yongle does today is about the display, the sound and the controls, and the city's simulation is the original game's. Later, guided by what players ask for, Yongle may add gameplay improvements and higher limits, closer to what Augustus does for Caesar 3 than to a strictly faithful remake. They would be options you choose, marked when they affect whether saves still work in the original game.
+Very little so far: everything Yongle does today is about the display, the sound and the controls, and the city's simulation is the original game's. The one exception is that Options now lets you change the game's own difficulty and auto defend, which the game has but never lets you change (see [FEATURES](FEATURES.md)). Later, guided by what players ask for, Yongle may add gameplay improvements and higher limits, closer to what Augustus does for Caesar 3 than to a strictly faithful remake. They would be options you choose, marked when they affect whether saves still work in the original game.
 
 ### Do multiplayer and the Campaign Creator work?
 
@@ -70,6 +71,13 @@ The Campaign Creator (`EmperorEdit.exe`) works as before. The multiplayer screen
 ### Can I use Yongle together with cnc-ddraw, dgVoodoo or another `ddraw.dll`?
 
 No: they are all a `ddraw.dll` in the game folder, and only one can be used. Yongle already does what they are usually used for with this game (a borderless full screen or a window at any resolution, with sharp scaling). Keep a backup of the other `ddraw.dll` if you want to switch back.
+
+### Is there a version for the other Impressions city builders?
+
+Yes, for *Zeus + Poseidon*: [Pericles](https://github.com/riap0526/pericles) is Yongle's sister project, built on the same engine and with the same approach. For the other games, have a look at these community projects:
+
+- [Julius](https://github.com/bvschaik/julius) and [Augustus](https://github.com/Keriew/augustus) for *Caesar III*.
+- [Akhenaten](https://github.com/dalerank/Akhenaten) for *Pharaoh*.
 
 ## Display and settings
 

@@ -210,3 +210,7 @@ Files `third_party/augustus/src/core/speed.c`, `speed.h` and `time.h` are taken 
 (https://github.com/Keriew/augustus, commit 63813587869eda5557fe5f1e0e8cea024ff8bef7).
 Copyright (C) the Augustus contributors. Licensed under the GNU Affero General Public License v3.0,
 the same license as this project (full text in `LICENSE`).
+
+The ten scroll speeds of smooth scrolling (`kPerFrame` in `src/core/scroll/camera.cpp`) are the numbers of the
+city row of `SCROLL_STEP` in Augustus's `src/input/scroll.c` (commit 2de6361d8fbdb66e31ee128c9d0c6b8ebd51918f);
+only the numbers are used, under the same license.

@@ -30,7 +30,7 @@ powershell -File proxy\ddraw\build.ps1 -Toolchain <llvm-mingw folder> -CMake <cm
 powershell -File proxy\ddraw\run_tests.ps1
 ```
 
-Step 1 is only needed once (or after deleting `build\`).
+Step 1 is only needed once (or after deleting `build\`). A few offline tests read the game's interface pictures; give them your game folder with `run_tests.ps1 -GamePath <game folder>` (nothing there is written). Without it, they are listed as not run.
 
 ## Output
 

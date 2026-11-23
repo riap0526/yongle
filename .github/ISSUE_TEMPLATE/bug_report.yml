@@ -10,7 +10,7 @@ body:
 
         **Before you start, please follow these steps** (they are the same steps we use in our own tests):
 
-        1. Close the game. Delete `ddraw_proxy.log` in the game folder (it keeps growing over sessions; a fresh one is much easier to read).
+        1. Close the game. Delete `ddraw_proxy.log` in Yongle's folder (the game folder, or `Documents\My Games\Yongle` when the game is under Program Files). It keeps growing over sessions; a fresh one is much easier to read.
         2. Start the game and do what causes the problem.
         3. **The moment you see the problem, press F12** (problem report: it marks the log and saves screenshots as `shots\report1_*.png`). For a plain screenshot press F11.
         4. If you can, quit the game normally (File → Exit game). After a crash, just continue.
@@ -58,7 +58,7 @@ body:
         - China map or campaign map
         - Dialogs, including Options → Display options
         - Windowed mode (F5 / Alt+Enter)
-        - Settings panel (Insert)
+        - Debug panel (Insert)
         - Screen flicker or black blocks
         - Something else
     validations:
@@ -131,7 +131,7 @@ body:
       label: Files
       description: |
         Drag and drop into this box:
-        - `ddraw_proxy.log` (required; from the game folder)
+        - `ddraw_proxy.log` (required; from Yongle's folder)
         - `emperor_engine.ini` (if you changed any settings)
         - the screenshots from `shots\` (the `report*` ones if you pressed F12)
         - a save game, zipped, if the problem depends on it

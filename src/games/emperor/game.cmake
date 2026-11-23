@@ -5,8 +5,8 @@
 # The public name and version: shown in the log, the panel and the DLL's properties (version.rc.in). Test builds
 # carry a suffix (e.g. "-dev") so their logs are not taken for a release; empty for a release.
 set(GAME_PROJECT emperor_engine)
-set(GAME_VERSION 0.2.0)
-set(GAME_VERSION_SUFFIX "-dev")
+set(GAME_VERSION 0.2.1)
+set(GAME_VERSION_SUFFIX "")
 set(GAME_PRODUCT "Yongle")
 set(GAME_DESCRIPTION "Yongle: modern display and quality-of-life layer for Emperor: Rise of the Middle Kingdom")
 

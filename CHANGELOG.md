@@ -2,23 +2,23 @@
 
 All notable changes to Yongle. Downloads, with the SHA256 of each zip, are on the [Releases](https://github.com/riap0526/yongle/releases) page. To upgrade, replace `ddraw.dll` and `ddraw.syms` in the game folder and keep your `emperor_engine.ini`: new settings take their defaults when they are missing (from 0.2.0 on, the file's descriptions are also brought up to date at the first start, with your values kept).
 
-## Unreleased
+## 0.2.1 (2026-11-23)
 
 ### Added
 
 - **Drag scrolling.** Hold the middle mouse button over the city and move the mouse: the city follows it. The cursor is hidden while you drag and comes back where you pressed. A click without moving still goes back to 100 % zoom. It can be turned off in Options.
-- **Difficulty and auto defend.** The game has both, but never let you change them. While you play a city alone, they are now in Options > General > Difficulty and in the Options menu. Auto defend sends your soldiers out by themselves when enemies come. The game has no switch for it: turn it off before removing Yongle.
+- **Difficulty and auto defend.** The game has both, but never lets you change them. While you play a city alone, they are now in Options > General > Difficulty and in the Options menu. Auto defend sends your soldiers out by themselves when enemies come. The game has no switch for it: turn it off before removing Yongle.
 - **Edge scrolling width.** How close to the edge of the screen the cursor has to be to scroll the city, from 1 pixel (as before) to 20, or 0 for none. In Options.
 - **A black frame for the menus.** Options > Video > Menu screens has a new choice, *Framed*: the menus, briefings and other full-screen pictures in a fret border with black around them.
 
 ### Changed
 
-- **New scroll speeds with smooth scrolling.** Each scroll speed setting now has its own steady speed, the same on every computer. Every setting is slower than before, and 100 % is no longer too fast. New players start at 50 % scroll speed, about as fast as the old 30 %. If you used 30 %, try 50 %.
-- **Nature sounds play the way the game designed them.** The game's files describe them as 3D sounds: each comes down from above, moves around you for a while and rises away. Yongle now recreates this in stereo and loops each sound for the time the files give. They use the ambient sounds volume. The setting is called Nature sounds.
-- **Esc on the end-of-mission screens.** On the victory, defeat and score screens and the timed pictures between missions, Esc now does nothing. Before, it asked whether to quit the game. Videos still skip with Esc.
-- **Options window buttons.** In the Options window, the button, tab or category under the mouse now turns darker like the game's own buttons, as in the Pause menu, instead of getting a thick frame. The box that shows a setting's value now reaches the arrows on both sides, like the sliders.
-- **Screenshots from the city view only.** The city and minimap screenshot keys now work only when no window, dialog or message is open, also not the sidebar's dialogs. With one open, the message says so once you close it.
-- **A notice for other versions of the game.** Yongle is made for the English GOG release of Emperor (1.0.1.0). With any other `Emperor.exe`, "Untested Emperor.exe" shows at the top of the screen for 20 seconds at the start. Other languages may work, but with problems or missing features.
+- **New scroll speeds.** With smooth scrolling, each scroll speed setting is now the same on every computer, and slower than before. If you used 30 %, try 50 %.
+- **Nature sounds follow the game's 3D sound design.** Each comes down from above, moves around you and rises away, as the game's files describe, now in stereo.
+- **Esc on the end-of-mission screens** now does nothing, instead of asking whether to quit the game. Videos still skip with Esc.
+- **Options window buttons.** The button under the mouse turns darker, like the game's own buttons, instead of getting a thick frame. Value boxes now reach the arrows.
+- **Screenshots from the city view only.** The city and minimap screenshot keys work only when no window or message is open. Otherwise a message tells you why.
+- **A notice for other versions of the game.** With any `Emperor.exe` other than the English GOG release 1.0.1.0, "Untested Emperor.exe" shows for 20 seconds at the start.
 - **No error sound for Alt with a letter.** Alt with a letter that has no action no longer makes the Windows error sound.
 
 ### Fixed
@@ -29,9 +29,9 @@ All notable changes to Yongle. Downloads, with the SHA256 of each zip, are on th
 - Holding a list's scroll arrow scrolled far too fast on modern computers. It now scrolls one line every 50 ms, as on computers of the time.
 - In the Exit game, Replay map and Exit to main menu boxes, the title and text now sit in the middle of the box.
 - In the Pause menu, the button under the mouse now turns darker like the game's own buttons, instead of getting a thick frame.
-- New players on the GOG and Steam versions started at the install's speeds instead of 80 % game speed and 50 % scroll speed. They now get these.
+- New players on the GOG version started at the install's speeds instead of 80 % game speed and 50 % scroll speed. They now get these.
 - A new resolution chosen on a menu screen (for example with Shift+F7) now applies at once, not only after you go to another screen.
-- A fixed resolution with an odd width (for example 1365x768) drew the picture slanted. The width is now made one pixel smaller.
+- A fixed resolution with an odd width (for example 1365×768) drew the picture slanted. The width is now made one pixel smaller.
 - Below 786 pixels high (for example 1366×768), the empire map sat in the top left corner next to the city. It is now centered, framed and shrunk to fit.
 - Esc with a sidebar window open sometimes opened the help for a sidebar button.
 - The Options window could stay on the screen after closing the mission goals or a similar screen.

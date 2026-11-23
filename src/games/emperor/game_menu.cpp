@@ -134,11 +134,12 @@ bool MenuBackScreen(int s)
 
 // The screens where Esc does nothing (as in Pericles: not the game's question, not back either,
 // as the mission intro): the timed full-screen picture 0x04, the mission summary 0x17, defeat 0x33, the score 0x42,
-// victory 0x43. Their right click moves on (the next mission), so no right click is added either. The videos (0x4a)
-// are the game's: Esc skips them.
+// victory 0x43, and the score details 0x59 (the score button of the victory dialog; goals_input 0x55d610 keeps 0x43
+// and 0x59 from going back to the city on a right click). Their right click moves on (the next mission) or does
+// nothing, so no right click is added either. The videos (0x4a) are the game's: Esc skips them.
 bool NoEscScreen(int s)
 {
-    return s == 0x04 || s == 0x17 || s == 0x33 || s == 0x42 || s == 0x43;
+    return s == 0x04 || s == 0x17 || s == 0x33 || s == 0x42 || s == 0x43 || s == 0x59;
 }
 
 int TextWidth(const char *text, int fontGroup);

@@ -1,3 +1,5 @@
+**English** | [繁體中文](readme/README.zh-TW.md) | [简体中文](readme/README.zh-CN.md)
+
 # Yongle
 
 **Modern display and quality-of-life improvements for *Emperor: Rise of the Middle Kingdom* (2002).**
@@ -8,9 +10,9 @@
 
 On the release page, download **`yongle-<version>.zip`**, not "Source code (zip)": the source code has no `ddraw.dll`. Then see [Installation](#installation).
 
-Yongle lets the original game run at your monitor's resolution and refresh rate, fits the interface to wide and high-resolution screens, adds smooth scrolling and city zoom, and keeps the game speed steady in big cities. Its settings and key bindings are in an Options window that looks like the game's own dialogs. It is named after the Yongle Emperor of the Ming dynasty, who built the Forbidden City — in the tradition of [Julius](https://github.com/bvschaik/julius), [Augustus](https://github.com/Keriew/augustus) and [Akhenaten](https://github.com/dalerank/Akhenaten) for the other Impressions city builders.
+Yongle keeps the original game and makes it fit today's computers: it runs at your screen's resolution with the interface laid out for it, and adds quality-of-life improvements, set in an Options window in the game's own style. More is on the way, gameplay options included. It is named after the Yongle Emperor of the Ming dynasty, who built the Forbidden City — in the tradition of [Julius](https://github.com/bvschaik/julius), [Augustus](https://github.com/Keriew/augustus) and [Akhenaten](https://github.com/dalerank/Akhenaten) for the other Impressions city builders.
 
-> **Status: early (v0.2.0).** Tested on the GOG release of Emperor (version 1.0.1.0) on Windows 11. Expect rough edges; please report what you find (see [Reporting problems](#reporting-problems)).
+If you also play *Zeus + Poseidon*, you may like the sister project, [Pericles](https://github.com/riap0526/pericles): it is built on the same engine and with the same approach as Yongle.
 
 ![A city at 2560×1440 with Yongle (display scale 100 %)](screenshots/city-1440p.webp)
 *A city at 2560×1440 with Yongle, display scale 100 %. Click any screenshot for full size.*
@@ -41,7 +43,8 @@ See **[CHANGELOG.md](CHANGELOG.md)** for what changed in each release.
 - **Options window** (F6) with the game's settings and Yongle's together.
 - **Key rebinding** for almost every key, with two keys per action.
 - **Esc closes windows** and opens a **Pause menu** in the city.
-- **Steady game speed** at any resolution, and a steady 100 % speed.
+- **Difficulty and auto defend** in Options: the game has both, but never lets you change them.
+- **Steady game speed:** a big city at a high resolution no longer runs slower than the speed you set, and 100 % is a steady speed, one step above 90 %, instead of as fast as your computer can draw.
 - **Sound:** a master volume, music and sounds that pause while you're switched away, ambient sounds at a steady rate, and the game's unused nature sounds.
 - **Screenshots** (F11), **full city and minimap screenshots** (F10, Shift+F10) and **problem reports** (F12).
 
@@ -97,12 +100,12 @@ Questions about where Yongle's files are, the intro movie or the renderer? See t
 The full list is in **[docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md)**. The main points:
 
 - On laptops and slower computers, **lowering the resolution** (a higher display scale, or *Auto*) helps performance most.
-- Game under `C:\Program Files (x86)`: Yongle's files are in **`Documents\My Games\Yongle`**, not in the game folder (see the [FAQ](docs/FAQ.md)).
+- Game copied under `C:\Program Files (x86)` by hand: Yongle's files are in **`Documents\My Games\Yongle`**, not in the game folder. GOG Galaxy installs keep them in the game folder (see the [FAQ](docs/FAQ.md)).
 - Tested on AMD graphics and Intel integrated graphics so far; NVIDIA, real 4K monitors and several monitors not yet.
 
 ## Reporting problems
 
-Please open an issue with the **Bug report** form. In short: delete `ddraw_proxy.log` in the game folder, reproduce the problem and press **F12** the moment you see it, then send the new `ddraw_proxy.log`, the `shots\report*` pictures and your `emperor_engine.ini`, with what you did, what you saw, your screen resolution, Windows version and graphics card.
+Please open an issue with the **Bug report** form. In short: delete `ddraw_proxy.log` in Yongle's folder (the game folder, or `Documents\My Games\Yongle`; see the [FAQ](docs/FAQ.md)), reproduce the problem and press **F12** the moment you see it, then send the new `ddraw_proxy.log`, the `shots\report*` pictures and your `emperor_engine.ini`, with what you did, what you saw, your screen resolution, Windows version and graphics card.
 
 ## Building and Contributing
 
